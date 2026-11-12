@@ -2,22 +2,13 @@
 
 ## 1. Architecture approach
 
-Build a maintainable modular application suitable for a two-branch business, with a clear path to scale. Inspect the existing repository before selecting or changing the stack.
+The current meeting build uses a TypeScript React/Vite client, an Express API, PostgreSQL as the system of record, and Clerk for authentication. The API enforces membership, role, branch, and assigned-job access. Browser storage is limited to the language preference; customer and operational records are loaded from PostgreSQL.
 
-Preferred direction if compatible with the repository:
-- TypeScript end-to-end.
-- Responsive Next.js PWA frontend.
-- Modular backend/API (NestJS or a well-structured Next.js backend, depending on existing code and deployment needs).
-- PostgreSQL as the system of record.
-- Background worker for scheduled and retryable jobs.
-- S3-compatible object storage for photos and generated PDFs.
-- Replit deployment initially, with configuration that avoids unnecessary platform lock-in.
-
-Do not force this exact stack if the existing repository has a sound alternative. Document the selected architecture and trade-offs.
+This is a deliberately narrow operating application, not the complete PRD. It is not yet configured for production deployment, backups, file storage, scheduled workers, or customer messaging. Keep future modules isolated and inactive until their workflows and integrations are implemented.
 
 ## 2. Logical modules
 
-Add a first-class **Business Configuration / Owner Decision Center** module. This is essential because owner discovery has not yet happened. It should manage business-wide defaults, branch overrides, proposed/approved status, draft/publish workflow, effective dates, version history, audit records, and impact previews. Avoid scattering operational settings as constants across modules.
+Provide an authenticated **Owner Settings** page for real operating configuration. The current active settings cover booking confirmation, daily drop-offs, operating hours, bay counts, the weekly day off, and the implemented service durations. Validate changes on the server, apply them to booking-capacity behavior, and record setting history. Do not present illustrative options as owner approvals.
 
 1. Identity and access
 2. Branches and staff
@@ -41,6 +32,8 @@ Modules should have clear boundaries and avoid circular dependencies.
 Model configuration by domain rather than one untyped JSON settings blob. Use typed settings or versioned domain records for at least: branch calendars and hours; services and service eligibility; pricing and quotation rules; capacity resources and service occupancy; booking/deposit/cancellation rules; job workflow and QC; technician assignment; WhatsApp routing/templates/bot permissions; warranty templates; inventory policy; payment methods/approval thresholds; roles and branch scopes; automation rules; notification preferences; reporting/KPI definitions.
 
 Each configurable policy should support, as applicable: business/branch scope, value and validation schema, status (`proposed`, `draft`, `approved`, `active`, `retired`), effective-from/to, version, created/updated/approved by, approval timestamp, and audit/change reason. Support inherited business defaults and explicit branch overrides. Use immutable versions for rules that affect historical customer or financial records. Provide preview and impact summary before activation.
+
+For the current build, only the eight implemented operating settings are editable. Other policies are visibly marked **On hold** without active controls. Settings save immediately and create an audit entry; a draft/approval workflow is not part of this application.
 
 Do not make security controls, audit integrity, authorization enforcement, or privacy protections optional settings.
 

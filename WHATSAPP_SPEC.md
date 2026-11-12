@@ -146,10 +146,24 @@ Do not mark a message as sent merely because it was placed in an internal queue.
 
 If credentials are unavailable:
 - Provide a labelled simulator for inbound/outbound messages.
-- Use the same internal conversation/message service as live integration.
+- Keep simulator messages and state visibly separate from real customer activity; no provider requests or external notifications may be triggered.
 - Display “Simulation — not connected to WhatsApp” clearly.
 - Keep integration status visible to authorized managers.
 - Never show simulated delivery as real customer delivery.
+
+The current meeting build has a persisted development-only simulated inbox. Its records are explicitly marked as simulation data, branch-scoped, and stored separately from provider messages. Simulated bookings use fictional sample profiles and the same server-side availability/capacity rules as Garage OS. Confirmation, rescheduling, and cancellation require an explicit simulated customer confirmation; no provider requests, real customer messages, or staff-device alerts are made.
+
+Live WhatsApp delivery is disabled in every environment until the Owner supplies and approves all of the following:
+- Go Stores Meta Business ownership/admin access and verified business assets.
+- Approved reception numbers, branch routing, and number migration/coexistence decisions.
+- Server-side credentials and webhook verification configuration.
+- Approved message templates for every supported language and use case.
+- Customer opt-in/consent, message wording, customer-service-window, retention, and fallback rules.
+- A documented outage/cutover plan and successful acceptance testing.
+
+The readiness endpoint reports these inputs as not ready and `deliveryEnabled` remains false. Do not turn on sending by changing a UI setting. Before any live implementation, enforce webhook signature validation, provider-event idempotency, explicit queued/accepted/delivered/read/failed states, bounded retry with duplicate protection, and the customer-service window on the server. Keep provider messages distinct from simulation records.
+
+Pickup times in simulation are estimates, not promises. They use configured service bay-hours, branch work-hours and bay counts, active jobs' stages, current queue load, and weekly closure. The timestamp and the reason are shown when the estimate is calculated; internal job notes are not returned by customer status lookup. Status lookup requires the fictional booking reference and a secondary code and reveals only the booking state, approved milestone labels, and estimated pickup.
 
 During a real provider outage:
 - Keep all internal jobs and bookings accessible.

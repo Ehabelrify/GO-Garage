@@ -51,6 +51,16 @@ Rules:
 - Escalate only if no staff response/claim has resolved the condition.
 - Owner receives only serious unresolved complaints or critical service disruptions.
 
+In the development simulator, handoff and unread state are persisted in the branch inbox and recorded in its event history. They are not push notifications or provider sends. The demo does not run scheduled escalation timers.
+
+## 3.1 Simulated booking and ETA behavior
+
+- Availability checks and final confirmation both use the shared branch capacity rules, including configured weekday closure, drop-off cap, service bay-hours, and bay counts.
+- Booking drafts, reschedules, and cancellations do not change booking records until the fictional customer confirmation step is explicitly accepted.
+- Simulation bookings reference only fictional development profiles and are marked with the `whatsapp-simulation` source; they cannot be created in production.
+- Pickup estimates account for configured service work, active jobs and their stages, bay capacity, working hours, and weekly closure. Show the estimate timestamp and inputs/reason; do not promise an exact pickup time.
+- Simulation delivery state is `not-sent`. No customer notification is queued or triggered.
+
 ## 4. Job lifecycle notifications
 
 Customer-facing notifications should be limited to:

@@ -107,6 +107,6 @@ The implementation order may change after repository inspection. Avoid building 
 - Do not mark a phase complete based only on visual implementation.
 
 
-## Owner-meeting readiness (before production policy configuration)
+## Owner-meeting readiness
 
-Deliver a clickable, functional Owner Decision Center early enough to demonstrate the configurable options in `OWNER_MEETING_PLAYBOOK.md`. Use clearly labelled sample values. The owner must be able to review categories, inspect alternatives and impacts, save unresolved decisions, approve selected settings, and export a decision summary. Do not wait for every owner answer to build the configuration framework.
+The current meeting build uses a real Owner Settings page, persistent sample operational records, branded individual sign-in, and separate server-enforced role/branch workspaces. Settings changes are saved and applied only to implemented workflows. Do not turn the meeting walkthrough into an option-poll or approval simulation. Unimplemented modules remain visibly **On hold**; publishing, production account provisioning, backups, and restore validation remain separate work.

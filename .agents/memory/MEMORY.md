@@ -1,0 +1,1 @@
+- [Owner settings and RBAC](owner-settings-and-rbac.md) — decisions belong in the authenticated Owner workspace; roles need separate, honestly enforced access, and unfinished modules must stay on hold.

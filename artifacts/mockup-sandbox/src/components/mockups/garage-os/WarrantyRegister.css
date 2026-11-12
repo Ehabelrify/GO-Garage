@@ -1,0 +1,45 @@
+.warranty-page { display:grid; gap:16px; }
+.warranty-overview { padding:20px; border:1px solid var(--garage-line); background:var(--garage-paper); box-shadow:var(--garage-shadow); }
+.warranty-overview-title { display:flex; justify-content:space-between; align-items:center; gap:14px; padding-bottom:15px; border-bottom:1px solid #e8eeea; }
+.warranty-kicker { display:block; color:var(--garage-teal); font-size:9px; font-weight:700; letter-spacing:.13em; }
+.warranty-overview-title h2 { margin:5px 0 0; color:var(--garage-ink); font-size:17px; font-weight:600; }
+.warranty-lock { display:inline-flex; align-items:center; gap:7px; padding:7px 9px; color:#816741; background:#f5eddf; font-size:10px; }
+.warranty-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); margin:0 -20px; padding:0 20px; border-bottom:1px solid #e8eeea; }
+.warranty-metrics > div { display:grid; gap:6px; padding:15px 13px; border-inline-start:1px solid #e8eeea; }
+.warranty-metrics > div:first-child { border-inline-start:0; }
+.warranty-metrics span { color:var(--garage-muted); font-size:10px; }
+.warranty-metrics strong { color:#8b9690; font-size:22px; font-weight:500; line-height:1; }
+.warranty-metrics small { color:#929f9a; font-size:9px; }
+.warranty-flow { padding-top:16px; }
+.warranty-flow-stages { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0; margin-top:12px; }
+.warranty-flow-stage { position:relative; display:flex; align-items:center; gap:10px; padding:7px 12px; border-inline-start:1px solid #dce4de; }
+.warranty-flow-stage:first-child { border-inline-start:0; padding-inline-start:0; }
+.warranty-stage-icon { width:32px; height:32px; display:grid; place-items:center; flex:none; color:#71847c; background:#edf1ec; }
+.warranty-flow-stage span { display:block; margin-bottom:3px; color:#99a59f; font-size:8px; font-variant-numeric:tabular-nums; }
+.warranty-flow-stage strong { display:block; color:#687975; font-size:10px; font-weight:600; }
+.warranty-bottom { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(260px,.65fr); gap:14px; align-items:start; }
+.warranty-decisions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.warranty-decision { display:flex; gap:9px; min-height:72px; padding:11px; border:1px solid #e4eae4; background:#f7f8f5; }
+.warranty-decision > span { color:#9c865f; font-size:9px; font-weight:700; font-variant-numeric:tabular-nums; }
+.warranty-decision strong { display:block; color:var(--garage-ink); font-size:10px; font-weight:600; }
+.warranty-decision p { margin:4px 0 0; color:var(--garage-muted); font-size:9px; line-height:1.5; }
+.warranty-note { display:flex; gap:11px; padding:16px; border:1px solid #e2d9c8; background:#f8f5ee; }
+.warranty-note-icon { width:31px; height:31px; display:grid; place-items:center; flex:none; color:#896b3c; background:#efe6d5; }
+.warranty-note h2 { margin:5px 0 5px; color:#4b5a50; font-size:13px; font-weight:600; }
+.warranty-note p { margin:0; color:var(--garage-muted); font-size:10px; line-height:1.65; }
+
+@media (max-width: 900px) {
+  .warranty-bottom { grid-template-columns:1fr; }
+}
+@media (max-width: 760px) {
+  .warranty-overview { padding:15px; }
+  .warranty-overview-title { align-items:flex-start; flex-direction:column; }
+  .warranty-metrics { margin:0 -15px; padding:0 15px; }
+  .warranty-metrics > div { padding:13px 8px; }
+  .warranty-metrics span { font-size:9px; }
+  .warranty-metrics strong { font-size:19px; }
+  .warranty-flow-stages { grid-template-columns:1fr 1fr; row-gap:8px; }
+  .warranty-flow-stage:nth-child(3) { border-inline-start:0; }
+  .warranty-flow-stage:first-child { padding-inline-start:12px; }
+  .warranty-decisions { grid-template-columns:1fr; }
+}

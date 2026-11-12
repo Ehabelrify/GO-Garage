@@ -1,0 +1,90 @@
+.public-verification-page {
+  --pv-ink:#263f37;
+  --pv-muted:#6b7d73;
+  --pv-line:#d8e2da;
+  --pv-paper:#fbfcf8;
+  --pv-surface:#ffffff;
+  --pv-green:#28705d;
+  --pv-green-soft:#eaf3ed;
+  --pv-amber:#8a672e;
+  --pv-red:#984d42;
+  min-height:100dvh;
+  display:flex;
+  flex-direction:column;
+  padding:0 clamp(18px,5vw,72px);
+  color:var(--pv-ink);
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(211,229,215,.42), transparent 34rem),
+    var(--pv-paper);
+  font-family:"IBM Plex Sans Arabic","IBM Plex Sans",sans-serif;
+}
+.public-verification-page::before {
+  position:fixed;
+  z-index:0;
+  inset:0;
+  pointer-events:none;
+  opacity:.13;
+  content:"";
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.16'/%3E%3C/svg%3E");
+}
+.public-verification-page > * { position:relative; z-index:1; }
+.public-verification-header { display:flex; align-items:center; justify-content:space-between; min-height:72px; border-bottom:1px solid #e2e9e2; }
+.public-header-brand { display:flex; align-items:center; gap:9px; color:#36544a; }
+.public-header-brand strong { font-size:13px; letter-spacing:.035em; }
+.public-header-brand small { color:#77887e; font-size:9px; letter-spacing:.12em; }
+.public-header-brand > span:nth-child(2) { color:#9aaa9e; }
+.public-brand-mark { display:grid; place-items:center; width:31px; height:31px; color:#326e5a; background:#e3eee5; }
+.public-language-switch { display:flex; gap:3px; padding:3px; border:1px solid #dce5dd; background:rgba(255,255,255,.64); }
+.public-language-switch button { padding:6px 9px; border:0; color:#6d8075; background:transparent; font:inherit; font-size:11px; cursor:pointer; }
+.public-language-switch button[aria-pressed="true"] { color:#315a49; background:#e7f0e8; font-weight:700; }
+.public-verification-stage { display:grid; justify-items:center; align-content:center; flex:1; width:min(100%,780px); margin:0 auto; padding:52px 0 60px; }
+.public-stage-heading { width:min(100%,590px); margin:0 0 22px; text-align:center; animation:pv-rise .48s ease-out both; }
+.public-stage-heading > span { color:#7b8e82; font-size:10px; font-weight:700; letter-spacing:.13em; }
+.public-stage-heading h2 { margin:8px 0 0; color:#334f43; font-size:clamp(19px,3vw,25px); font-weight:600; line-height:1.4; }
+.public-warranty-card { width:min(100%,520px); padding:25px clamp(20px,5vw,34px) 18px; border:1px solid var(--pv-line); background:var(--pv-surface); box-shadow:0 18px 54px rgba(37,67,52,.075); animation:pv-rise .48s .08s ease-out both; }
+.public-card-brand { display:flex; align-items:center; gap:9px; padding-bottom:18px; border-bottom:1px solid #e8eee8; }
+.public-card-brand > span:last-child { display:grid; gap:2px; }
+.public-card-brand strong { color:#3c5b4d; font-size:11px; letter-spacing:.09em; }
+.public-card-brand small { color:#8a998e; font-size:9px; letter-spacing:.11em; }
+.public-card-status { display:flex; align-items:center; gap:13px; margin-top:22px; }
+.public-status-mark { display:grid; place-items:center; width:47px; height:47px; flex:none; color:var(--pv-green); background:var(--pv-green-soft); }
+.public-card-status > div > span { color:#75867c; font-size:10px; }
+.public-card-status h1 { margin:2px 0 0; color:#355346; font-size:20px; font-weight:650; line-height:1.35; }
+.public-card-intro { margin:16px 0 0; color:#6a7d72; font-size:12px; line-height:1.7; }
+.public-warranty-details { display:grid; gap:0; margin:16px 0 0; border-top:1px solid #e8eee8; }
+.public-warranty-details > div { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; padding:11px 0; border-bottom:1px solid #e8eee8; }
+.public-warranty-details dt { display:flex; align-items:center; gap:7px; flex:none; color:#73857a; font-size:11px; }
+.public-warranty-details dt svg { color:#789182; }
+.public-warranty-details dd { margin:0; color:#3d5649; font-size:12px; font-weight:600; text-align:end; }
+.public-card-foot { margin-top:15px; color:#829186; font-size:10px; text-align:center; }
+.public-warranty-card.status-expired .public-status-mark { color:var(--pv-amber); background:#f5f0e2; }
+.public-warranty-card.status-expired .public-card-status h1 { color:#775f32; }
+.public-warranty-card.status-void .public-status-mark { color:var(--pv-red); background:#f6eae7; }
+.public-warranty-card.status-void .public-card-status h1 { color:#814b43; }
+.public-verification-message { width:min(100%,520px); padding:30px clamp(20px,5vw,36px); border:1px solid var(--pv-line); background:#fff; box-shadow:0 18px 54px rgba(37,67,52,.06); text-align:center; animation:pv-rise .4s ease-out both; }
+.public-verification-symbol { display:grid; place-items:center; width:47px; height:47px; margin:0 auto 12px; color:#7a8269; background:#eff1e8; }
+.public-verification-message h1 { margin:0; color:#3b5147; font-size:20px; }
+.public-verification-message p { max-width:390px; margin:9px auto 0; color:#6c7d73; font-size:12px; line-height:1.7; }
+.public-verification-not-found { border-top:3px solid #9b8051; }
+.public-retry-button { margin-top:17px; padding:9px 17px; border:1px solid #2e6a57; color:#fff; background:#2e6a57; font:inherit; font-size:12px; font-weight:650; cursor:pointer; }
+.public-retry-button:hover { background:#245747; }
+.public-verification-skeleton { display:grid; gap:13px; width:min(100%,520px); min-height:280px; padding:25px; border:1px solid var(--pv-line); background:#fff; }
+.public-verification-skeleton div { height:25px; background:linear-gradient(90deg,#edf2ed 20%,#f7f8f5 50%,#edf2ed 80%); background-size:200% 100%; animation:pv-shimmer 1.4s ease-in-out infinite; }
+.public-verification-skeleton div:first-child { width:42%; height:18px; }
+.public-verification-skeleton div:nth-child(2) { width:72%; height:48px; margin-top:12px; }
+.public-verification-skeleton div:nth-child(3) { height:70px; margin-top:4px; }
+.public-verification-skeleton div:last-child { width:55%; }
+.public-verification-footer { display:flex; justify-content:center; align-items:center; gap:7px; min-height:56px; border-top:1px solid #e2e9e2; color:#829187; font-size:10px; }
+.public-verification-footer svg { color:#648273; }
+@keyframes pv-rise { from { opacity:0; transform:translateY(9px); } to { opacity:1; transform:translateY(0); } }
+@keyframes pv-shimmer { to { background-position:-200% 0; } }
+@media(max-width:560px) {
+  .public-verification-header { min-height:62px; }
+  .public-verification-stage { padding:35px 0 42px; }
+  .public-stage-heading { margin-bottom:16px; }
+  .public-warranty-card { padding:20px 18px 15px; }
+  .public-warranty-details > div { gap:10px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .public-verification-page *, .public-verification-page *::before { animation-duration:.01ms !important; animation-iteration-count:1 !important; }
+}

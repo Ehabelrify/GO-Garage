@@ -2,6 +2,10 @@
 
 This is a conceptual model. Adapt naming and normalization to the inspected repository. Use migrations and enforce constraints in PostgreSQL.
 
+## Current implementation slice
+
+The current meeting build persists branches, services, staff memberships, verified Owner bootstrap state, customer/vehicle records, customer-to-branch access, bookings, jobs, job-stage events, operating settings, setting versions, and setting-audit events. Clerk user IDs are the identity reference; the application does not store passwords. The broader entities below remain design references unless a module is explicitly active in the UI.
+
 ## 1. Core entities
 
 ### Branch

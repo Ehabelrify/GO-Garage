@@ -2,13 +2,13 @@
 
 ## 1. Discovery status — read first
 
-**Owner discovery status: NOT YET COMPLETED.** The second meeting is intended to validate the operating model and select policies. The user cannot confirm these policies on the owner's behalf. Therefore, all detailed operating choices below are **unknown / proposed**, not approved.
+**Owner discovery status: NOT YET COMPLETED.** Detailed operating choices below remain provisional until the business owner validates them. The application exposes the implemented operating controls as real Owner settings; it does not treat a setting change as a meeting poll or demo approval.
 
 Product direction and engineering safeguards are established for this brief; operational policy remains configurable. Use `OWNER_MEETING_PLAYBOOK.md` to present the options and record the owner's decisions. Do not continue asking the user to choose unknown business policies.
 
 Status vocabulary:
 - **Established direction:** product-level requirement already agreed for this project.
-- **Proposed default [ASSUMED]:** safe starting point for demo/development; not a Go Stores policy.
+- **Seeded development value [ASSUMED]:** sample starting value for the development database; not a verified Go Stores policy.
 - **Owner decision required:** must be discussed and approved before live operation.
 - **Owner approved:** only after an explicit decision is recorded with approver and date.
 
@@ -46,7 +46,7 @@ Status vocabulary:
 
 ## 4. Provisional capacity configuration
 
-The following figures are demo-only assumptions to make the prototype usable. Do not present them as measured Go Stores capacity. Every value must be editable per branch and service, with effective dates.
+The following figures are development seed assumptions to make the workspace usable. Do not present them as measured Go Stores capacity. Implemented values can be changed by the Owner in Settings; other capacity policies remain on hold.
 
 | Setting | Branch 1 | Branch 2 | Status |
 |---|---:|---:|---|
@@ -105,14 +105,14 @@ The complete owner-facing option catalogue and meeting agenda are in `OWNER_MEET
 - Automations, customer communications, escalation recipients and working-hour calendars.
 - Reports, KPIs, owner digest, retention, exports, backups and launch readiness.
 
-## 7. Configuration implementation requirements
+## 7. Current Settings implementation
 
-- Build an Owner Decision Center / Settings area with categories, searchable settings, proposed default, available options, scope, impact explanation, status, owner decision, approver, effective date, and change history.
-- Include a meeting/demo mode that visibly labels sample data and provisional values.
-- Support draft → preview → approve/publish for high-impact settings.
-- Use configuration versioning for service catalogue/pricing, capacity calendars, warranty templates, automation rules, and workflow policies.
-- Add branch-level overrides only where the domain supports them; show inherited vs overridden values clearly.
-- Export a decision summary for the owner after the meeting.
+- Operating settings live in the authenticated Owner workspace. Saving a value updates PostgreSQL, applies it to supported booking checks, and adds a history record.
+- Active settings are booking confirmation, daily drop-off limit, working hours, clean/general bay counts, weekly day off, tint duration, and ceramic duration.
+- Development seed values are sample assumptions, not owner-approved policy. A development-only environment label distinguishes the sample database.
+- Warranty policy drafts, versioned records, and human-reviewed claims are available; issuing coverage and public QR verification remain **On hold** until the Owner supplies and approves the required terms and privacy rules.
+- WhatsApp, inventory, payments, intake-photo requirements, automated assignment, customer status messages, and other unfinished policies remain visible as **On hold** with no active controls.
+- General operating settings do not use a proposal or demo-approval flow; warranty policies have their own explicit draft and publish workflow.
 
 ## 8. Assumption handling
 

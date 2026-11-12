@@ -78,8 +78,8 @@ Uses WhatsApp to ask questions, request a booking, confirm/reschedule/cancel, ch
 
 ## 5. Product principles
 
-### Configurable proposal pending owner discovery
-The owner has not yet confirmed detailed operating policies. Garage OS must therefore demonstrate options rather than encode assumptions as facts. The product must include an Owner Decision Center for configuring and approving branch operations, services, pricing, bookings, assignment, workflow, warranty, inventory, finance, WhatsApp, automations, permissions, and reporting. Every material policy must be marked as a proposed default, awaiting owner decision, or owner-approved. See `OWNER_MEETING_PLAYBOOK.md`.
+### Owner-controlled operating settings
+The owner has not yet confirmed detailed operating policies. Implemented settings belong in the authenticated Owner account and must change actual supported system behavior. The application must not present option cards as decisions to approve. Seeded development values remain clearly identified as samples; unfinished settings and modules stay inactive and visibly **On hold**. Use `OWNER_MEETING_PLAYBOOK.md` as a discussion guide for future product scope, not as an active settings catalogue.
 
 
 - WhatsApp-first for customer communication; internal PWA for staff.
@@ -95,11 +95,12 @@ The owner has not yet confirmed detailed operating policies. Garage OS must ther
 
 ## 6. Scope
 
-### MVP / first production release
+### Current meeting-build settings
 
-- Owner Decision Center with configurable business-wide defaults and branch-level overrides.
-- Settings catalogue with proposed defaults, alternatives, impact notes, approval status, effective dates, and audit history.
-- Draft/preview/publish workflow for high-impact settings; preserve historical records when rules change.
+- Owner Settings with business-wide or branch-specific values for the implemented operating rules.
+- Server validation, persistence, immediate application to supported booking checks, and audit history.
+- Seed values labeled as development samples; no demo approval, draft/publish, or decision-export flow.
+- Unimplemented policy areas remain visible as **On hold** with no active controls.
 
 **Foundation**
 - Authentication and role-based access.
@@ -173,14 +174,12 @@ The owner has not yet confirmed detailed operating policies. Garage OS must ther
 
 ## 7. Core workflows
 
-### 7.0 Owner setup and decision workflow
-1. Owner or authorized manager opens the setup/decision center.
-2. System lists unresolved decisions by category and marks demo assumptions clearly.
-3. Each setting shows the proposed default, alternatives, business impact, scope, and dependencies.
-4. Authorized user selects a value, branch scope, exceptions, and effective date.
-5. High-impact settings are previewed and approved before publication.
-6. The system records approver, timestamp, previous/new value, and reason; historical transactions retain their original rule version.
-7. An exportable decision summary is available for meeting notes and follow-up.
+### 7.0 Owner Settings workflow
+1. Owner signs in with an individually authenticated account.
+2. Owner opens **Settings** and sees the current value and scope for each active control.
+3. Owner changes a supported value and saves it.
+4. The server validates the value, persists it, applies it to supported booking behavior, and records the previous/new value, actor, scope, and time.
+5. Areas without an implemented workflow remain **On hold** and cannot be changed from the interface.
 
 
 ### 7.1 New customer enquiry

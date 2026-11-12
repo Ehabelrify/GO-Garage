@@ -15,16 +15,18 @@ You are building **Garage OS**, a production-oriented operations platform for Go
 ## 2. Product priorities
 
 ### Configurable-by-default rule (critical)
-The owner has not yet completed the operational discovery meeting. Therefore, operational policies are **unknown**, not implicitly approved. Do not ask the user to invent answers on the owner's behalf and do not hard-code a single business policy. Build a configurable product that can demonstrate the available choices to the owner. Use `OWNER_MEETING_PLAYBOOK.md` and `DECISIONS_AND_ASSUMPTIONS.md` as the source of truth for options and provisional recommendations.
+The owner has not yet completed the operational discovery meeting. Therefore, operational policies are **unknown**, not implicitly approved. Do not ask the user to invent answers on the owner's behalf or present assumptions as verified policy. The current application uses editable operating settings in the authenticated Owner account, not a decision poll or demo approval screen. Use `OWNER_MEETING_PLAYBOOK.md` as a discussion guide, not as a requirement to turn every option into an active control.
 
-- Every material operational setting must be editable by an authorized role, with sensible scope (business-wide or branch-specific), validation, audit history, and an explicit default.
+- Every implemented operational setting must be editable by the Owner, with sensible scope (business-wide or branch-specific), server validation, audit history, and a visible current value.
 - Support business-wide defaults with branch-level overrides where meaningful.
-- Distinguish **Proposed default**, **Owner decision required**, **Owner approved**, and **Not applicable**. Never label a proposal as an approved policy.
-- Where options affect workflow, permissions, money, customer promises, legal terms, or capacity, expose the alternatives and explain their consequences before activation.
-- Provide an Owner Decision Center / setup area that groups unresolved decisions, shows the current proposal, alternatives, impact, selected value, approval status, and change history. It must be usable in a live owner meeting.
-- Allow draft configuration and preview before publishing. Record who changed/approved a setting, when, its scope, previous value, new value, and effective date. Support safe rollback where feasible.
+- Never label a seeded development value as a verified business policy.
+- Put unfinished features in a clearly marked **On hold** state with no fake or misleading controls.
+- Owner Settings saves supported changes directly, records who changed a setting, when, its scope, and previous/new values. Do not add a proposal/approval workflow unless the user asks for it.
 - Configuration changes must not silently rewrite historical bookings, quotations, jobs, invoices, payments, or warranties. Use effective dates/versioned rules.
 - Do not make fundamental security, data-integrity, or audit safeguards optional merely because operational settings are configurable.
+
+### Current user-directed scope
+The current build is a polished first-meeting application with individual sign-in, Owner/Branch Manager/Receptionist/Technician workspaces, persistent operational records, and server-enforced role/branch access. The Owner's controls are a **Settings** page. Do not restore a Decision Center, role preview switcher, fake demo approval, shared sample login, or inactive feature pretending to work.
 
 
 Build a coherent, real product with the following priorities, in order:
