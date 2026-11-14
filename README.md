@@ -1,67 +1,70 @@
-# Garage OS — Go Stores Operations
+# Garage OS - Go Stores Operations
 
-- **Status:** Role-based meeting build; production launch setup is not complete
-- **Languages:** Arabic (default, RTL) and English (LTR)
-- **Runtime:** React/Vite frontend, Express API, PostgreSQL, Clerk authentication
+Garage OS is an internal operations application for a two-branch automotive
+business in Egypt. The current build combines a React/Vite web client, an
+Express/PostgreSQL API, Clerk authentication, and a shared TypeScript domain
+package. Arabic/RTL and English/LTR are supported.
 
-Garage OS is an internal operations workspace for Go Stores. Each person signs in with an individual account and receives a server-enforced role and branch scope. The Owner manages operating settings and staff access; Branch Managers, Receptionists, and Technicians see their own work areas.
+## Current application map
 
-## Current working scope
+- `apps/web/` - React client, application shell, feature screens, shared UI,
+  styles, and public assets.
+- `apps/server/` - Express API, authentication and authorization, business
+  features, database/migration infrastructure, storage adapter, and seed code.
+- `packages/domain/` - shared types and pure booking, job, and warranty rules.
+- `artifacts/mockup-sandbox/` - separate prototype; it is not the production
+  app entry point.
 
-- Branded sign-in and sign-out, with individual Clerk invitations and no shared/default password.
-- Owner, Branch Manager, Receptionist, and Technician workspaces with role and branch checks on the API.
-- Persistent customer, vehicle, booking, job, operating-setting, and setting-history records in PostgreSQL.
-- Owner settings for booking confirmation, daily intake, working hours, bay counts, weekly closure, and supported service durations. Saved values are validated, audited, and used by booking-capacity checks.
-- Customer creation, booking requests and confirmation/cancellation, job-stage updates, and technician assignment.
-- Owner-managed warranty policy drafts, immutable published versions, delivery-triggered coverage for enabled services, and human-reviewed claims.
-- Arabic RTL and English LTR workspace layouts.
+The Replit workflow in `.replit` starts `npm run dev` with development demo
+authentication enabled and serves on port 5000. The root npm scripts and
+`scripts/post-merge.sh` are retained for Replit.
 
-The development database contains clearly identified fictional sample records and provisional warranty policy drafts for tint, ceramic coating, and full PPF. They are not approved customer terms and cannot issue coverage until an Owner reviews and publishes them. Do not enter real customer data in the development environment.
+## Implemented scope and boundaries
 
-## Run locally in the Replit development environment
+The app includes staff sign-in and role/branch access, customer and vehicle
+records, bookings and capacity checks, job stages and assignment, Owner
+operating settings, warranty policies/records/claims, and warranty invoice
+drafts. Warranty public verification is implemented behind an Owner-controlled
+setting; do not enable it until the approved fields and customer-facing policy
+are confirmed.
+
+The WhatsApp inbox is a development simulator only; provider delivery is
+disabled. The Replit workflow can enable separate development demo identities,
+which are not production authentication. General inventory, accounting/POS,
+live WhatsApp delivery, and scheduled messaging are not implemented.
+
+## Replit and local commands
 
 ```sh
-npm install
-NODE_ENV=development npm run db:migrate
-NODE_ENV=development npm run db:seed:dev
+npm ci
 npm run dev
-```
-
-The seed command is development-only and must not be run against production. `npm run db:migrate` also rejects production mode in this meeting build.
-
-### First Owner access
-
-The development preview includes a separate demo account chooser for Owner, Branch Manager, Receptionist, and Technician. These temporary identities use signed development sessions, do not have passwords or real Clerk accounts, and cannot be used in production. The normal Clerk sign-in and verified-email flow remain unchanged.
-
-For a real Owner account, configure `OWNER_BOOTSTRAP_EMAIL` in Replit Secrets using the verified Clerk email that will belong to the first Owner, then create that account through the branded sign-in flow. After the Owner is active, invite each staff member from **Staff access**; Clerk sends individual invitations with the selected role and branch scope. Self-sign-up without an authorized invitation remains blocked from business data.
-
-Never put a real email or credential in source code or documentation.
-
-## Areas on hold
-
-The internal warranty register and claim workflow are active. Automatic coverage is issued only when an Owner-published policy enables it and an eligible job is delivered; development sample policies remain drafts. Public QR warranty verification is **On hold**. WhatsApp messaging, inventory, payments, intake-photo evidence, automated notifications, and custom workflow configuration remain inactive. No customer messages are sent.
-
-## Checks
-
-```sh
 npm run typecheck
 npm test -- --run
 npm run build
 ```
 
-## Product documents
+The app needs the appropriate `DATABASE_URL` and Clerk configuration for the
+environment. `npm run db:migrate` changes the database selected by
+`DATABASE_URL`; confirm that it is the intended development database before
+running it. `npm run db:seed:dev` writes fictional sample data and is
+development-only.
 
-| File | Purpose |
+Two database integration suites perform inserts/deletes and temporarily change
+a warranty verification setting. They run only when
+`GARAGE_TEST_DATABASE_URL` explicitly identifies a dedicated disposable test
+database; an ambient `DATABASE_URL` is not sufficient. Never point either
+variable at production or a shared Replit database.
+
+## Documentation
+
+| Area | Documents |
 |---|---|
-| `PRD.md` | Product vision, workflows, scope, and longer-term requirements |
-| `DESIGN_SYSTEM.md` | Visual, interaction, Arabic/RTL, and responsive guidance |
-| `ARCHITECTURE.md` | Current technical architecture and future module boundaries |
-| `DATA_MODEL.md` | Implemented records and broader conceptual model |
-| `SECURITY_PRIVACY.md` | Access control, customer privacy, auditing, and operational safety |
-| `DECISIONS_AND_ASSUMPTIONS.md` | Provisional business settings and owner validation needs |
-| `OWNER_MEETING_PLAYBOOK.md` | Topics for owner discovery; not a screen in the application |
-| `ACCEPTANCE_TESTS.md` | Verified current scope and broader future acceptance scenarios |
+| Product | [PRD](docs/product/PRD.md), [design system](docs/product/DESIGN_SYSTEM.md), [Owner meeting playbook](docs/product/OWNER_MEETING_PLAYBOOK.md), [decisions and assumptions](docs/product/DECISIONS_AND_ASSUMPTIONS.md) |
+| Engineering | [Architecture](docs/engineering/ARCHITECTURE.md), [data model](docs/engineering/DATA_MODEL.md), [security and privacy](docs/engineering/SECURITY_PRIVACY.md), [acceptance tests](docs/engineering/ACCEPTANCE_TESTS.md), [automations](docs/engineering/AUTOMATIONS.md), [WhatsApp specification](docs/engineering/WHATSAPP_SPEC.md), [warranty evidence storage](docs/engineering/WARRANTY_EVIDENCE_STORAGE.md) |
+| Operations | [Delivery plan](docs/operations/DELIVERY_PLAN.md), [decisions register](docs/operations/DECISIONS.md), [project log](docs/operations/PROJECT_LOG.md) |
+| Current-state report | [Repository assessment and quick analysis](docs/reports/REPOSITORY_ASSESSMENT.md) |
+| Contributor guidance | [Root instructions](AGENT_INSTRUCTIONS.md), [application instructions](apps/AGENT_INSTRUCTIONS.md), [documentation instructions](docs/AGENT_INSTRUCTIONS.md) |
 
-## Important scope
-
-The live settings in this build are functional configuration, not a decision-polling or demo-approval flow. Seeded values are examples and should be verified by the business owner before operational use. Features outside the implemented scope remain inactive. Production account setup, backup/restore validation, and publishing are not included.
+Product and engineering references include proposed or future scope. For
+implemented behavior and readiness limits, use the repository assessment and
+inspect the current source.

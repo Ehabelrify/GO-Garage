@@ -3,16 +3,20 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "workspaces": [
+    "packages/domain"
+  ],
   "scripts": {
-    "dev": "tsx server/index.ts",
-    "start": "tsx server/index.ts",
+    "dev": "tsx apps/server/index.ts",
+    "start": "tsx apps/server/index.ts",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "vitest run",
-    "db:migrate": "tsx server/migrate.ts",
-    "db:seed:dev": "tsx server/seed-dev.ts"
+    "db:migrate": "tsx apps/server/migrate.ts",
+    "db:seed:dev": "tsx apps/server/seed-dev.ts"
   },
   "dependencies": {
+    "@garage/domain": "0.1.0",
     "@clerk/express": "^2.1.88",
     "@clerk/localizations": "^4.24.6",
     "@clerk/react": "^6.18.6",
