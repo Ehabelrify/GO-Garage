@@ -12,6 +12,11 @@ first. This file is subordinate and applies only to `docs/`.
 - `operations/` holds delivery and ongoing decision/project records.
 - `reports/` holds current-state assessments; keep these grounded in the
   checked-out source and label unverified readiness items as such.
+- `testing/` holds test and code-review reports with their source evidence.
+  Preserve original issue IDs, test dates, and verification limits; a converted
+  report does not establish a new test run or resolve its findings.
+  Maintain ongoing Phase 1 work in `testing/PHASE_1_ISSUES_TRACKER.md` using its
+  stable IDs and intake/status rules; retain the source reports as snapshots.
 - `superpowers/` contains task-specific design and execution records, not
   authoritative product policy.
 

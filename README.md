@@ -63,6 +63,7 @@ variable at production or a shared Replit database.
 | Engineering | [Architecture](docs/engineering/ARCHITECTURE.md), [data model](docs/engineering/DATA_MODEL.md), [security and privacy](docs/engineering/SECURITY_PRIVACY.md), [acceptance tests](docs/engineering/ACCEPTANCE_TESTS.md), [automations](docs/engineering/AUTOMATIONS.md), [WhatsApp specification](docs/engineering/WHATSAPP_SPEC.md), [warranty evidence storage](docs/engineering/WARRANTY_EVIDENCE_STORAGE.md) |
 | Operations | [Delivery plan](docs/operations/DELIVERY_PLAN.md), [decisions register](docs/operations/DECISIONS.md), [project log](docs/operations/PROJECT_LOG.md) |
 | Current-state report | [Repository assessment and quick analysis](docs/reports/REPOSITORY_ASSESSMENT.md) |
+| Testing reports | [Phase 1 issues tracker](docs/testing/PHASE_1_ISSUES_TRACKER.md), [repository code review](docs/testing/REPOSITORY_CODE_REVIEW.md), [UI test report](docs/testing/GARAGE_OS_UI_TEST_REPORT.md), [original UI report PDF](docs/testing/Garage_OS_UI_Test_Report.pdf) |
 | Contributor guidance | [Root instructions](AGENT_INSTRUCTIONS.md), [application instructions](apps/AGENT_INSTRUCTIONS.md), [documentation instructions](docs/AGENT_INSTRUCTIONS.md) |
 
 Product and engineering references include proposed or future scope. For

@@ -93,6 +93,7 @@ been verified.
   [decisions](docs/operations/DECISIONS.md), and
   [project log](docs/operations/PROJECT_LOG.md).
 - Current implementation and readiness: [repository assessment](docs/reports/REPOSITORY_ASSESSMENT.md).
+- Phase 1 issues and future intake: [unified tracker](docs/testing/PHASE_1_ISSUES_TRACKER.md).
 - Scoped guidance: [apps](apps/AGENT_INSTRUCTIONS.md) and
   [docs](docs/AGENT_INSTRUCTIONS.md).
 
