@@ -14,6 +14,14 @@ Status vocabulary:
 
 ## 2. Established product direction
 
+**User-approved scope update — 16 November 2026:** The full operational product
+is primary; demonstrations/training are isolated auxiliary layers. The user
+approved all researched additions: packages/quotes, deferred reservations,
+lifetime coverage, benefits/aftercare, transport, promotion/referral eligibility,
+fact-informed inbox handoff and owner exceptions. See [accepted scope](PRODUCT_DIRECTION_AND_RELEASES.md).
+Implementation remains open. These approvals establish features, not actual
+pricing, coverage, capacity or eligibility rules.
+
 | Area | Direction | Status |
 |---|---|---|
 | Business | Go Stores; two known branches in Egypt | Established |

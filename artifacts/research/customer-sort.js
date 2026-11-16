@@ -1,0 +1,1 @@
+(()=>{const m=[...document.querySelectorAll('[role="menu"]')].find(e=>e.innerText.includes('All comments'));if(!m)return 'no comment menu';const b=[...m.querySelectorAll('[role="menuitem"]')].find(e=>e.innerText.startsWith('All comments'));if(b)b.click();return 'selected all comments'})()

@@ -1,16 +1,19 @@
 # Garage OS — Phase 1 Issues Tracker
 
-**Created / last updated:** 15 November 2026  
+**Created / last updated:** 15 November 2026 / 16 November 2026
 **Purpose:** Single working tracker for Phase 1 defects, investigation, implementation handoff, and retesting.  
 **Initial intake:** 25 entries: 7 code-review findings, 15 UI-test findings, and 3 engineering follow-ups.  
-**Next available ID:** `P1-026`  
-**Current ownership:** All entries are unassigned. All entries are Open; no fixes or new runtime tests were performed while creating this tracker.
+**Current intake:** 44 entries: the original 25, 6 user-feedback/discovery follow-ups, 6 cross-industry research improvements, and 7 approved business/product additions recorded on 16 November 2026.
+**Next available ID:** `P1-045`
+**Current ownership:** All 44 entries are unassigned and Open. The user approved all researched recommendations/additions and the operational-product direction. This update records requirements and the next-session full-plan handover; no implementation or new runtime retests were performed.
 
 ## Sources and application context
 
 This document combines the [repository code review](REPOSITORY_CODE_REVIEW.md) and [cleaned UI test report](GARAGE_OS_UI_TEST_REPORT.md), including the code review's three build/workflow concerns. The [original UI PDF](Garage_OS_UI_Test_Report.pdf) and both reports remain historical evidence. Add future issues and progress here; do not rewrite the original reports to imply that their findings were retested.
 
 Garage OS uses React/Vite, Express, PostgreSQL, Clerk, and `@garage/domain`. It implements role/branch access, customer and vehicle records, bookings, workshop stages, staff assignment, operating settings, warranty policies/records/claims/evidence, invoice drafts, and gated public verification. Arabic/RTL and English/LTR are supported. WhatsApp is a development simulator. Inventory, full accounting/POS, and live/scheduled messaging remain outside implemented scope.
+
+**Accepted scope update — 16 November 2026:** Garage OS is the full operational product; fictional demonstration/training is an isolated auxiliary layer. Future capabilities ship in phases/versions. [Accepted direction](../product/PRODUCT_DIRECTION_AND_RELEASES.md) maps the approved additions. The next session must create the [full plan covering P1-001–P1-044](../operations/PHASE_1_FULL_PLAN_HANDOVER.md), including every original defect and finding. Earlier demo-first intake remains historical; current requirements below supersede its product framing without claiming fixes. Feature approval does not approve researched prices, warranties or other business policies.
 
 ## How to maintain this tracker
 
@@ -64,6 +67,25 @@ Garage OS uses React/Vite, Express, PostgreSQL, Clerk, and `@garage/domain`. It 
 | [P1-023](#p1-023) | Review workflow concern 1 | Post-merge migrations precede build validation | Medium | P1 | Open | Risk |
 | [P1-024](#p1-024) | Review workflow concern 2 | Build omits server type checking | Medium | P1 | Open | Source |
 | [P1-025](#p1-025) | Review workflow concern 3 | Large eagerly loaded JavaScript bundle | Low | P3 | Open | Historical build |
+| [P1-026](#p1-026) | User feedback / accepted operational scope | Operational WhatsApp journey and auxiliary scenario entry | Medium | P2 | Open | Reported |
+| [P1-027](#p1-027) | User feedback / accepted operational scope | Six-number operational inbox and isolated demonstration layer | Medium | P2 | Open | Reported |
+| [P1-028](#p1-028) | User feedback 2026-11-16 | Warranty workspace is overloaded and needs contextual editing | Medium | P2 | Open | Reported |
+| [P1-029](#p1-029) | User feedback 2026-11-16 | Owner overview needs financial metrics and monthly trends | Medium | P2 | Open | Reported |
+| [P1-030](#p1-030) | User feedback 2026-11-16 | Cross-industry UI/UX and workflow improvement discovery | Low | P2 | Open | Reported |
+| [P1-031](#p1-031) | User follow-up 2026-11-16 | Owner and business discovery after product discussion | Low | P2 | Open | Reported |
+| [P1-032](#p1-032) | Front research / user intake | Central inbox ownership, handoff, and unanswered-work visibility | Medium | P2 | Open | Reported |
+| [P1-033](#p1-033) | Housecall Pro research / user intake | Owner report filters, trend views, and drill-down | Low | P2 | Open | Reported |
+| [P1-034](#p1-034) | Jobber research / user intake | Separate quotes, collections, balances, costs, and profit | Medium | P2 | Open | Reported |
+| [P1-035](#p1-035) | Fresha research / user intake | Contextual warranty forms and safe template lifecycle | Low | P2 | Open | Reported |
+| [P1-036](#p1-036) | RepairDesk research / user intake | Stage-based action queues and optional operational columns | Low | P2 | Open | Reported |
+| [P1-037](#p1-037) | Process Street research / user intake | Sequential forms with conditional steps and retained input | Low | P2 | Open | Reported |
+| [P1-038](#p1-038) | User approval / product direction | Operational product, isolated demonstration layer and phased delivery | High | P1 | Open | Reported |
+| [P1-039](#p1-039) | Approved Go Stores research additions | Structured catalogue, packages and accepted quotation versions | Medium | P2 | Open | Source + Reported |
+| [P1-040](#p1-040) | Approved Go Stores research additions | Deferred promotion reservations and later installation | Medium | P2 | Open | Reported |
+| [P1-041](#p1-041) | Approved Go Stores research additions | Fixed-term and lifetime warranty coverage semantics | High | P1 | Open | Source + Reported |
+| [P1-042](#p1-042) | Approved Go Stores research additions | Included benefits and aftercare entitlement redemption | Medium | P2 | Open | Reported |
+| [P1-043](#p1-043) | Approved Go Stores research additions | Vehicle transport and VIP service coordination | Medium | P2 | Open | Reported |
+| [P1-044](#p1-044) | Approved Go Stores research additions | Promotion qualification, referral and multi-car redemption | Medium | P2 | Open | Reported |
 
 ## Technical issue details
 
@@ -449,8 +471,475 @@ sanitized evidence links, and final status decision.
 **History:** YYYY-MM-DD — Intake recorded.
 ```
 
+## User feedback topics — 16 November 2026
+
+These are product-change requests and discovery tasks, not newly reproduced defects. Severity and priority are provisional triage values. All six inherit **Implementation: None recorded; Retest: Not performed**. Research progress does not mean the requested product behavior exists. The user requested discussion where intent is unclear and will explain the WhatsApp behavior in subsequent steps.
+
+| Topic | Entries | Discussion dependency |
+|---|---|---|
+| WhatsApp demo and operational inbox | P1-026, P1-027 | Entry, RBAC, and two-sided layout clarified; exact conversation and automation rules pending |
+| Warranty usability | P1-028 | Which sections start collapsed and what add/remove actions mean |
+| Owner financial overview | P1-029 | Priority metrics, financial definitions, available source data |
+| Overall UI/UX and workflow opportunities | P1-030 | Discuss research findings and select improvements |
+| Next task: owner and business research | P1-031 | Begin after the preceding topics have been discussed |
+
+**WhatsApp clarification, 2026-11-16:** Outside selection opens the specified demo user's workspace with only that user's permitted data, pages, and actions (RBAC). The WhatsApp demo itself has two sides: customer conversation/input and the selected user's agent dashboard/navigation, showcasing auto-replies and selectable list choices. Synchronizing the same fictional interaction across both sides is the proposed behavior. Exact conversation content and agent handoff triggers remain to be discussed.
+
+### Shared intake evidence and limits
+
+**Reported / updated:** 2026-11-16; direct user feedback in this session.
+**Environment:** Build/commit, browser/OS, branch, locale, viewport/zoom, exact URLs, reproduction steps, and screenshots were not supplied. Owner role is explicit for P1-029; affected roles for the other topics remain to be confirmed.
+**Evidence:** Reported. Source inspection below provides context only; it does not reproduce the user's experience.
+**Status / owner:** Open / Unassigned for each entry. Record answers as dated updates without replacing this original intake.
+
+<a id="p1-026"></a>
+
+### P1-026 — Operational WhatsApp journey and auxiliary scenario entry
+
+**Title updated — 2026-11-16:** Formerly WhatsApp simulator experience and direct demo entry. Historical intake below is preserved; the accepted operational-scope update supersedes its demo-first framing.
+
+**Area:** WhatsApp simulation / external demo-user selection.
+**Severity / priority:** Medium / P2, proposed; reported workflow dissatisfaction.
+**Related:** P1-007 (conversation isolation), P1-008/P1-009 (demo access), P1-027 (shared inbox).
+
+**Actual / impact:** The user finds the simulation very poor, boring, and functionally different from the intended experience. Specific failed actions have not yet been described.
+
+**Expected — user request:** Improve the simulation and connect it directly from the demo-user selection on the outside page. Apply the detailed behavior the user will explain in subsequent steps.
+
+**Source context:** [Simulator](../../apps/web/src/features/whatsapp/WhatsAppSimulationPage.tsx), [demo-user panel](../../apps/web/src/features/demo-auth/DemoAccountPanel.tsx), and [auth flow](../../apps/web/src/app/AuthApp.tsx). The current selector chooses staff demo identities. The clarification below requests a simulated customer side alongside the staff side; it does not establish a new customer login role.
+
+**Confirmed clarification — 2026-11-16:** Selecting a demo user outside opens that specified user's workspace, respecting RBAC for everything the user can access or see. The WhatsApp demo page is divided into two sides: (1) what the customer sees and inputs, and (2) the agent dashboard, showing what the selected user sees and how to navigate it. Showcase auto-replies and selectable list choices as part of the interaction. The request does not require every role to land directly on WhatsApp or grant inbox access to otherwise unauthorized roles.
+
+**Proposed approach / remaining discussion:** Connect both sides to the same fictional conversation so customer inputs/list selections, automatic responses, and permitted staff replies stay synchronized. Preserve actual selected-user permissions rather than giving the demo a universal agent view. Confirm the initial greeting, list options, reply sequences, handoff trigger, reset behavior, and how the two sides adapt to narrow screens. These details are not yet approved.
+
+**Acceptance — provisional:** The agreed outside selection opens the intended demo journey without redundant setup; chosen role/branch permissions still apply. The user can complete the agreed fictional messaging scenario and see its intended operational result. Conversation state remains isolated under P1-007; no external messages are sent. Confirm behavior in Arabic/English and on mobile/desktop after the journey is agreed.
+
+**Additional acceptance from clarification:** Outside selection starts the specified demo identity's workspace. On the WhatsApp demo page, both customer and agent sides are visible on a wide screen. The customer can type a message and select a demonstrated list choice; the corresponding automatic response is visible to the customer and the same interaction is reflected on the agent side. The agent side supports the selected user's permitted navigation/actions only. Unauthorized roles cannot acquire inbox data or actions through the demo UI, direct routes, or API calls. Exact reply content and timing remain pending.
+
+**History:** 2026-11-16 — Intake recorded; exact demo journey awaits user explanation.
+
+**Update:** 2026-11-16 — User clarified role-based workspace entry, a two-sided customer/agent demo, and demonstration of auto-replies/list choices. Recorded only; no implementation or retest performed.
+
+**Assumed full-flow proposal — 2026-11-16:** The user authorized assuming the greeting, choices, and functional sequence, and explicitly requested **no code changes now**. The [complete demo-flow proposal](../product/WHATSAPP_DEMO_FLOW_PROPOSAL.md) records proposed bilingual greeting/menu, service enquiry, booking and staff approval, verified status lookup, reschedule/cancel, warranty help, branch information, human handoff, and recovery/reset scenarios. Assumptions are demo defaults, not approved business policy. Existing confirmation settings and actual role/branch permissions control outcomes; no universal demo privileges are introduced. This replaces the need to obtain every conversation detail before drafting; the overall proposal remains available for discussion.
+
+**Latest confirmed requirement — 2026-11-16:** The main automated journey is requested branch/service → check actual available booking times at that branch → customer selects a preferred available time → collect required missing customer/vehicle information → customer reviews/confirms → automatically create a confirmed booking in Garage OS. A valid automated booking does **not** require staff approval. Handoff occurs on customer request or an enquiry outside supported options. This supersedes staff approval as the proposed primary path above. The linked flow proposal has been rewritten accordingly; actual settings/code remain unchanged under the user's no-code instruction.
+
+**Additional acceptance / dependencies:** Availability is branch/service-specific, reflects actual time/capacity constraints, and is rechecked atomically at confirmation. Conflicts offer refreshed times while preserving input; repeated confirmation/retries create at most one booking. Confirmation text follows successful persistence. The authorized agent view shows the linked booking; automatic success does not require agent claim. Resolve P1-001/P1-002 and reconcile the current `booking-confirmation` setting with the requested automatic path during future implementation. Handoff preserves source number, requested branch, original enquiry, and collected context without committing an incomplete booking.
+
+**Accepted operational scope update — 2026-11-16:** The user approved the research-derived additions and explicitly replaced demo-first framing with a full functional product. The customer enquiry/availability/automatic-booking/handoff journey is operational behavior; the two-pane fictional customer scenario, selector and reset are auxiliary presentation/training controls under P1-038. Incorporate vehicle category/model, selected package/coverage, standalone services and scoped quote context from P1-039; retain valid input across handoff. Actual prices, durations and policy answers must come from configured approved records, not scraped posts. Preserve six-number central-team behavior, atomic booking and RBAC. Prior no-code notes remain the history of earlier documentation tasks; this tracker update performs no runtime change.
+
+<a id="p1-027"></a>
+
+### P1-027 — Six-number operational inbox and isolated demonstration layer
+
+**Title updated — 2026-11-16:** Formerly shared WhatsApp inbox in production and demo views. Historical intake below is preserved; functional operational behavior is primary and scenario controls are auxiliary.
+
+**Area:** Operational inbox / demo parity / future provider integration.
+**Severity / priority:** Medium / P2, proposed; intended operational workspace differs from the simulator.
+**Related:** P1-026; [WhatsApp specification](../engineering/WHATSAPP_SPEC.md).
+
+**Expected — user request:** Keep the real WhatsApp shared-inbox experience in both production and demo views, with the integration missing for now. Detailed application will follow the user's next-step explanation.
+
+**Confirmed clarification — 2026-11-16:** The agent side of the two-sided WhatsApp demo shows the selected user's dashboard and navigation under that user's RBAC. The customer side provides the fictional inputs and list selections needed to demonstrate auto-replies and their corresponding agent-visible conversation. The two-sided showcase is requested for the demo; production retains the authorized staff inbox experience with integration disconnected for now.
+
+**Current-state limit:** Repository instructions describe WhatsApp as a development simulator with provider delivery disabled. This intake does not establish that a real shared inbox or live integration already exists. It records the desired operational interface in both views.
+
+**Proposed approach / open discussion:** Treat the staff inbox and simulation controls as distinct responsibilities; agree how the simulator feeds the demo inbox and what disconnected production users can see/do. Assignment, internal notes, filters, customer/job context, and handoff are research candidates, not agreed requirements. Preserve role/branch authorization. Adding the interface does not enable a provider or authorize live delivery.
+
+**Acceptance — provisional:** Authorized staff can reach the agreed shared-inbox interface in production and demo views. Demo conversations drive the agreed inbox workflow with fictional data. An unconnected production inbox clearly reflects its connection state and never presents a simulated send as a delivered provider message. Simulator tools and fictional records cannot leak into real customer activity. Final workflow criteria await the user's explanation.
+
+**History:** 2026-11-16 — Separate intake because inbox parity and demo-entry behavior have different closure checks.
+
+**Update:** 2026-11-16 — Linked the confirmed two-sided demo to the operational inbox and selected-user RBAC. Exact staff interactions and disconnected production behavior still need discussion; implementation remains unstarted.
+
+**Assumed staff sequence — 2026-11-16:** See the [demo-flow proposal](../product/WHATSAPP_DEMO_FLOW_PROPOSAL.md): branch queue → claim → permitted reply/internal note → linked operational navigation → pending/resolved → reopen on customer activity. Bot responses pause during human handling and resume explicitly. The customer and agent panes reflect one fictional interaction; staff-only notes stay private. Production retains a disconnected staff inbox without customer-simulation controls. These are documented assumptions only; no implementation or retest performed.
+
+**Latest confirmed core scope — 2026-11-16:** One shared inbox consolidates conversations from **six WhatsApp business phone numbers**, with the automatic branch-availability booking journey in P1-026 and human handoff for requests/out-of-options enquiries. Preserve the receiving business number and reply through that same number; source number, requested booking branch, operational queue, customer, and assignee are distinct context. The demo uses six fictional channels; no provider connection is made now.
+
+**Additional acceptance — proposed details:** Consolidated and per-number filtered views respect RBAC/branch scope; the inbox does not grant all staff access to all six numbers. Keep the same customer's conversations across numbers distinguishable, prevent duplicate event processing, and preserve context through cross-branch routing. Human handoff pauses automation and requires the normal authorized claim/reply process. Production connection states remain honest and demo traffic stays isolated.
+
+**Confirmed routing answer — 2026-11-16:** **One central team** handles all six WhatsApp numbers across supported booking branches. Human handoffs go to one central queue; the receiving number remains the reply channel, and the requested branch determines booking availability. Changing requested branch preserves the central conversation and assigned agent. This supersedes earlier assumed branch-queue routing and resolves the central-versus-branch-team question.
+
+**Access requirement / implementation gap:** Authorized central-team members need all six channels and necessary cross-branch customer/availability/booking context, while other users keep their role/branch restrictions. Central membership does not grant owner settings, financial reporting, warranty approval, or unrelated workshop controls. Current branch-based authorization must be explicitly adapted during implementation; no access or configuration changes were made now. Verify centralized six-channel handling, branch changes without reassigning the conversation, and denial for users outside authorized coverage.
+
+**Accepted operational scope update — 2026-11-16:** One functional shared inbox is required for the six-number central team; scenario panes are an isolated layer over the same business workflow, not an alternative product. Source number, requested branch, agent, customer/vehicle and accepted quote/package context must persist through navigation and handoff (P1-039/P1-040). Receiving number remains the reply channel. Live provider readiness, webhook validation, idempotent events, retry/failure visibility and truthful delivery states belong in the full plan; approval does not configure credentials or enable sending. The operational UI must report missing connections honestly.
+
+<a id="p1-028"></a>
+
+### P1-028 — Warranty workspace is overloaded and needs contextual editing
+
+**Area:** Warranty policies / coverage / claims / history / verification.
+**Severity / priority:** Medium / P2, proposed; information overload affects workflow usability.
+**Related:** P1-003 (invoice printing), P1-010 (policy naming/status), P1-021 (tabs), P1-022 (issuance guidance).
+
+**Actual / impact:** The user feels the warranty pages are bloated and expose too much information at once.
+
+**Expected — user request:** Make information expandable; support editing and adding/removing where appropriate, with less visible at once.
+
+**Source context:** [Warranty workspace](../../apps/web/src/features/warranty/WarrantiesPage.tsx) already has policy, coverage, claims, history, and verification tabs. Policy forms can still expose extensive fields. Published policy versions are immutable; editing a draft and changing published terms have different consequences.
+
+**Proposed approach:** Show compact summaries with detail and forms opened on demand. Offer relevant actions near the selected record. Preserve validation, permissions, historical coverage, and policy versioning while improving discoverability.
+
+**Open discussion:** Which content must remain visible at a glance? Does add/remove mean policy terms, evidence items, whole records, or personal screen sections? Confirm behavior by entity; do not interpret the request as permission to delete issued coverage, history, or published terms.
+
+**Acceptance — provisional:** The agreed default view shows summaries and primary actions; users can expand details and access permitted create/edit/remove actions without navigating through unrelated information. Unsaved input and validation remain usable when sections open/close. Published policy changes retain versioning and historical records. Retest issue, claim, invoice/print, evidence, and verification journeys across authorized roles, both languages, and mobile/desktop.
+
+**History:** 2026-11-16 — Intake recorded; editable/removable entities and initial collapsed state need discussion.
+
+<a id="p1-029"></a>
+
+### P1-029 — Owner overview needs financial metrics and monthly trends
+
+**Area:** Owner dashboard / reporting / financial data.
+**Severity / priority:** Medium / P2, proposed; missing owner decision support.
+**Related:** P1-030; P1-031 for business-specific definitions.
+
+**Actual / impact:** The user wants the owner overview rearranged and corrected, with more monetary figures, profit figures, trend lines, months, and time comparisons.
+
+**Source context:** [Overview](../../apps/web/src/features/overview/OverviewPage.tsx) currently emphasizes active vehicles, pending bookings, ready jobs, handoffs, and workshop status. Two summary cards derive from the same active-job count. Full accounting/POS is not implemented; invoice drafts alone do not establish collected revenue or profit.
+
+**Expected — user request:** A clearer owner overview with financial metrics and trends over time.
+
+**Proposed approach:** Agree the decisions the dashboard should support, then prioritize a concise financial summary, selectable periods, trend charts, and detail access. Revenue, cash collected, unpaid balances, direct costs, gross profit, net profit, branch/service comparisons, and prior-period changes are candidate metrics only. Define each selected metric's inputs and calculation before implementation. Missing data must appear as unavailable; demo values must be labeled fictional.
+
+**Open discussion:** Which money figures matter first? What does the owner mean by profit, and where will costs, payments, refunds, and overhead come from? Confirm month boundaries, currency, branch aggregation, and comparison rules during discovery rather than inventing business policy.
+
+**Acceptance — provisional:** Agreed metrics and charts use consistent period/branch filters and trace to their source records. Agreed monthly trends and comparisons handle empty periods, missing inputs, and a zero comparison base honestly. Owner financial access is enforced by the API as well as the UI. Fictional fixtures validate calculations once definitions are agreed; drafts cannot silently become booked revenue or profit.
+
+**History:** 2026-11-16 — Intake recorded; financial definitions and data availability remain unresolved.
+
+**Accepted business-research extension — 2026-11-16:** Owner visibility must cover real operational exceptions as well as financial summaries: unhandled quote requests, upcoming/missed recorded pickup commitments, outstanding promised benefits, transport exceptions and claims requiring authorized decisions. P1-033 owns shared filters/drill-down, P1-034 monetary definitions and P1-036 work queues. Use persisted source records and agreed due/eligibility semantics from P1-039–P1-043; do not infer a promise from an ETA or manufacture profit from quotes. Avoid duplicate dashboards or implementation tasks for this extension.
+
+<a id="p1-030"></a>
+
+### P1-030 — Cross-industry UI/UX and workflow improvement discovery
+
+**Area:** Product-wide usability / workflow research / feature prioritization.
+**Severity / priority:** Low / P2, proposed; discovery opportunity, not a reproduced defect.
+**Related:** P1-026–P1-029 and existing localized/mobile usability findings P1-011–P1-022.
+
+**Expected — user request:** Preserve the overall direction while identifying further UI/UX work, useful features, and fixes. Search comparable management/workflow products across automotive and other niches and discuss findings with the user.
+
+**Research record:** [Cross-industry workflow research and discussion notes](../product/WORKFLOW_PRODUCT_RESEARCH_2026-11-16.md). Official product/help sources are linked there; facts are separated from suggested Garage OS adaptations.
+
+**Proposed approach:** Compare patterns against real Garage OS journeys rather than adding features by count. Start with reduced visual density, contextual actions, clear next steps, accountable handoffs, and reporting detail on demand. Keep speculative additions separate from reported defects and accepted requirements.
+
+**Acceptance:** Present sourced comparisons from multiple niches, the problems each pattern solves, relevant Garage OS opportunities, and tradeoffs/dependencies. Discuss the shortlist with the user; record chosen, rejected, and postponed ideas, then create concrete implementation criteria for selected work. Research collection alone does not close this discussion task.
+
+**Progress:** 2026-11-16 — Initial web research recorded; user discussion and selection pending.
+
+**User intake update — 2026-11-16:** The user requested adding **all six researched patterns**, including suggested Garage OS behavior, to Phase 1. Concrete follow-ups are P1-032–P1-037 below. Inclusion in the tracker is confirmed; detailed interaction choices, financial definitions, and business policies remain proposals where noted. This discovery entry remains Open as an umbrella; future progress should be recorded against the specific follow-up criteria without duplicating their implementation work.
+
+**History:** 2026-11-16 — Intake recorded; no product redesign or feature implementation authorized by this discovery entry alone.
+
+<a id="p1-031"></a>
+
+### P1-031 — Owner and business discovery after product discussion
+
+**Area:** Next-task discovery / business operating model.
+**Severity / priority:** Low / P2, proposed; planning follow-up, not a defect.
+**Dependency:** User requested this as the next task after the preceding topics.
+
+**Expected — user request:** Research the owner and the business itself after this feedback/research discussion.
+
+**Existing context:** [Owner meeting playbook](../product/OWNER_MEETING_PLAYBOOK.md) already covers branches, service catalogue, bookings, workshop/QC, WhatsApp, warranty, finance, reporting, and unresolved decisions. It explicitly does not establish owner-approved operating policy.
+
+**Open discussion for that task:** Confirm the business identity/public links, intended owner context, research questions, and desired outcome before attributing facts to any person or company. Reuse existing discovery material and distinguish public facts, user statements, and hypotheses.
+
+**Acceptance:** Once that task begins, produce a sourced business brief and tailored owner discussion agenda; record confirmed operating facts and unresolved decisions. No operating policies change solely because research suggests them.
+
+**Initial progress (historical):** Queued as an Open follow-up; research had not started at intake. **Updated 2026-11-16:** Sourced research is now saved in the fact register/dossier; unresolved owner-policy validation remains Open. See the accepted research update below.
+
+**History:** 2026-11-16 — Follow-up recorded in the user's requested sequence.
+
+## Research-derived improvement topics — 16 November 2026
+
+The user explicitly requested all six findings and their Garage OS adaptations in Phase 1. These entries break down the broad feedback in P1-027–P1-030 into independently reviewable outcomes; they do not replace the original observations or represent additional reproduced defects. Parent issues keep their overall experience criteria; the specific deliverables below should have one implementation record each, linked back to the parent rather than implemented twice.
+
+**Shared intake:** Reported / updated 2026-11-16; source is the user's request to add the discussed research findings. Status Open; owner Unassigned; implementation None recorded; retest Not performed for all six. Evidence is Reported, with official product documentation as pattern references, not proof of a Garage OS defect. Severity/priority are provisional triage values. Browser, build/commit, OS, exact URL, viewport, reproduction steps, and screenshots were not supplied; these are feature proposals rather than browser-specific failure reports. [Research notes](../product/WORKFLOW_PRODUCT_RESEARCH_2026-11-16.md) preserve the comparison context. No code/configuration changes are authorized by this documentation update.
+
+| Topic | Specific entry | Existing parent / boundary |
+|---|---|---|
+| Shared-inbox teamwork | P1-032 | P1-027 owns six-number consolidation and central-team access; this entry owns daily triage and accountability |
+| Owner reporting interaction | P1-033 | P1-029 owns overall dashboard redesign; this entry owns time filters, chart views, and drill-down |
+| Trustworthy financial figures | P1-034 | P1-029 owns presentation; this entry owns definitions, source data, and calculation integrity |
+| Warranty information density and lifecycle | P1-035 | P1-028 owns overall warranty usability; this entry owns contextual forms and draft/archive/issued-record behavior |
+| Operational work discovery | P1-036 | P1-030 owns broader research; this entry owns stage/action queues across existing workflows |
+| Guided task completion | P1-037 | P1-026 owns the WhatsApp journey; this entry owns reusable sequential/conditional interaction rules across booking and warranty tasks |
+
+**Research progress / accepted use — 2026-11-16:** Public and authorized-browser research is collected in the [33-fact register](../product/GO_STORES_FACTS_2026-11-16.md), [meeting dossier](../product/GO_STORES_MEETING_DOSSIER_2026-11-16.md) and linked evidence ledgers. This supersedes the earlier queued/not-started status of the research activity; P1-031 remains Open because current branch roster, approved prices/terms, authority and detailed operating decisions are still unconfirmed. The user approved all recommended feature directions, mapped to P1-038–P1-044 and extensions of existing inbox/reporting work. Published promotions and profile roles are not approved policy or automatic staff access; do not repeat completed research or ask for supplied profile links again.
+
+<a id="p1-032"></a>
+
+### P1-032 — Central inbox ownership, handoff, and unanswered-work visibility
+
+**Reported / updated:** 2026-11-16; user-requested research intake.
+**Area:** WhatsApp / central-team triage.
+**Severity / priority:** Medium / P2, proposed; handling responsibility can affect customer follow-up.
+**Related:** P1-027 (six-number central inbox), P1-026 (customer automation), P1-007 (conversation isolation).
+
+**Finding:** Front documents shared inboxes, conversation assignment, internal comments, tags, snoozing, and rules. [Official reference](https://help.front.com/en/articles/2157).
+
+**Suggested Garage OS behavior:** Give the central team one queue across all six numbers, with practical views for Unassigned, Assigned to me, Waiting, and Resolved. Each conversation shows receiving business number, requested branch, current agent, bot/human state, latest inbound activity, and whether a human response is due. Provide claim, authorized reassignment, pending, resolve, and reopen actions. Keep internal notes visually distinct and staff-only. Preserve the same agent when the customer changes booking branch; reply through the original receiving business number.
+
+**Suggested sequence:** Automation handles supported booking requests → explicit agent request/unsupported enquiry immediately pauses intent auto-replies and enters the central unassigned queue → an agent claims and sees the collected context → agent replies or records a private note → agent marks pending/resolved as appropriate. Bot handling remains paused while queued and during human handling until explicitly resumed. New customer activity reopens resolved work without silently restarting the bot. Fully automated successful bookings do not become unanswered human tasks.
+
+**Dependencies / decisions:** Central-team authorization under P1-027; concurrency-safe assignment; approved definitions of waiting and response due. Distinguish time since last inbound message from time requiring a human reply. Any SLA thresholds, working-hours escalation, snooze, or external alerts remain separate policy choices; do not activate assumed thresholds.
+
+**Acceptance:** Authorized central staff can triage all six channels and find unassigned/human-response-due conversations. Competing claims preserve a single owner; only permitted agents reply. Internal notes never reach the customer side. Handoff carries original enquiry, branch, slot, and booking context; branch changes preserve ownership. Filters do not hide relevant work permanently, automated success is not labeled overdue, and unauthorized users cannot read conversations through UI/API. Cover both languages, keyboard use, and mobile layouts.
+
+**Implementation / retest:** None recorded / Not performed. No new provider integration or alerts enabled.
+
+**Accepted fact-informed handoff — 2026-11-16:** Carry model/category, service intent, chosen grade/package, coverage/roof/add-ons, relevant promotion reservation and prior quote reference into the central queue. Support enquiries outside fixed packages (standalone insulation, modifications, transport/aftercare) without inventing prices or eligibility. Preserve source-channel and selected-branch context; agents see only authorized data. P1-039 owns structured quote data and P1-040 offer reservation, so this issue consumes those interfaces rather than building separate copies.
+
+<a id="p1-033"></a>
+
+### P1-033 — Owner report filters, trend views, and drill-down
+
+**Reported / updated:** 2026-11-16; user-requested research intake.
+**Area:** Owner dashboard / reporting interaction.
+**Severity / priority:** Low / P2, proposed; owner analysis usability.
+**Related:** P1-029 (overall financial overview), P1-034 (trusted metrics).
+
+**Finding:** Housecall Pro documents global date ranges, day/week/month/quarter/year grouping, chart/table views, rearrangeable report cards, and drill-down reports. [Official reference](https://help.housecallpro.com/en/articles/6577580-reporting-dashboard).
+
+**Suggested Garage OS behavior:** Start the owner overview with a compact row of agreed financial summaries and a prominent period/branch filter. Offer month, year-to-date, and custom ranges, with suitable day/week/month trend grouping. A selected metric opens a detailed report using the same filters and showing its source records. Provide a table alternative to charts. Optional card rearrangement/hide/show can let the owner choose emphasis, while retaining a simple useful default rather than exposing every report at once.
+
+**Suggested sequence:** Owner selects a month and branch/all supported branches → summaries and trend charts refresh together → compare with an explicitly labeled previous equivalent period → select a figure or chart period → inspect contributing records → return with filters preserved. Save layout preferences only if customization is included in the agreed implementation.
+
+**Dependencies / decisions:** P1-034 supplies approved calculations and source completeness. Confirm calendar/timezone, default range, comparison behavior, metric shortlist, and whether persistent card customization is needed. Proposed initial currency is the business-configured currency; do not infer it from location. Missing source data is unavailable, not zero.
+
+**Acceptance:** Every card/chart/report uses the same selected filters and states its period, grouping, currency, and comparison. Drill-down reconciles with the selected total under the documented calculation/rounding rules. Empty periods and zero comparison bases do not yield misleading percentages. Optional customization supports reset to default and does not affect calculations. Financial endpoints enforce the approved role permissions. Verify accessible tables, Arabic/RTL, English/LTR, and mobile chart readability.
+
+**Implementation / retest:** None recorded / Not performed. Recording this suggestion does not add reporting endpoints or financial data.
+
+**Accepted exception-reporting extension — 2026-11-16:** Apply the same period/branch filters and record drill-down to approved operational exception cards: unanswered quote work, recorded pickup commitments, pending promised benefits, transport issues and claim decisions. Counts reconcile to P1-036 queues and underlying records, with clear definitions and unavailable states for missing modules/data. Distinguish overdue commitments from changing estimates; do not claim real-time provider data or implement financial calculations twice.
+
+<a id="p1-034"></a>
+
+### P1-034 — Separate quotes, collections, balances, costs, and profit
+
+**Reported / updated:** 2026-11-16; user-requested research intake.
+**Area:** Financial definitions / reporting data integrity.
+**Severity / priority:** Medium / P2, proposed; misleading monetary figures would affect owner decisions.
+**Related:** P1-029, P1-033; P1-031 for owner/business discovery.
+
+**Finding:** Jobber's job-costing documentation distinguishes work-in-progress costs from profitability and warns about double-counting the same cost through line items and expenses. [Official reference](https://help.getjobber.com/en/articles/job-costing/).
+
+**Suggested Garage OS behavior:** Define separate figures for quoted/draft value, recognized revenue if supported, money collected, outstanding balance, direct job costs, and profit. A quote or invoice draft is not proof of collection or recognized revenue. Label in-progress cost/profit estimates separately from finalized results. Provide a visible metric explanation and drill-down to the source records; unavailable inputs prevent a misleading profit total.
+
+**Suggested sequence:** Establish each selected metric's definition with the owner → identify a reliable source and recognition date → map each job/payment/cost once → calculate scoped period totals → reconcile totals to records → expose them to P1-033. Start with the metrics the available records can support; show missing ones as unavailable until their inputs exist.
+
+**Dependencies / decisions:** Full accounting/POS and a complete payment/cost ledger are not currently implemented. Confirm gross versus net profit, revenue recognition, deposits/partial payments, discounts, taxes, refunds, labour/material costs, overhead allocation, currencies, and finalized versus ongoing work. These are business/accounting decisions, not defaults borrowed from another product. Identify any required future data model or integration as scoped work before implementation.
+
+**Acceptance:** Agreed fictional fixtures cover draft-only work, unpaid and partially paid work, cancellation/refund, ongoing jobs, missing costs, and finalized jobs. Each input is counted once; drafts do not inflate collections/revenue. Figures reconcile to drill-down records using approved date/branch/currency rules. Missing cost or payment data is visibly incomplete; net profit is not claimed without its required inputs. Permission checks protect detailed financial records as well as summaries.
+
+**Implementation / retest:** None recorded / Not performed. No accounting module, ledger, payment integration, or policy has been added.
+
+<a id="p1-035"></a>
+
+### P1-035 — Contextual warranty forms and safe template lifecycle
+
+**Reported / updated:** 2026-11-16; user-requested research intake.
+**Area:** Warranty / progressive detail / record lifecycle.
+**Severity / priority:** Low / P2, proposed; reduced information overload and clearer actions.
+**Related:** P1-028 (warranty usability), P1-010 (policy status), P1-022 (issuance prerequisites), P1-037 (shared interaction rules).
+
+**Finding:** Fresha documents service-specific forms, conditional questions, and form edit/duplicate/archive behavior that preserves completed submissions. [Create a form](https://www.fresha.com/help-center/knowledge-base/clients/102340-create-a-client-form), [organize forms](https://www.fresha.com/help-center/knowledge-base/clients/101353-organize-your-forms).
+
+**Suggested Garage OS behavior:** Open warranty pages on compact policy/coverage/claim summaries with status and one clear primary action. Open the relevant detail/editor on selection; show only fields relevant to the chosen service and task. Expand terms, evidence requirements, and history on demand. Offer create, edit draft, duplicate as new draft, and retire/archive where the entity's rules allow. Retain the exact policy version/terms attached to issued coverage. Published terms change through a new version, not inline rewriting.
+
+**Suggested sequence:** Select task and service/record → see its summary and prerequisites → open the relevant form → expand optional detail as needed → validate/save → return to the selected updated record. For a policy revision, duplicate/create a draft, edit it, and follow the existing authorized publication process. Retiring a template must not erase issued warranties or claim history.
+
+**Dependencies / decisions:** Confirm which draft fields can be added/removed, what retire/archive means by entity, and whether a new archive capability is required. Existing published/retired states and immutability take precedence over a generic archive action. P1-037 owns reusable conditional-form behavior; this entry owns the warranty-specific fields and lifecycle. Do not add destructive record deletion by inference.
+
+**Acceptance:** Default screens expose agreed summaries rather than all full forms. Each authorized action is discoverable near its record. Service/task changes reveal relevant fields, keep valid input, and cannot hide blocking validation. Issued coverage still displays its original terms after a template revision/retirement. Unauthorized users cannot change policy status or issue coverage. Retest issue/claim/evidence/invoice-print/verification journeys in both languages and mobile/desktop.
+
+**Implementation / retest:** None recorded / Not performed. No records, terms, or permissions changed.
+
+**Accepted coverage extension — 2026-11-16:** Keep contextual warranty forms and issued-version preservation, and consume P1-041's fixed-term/lifetime model when it is implemented. Explain coverage kind and approved definition without requiring a fake expiry for lifetime. P1-042 owns aftercare entitlement/redemption, distinct from warranty claim approval. This entry owns usability/lifecycle, not a second warranty model.
+
+<a id="p1-036"></a>
+
+### P1-036 — Stage-based action queues and optional operational columns
+
+**Reported / updated:** 2026-11-16; user-requested research intake.
+**Area:** Booking / workshop / claims / operational navigation.
+**Severity / priority:** Low / P2, proposed; staff work discovery and prioritization.
+**Related:** P1-030 (research umbrella), P1-012 (stage wording), P1-013 (assignment prerequisites), P1-032 (inbox-specific triage).
+
+**Finding:** RepairDesk documents staged workflows, workflow/current-step filters, and optional visible workflow columns. [Official reference](https://help.repairdesk.co/portal/en/kb/articles/workflows).
+
+**Suggested Garage OS behavior:** Add useful saved/filterable work views over existing records: booking needs review where applicable, waiting for assignment, ready for QC, ready for pickup, and claim awaiting authorized review. Show stage, next permitted action, responsible person/team, and a recorded waiting reason when available. Keep secondary columns optional so reception, managers, and technicians can focus on their own tasks. Preserve the existing domain stages; do not invent a new workflow engine or new business states just for the view.
+
+**Suggested sequence:** User opens a permitted workflow → chooses a stage/action filter → sees matching scoped records and clear next actions → opens/completes an authorized action → the record moves out of that queue when the underlying state changes. Technician views remain limited to authorized assigned work. Inbox queue behavior remains under P1-032, rather than building two competing inbox triage systems.
+
+**Dependencies / decisions:** Map each view to actual stored stages, permissions, and prerequisite rules. Distinguish a calculated next action from a persisted waiting reason; do not display an inferred reason as fact. Agree which filters/columns are useful by role. Alternative per-service workflows remain a later owner-discovery question, not an automatic requirement from this entry.
+
+**Acceptance:** Queue counts reconcile with matching authorized records; filters neither reveal out-of-scope work nor claim completion prematurely. Actions obey existing transition/QC/assignment rules. Completed actions update the relevant queues, and empty views explain the selected filter. Optional columns do not remove essential identifying/status information. Verify role access, clear bilingual stage labels, keyboard navigation, and mobile usability.
+
+**Implementation / retest:** None recorded / Not performed. No stages or approval rules added.
+
+**Accepted business-work extension — 2026-11-16:** Include useful authorized queues for quote follow-up, due recorded pickup promises, benefit fulfillment, transport exceptions and claim decisions when their source workflows exist. P1-039–P1-043 own records/state and eligibility; queues derive from those persisted facts rather than inventing new completion states. Shared counts reconcile with P1-033 owner drill-down. Same-day social replies do not establish universal due times.
+
+<a id="p1-037"></a>
+
+### P1-037 — Sequential forms with conditional steps and retained input
+
+**Reported / updated:** 2026-11-16; user-requested research intake.
+**Area:** Shared task interaction / booking and warranty journeys.
+**Severity / priority:** Low / P2, proposed; guided completion without repeated input or irrelevant fields.
+**Related:** P1-026 (complete WhatsApp booking flow), P1-028/P1-035 (warranty-specific behavior), P1-004 (truthful save/refresh outcomes).
+
+**Finding:** Process Street documents conditional tasks/headings/fields based on earlier choices and workflow actions. [Official reference](https://www.process.st/help/docs/conditional-logic/).
+
+**Suggested Garage OS behavior:** Use clear sequential steps for longer tasks: select intent/service/record → collect only required relevant details → review → explicitly confirm → show persisted outcome and next action. Let previous choices control visible sections. Retain compatible input when moving back; changing a prerequisite invalidates only affected dependent values. Keep short tasks as short forms rather than forcing every action through a wizard.
+
+**Suggested sequence:** In booking, a branch/service choice determines available dates/times; changing it refreshes availability and requires selecting a still-valid slot. In warranty work, task/service selection reveals the relevant fields and evidence requirements. Show progress, Back, and a clear exit/discard choice; preserve input on recoverable failures. Offer human help in WhatsApp without discarding collected context. P1-026 and P1-035 retain the domain-specific outcomes; this entry owns consistent step, validation, and recovery behavior across them.
+
+**Dependencies / decisions:** Start with fixed, understandable task rules rather than a user-configurable workflow builder. Server validation must enforce requirements independently of hidden controls. Agree draft-retention boundaries; switching identity/conversation/record cannot reuse another user's sensitive input. Avoid new business-policy branches unless separately approved.
+
+**Acceptance:** Forward/Back navigation retains valid values; prerequisite changes clear/revalidate dependent choices and explain why. Irrelevant hidden fields do not block a legitimate task, while malicious requests cannot omit server-required data. Validation identifies the affected step and focuses the error. Final confirmation commits once; save/refresh failures report the real outcome and avoid duplicate mutation. Verify successful completion, exit, retry, conversation/identity isolation, Arabic/English, keyboard use, and narrow screens across the selected booking and warranty tasks.
+
+**Implementation / retest:** None recorded / Not performed. No form components or workflow rules changed.
+
+
+## Approved operational-product additions — 16 November 2026
+
+The user approved all recommendations and valuable additions derived from the Go Stores research, requested a full functional project with auxiliary demonstration layers and phased versions, and explicitly requested this tracker update and a next-session full-plan handover. [Accepted scope](../product/PRODUCT_DIRECTION_AND_RELEASES.md) is the current direction. These are accepted feature requirements, not reproduced defects or approved business policy.
+
+**Shared intake:** Reported/updated 2026-11-16; Status Open; Owner Unassigned; implementation None recorded; retest Not performed for all seven. Severity/priority below are proposed triage. Browser/build/viewport reproductions are not applicable to scope intake; Source means static code/evidence where stated. The full plan must preserve every earlier issue, assign each new scope to a coherent release, and link overlap to existing owners rather than duplicate work.
+
+<a id="p1-038"></a>
+
+### P1-038 — Operational product, isolated demonstration layer and phased delivery
+
+**Area:** Product architecture / environment isolation / phased scope.
+**Severity / priority:** High / P1, proposed; mixing simulated and operational results risks data and trust.
+**Evidence:** Reported; direct user approval. Related P1-007–P1-009, P1-026/P1-027, P1-039–P1-044.
+
+**Accepted behavior:** Garage OS is the functional operations product. Persist real workflows with server validation, actual role/branch access, auditability and recoverable outcomes. Demonstration/training supplies isolated fictional identities, datasets and provider events while reusing operational domain behavior. Future versions have explicit boundaries and truthful availability; no button fakes an unimplemented operation. Product direction does not claim current production readiness.
+
+**Planning / dependencies:** Inspect existing demo-auth, seed, simulation and bootstrap paths before deciding isolation changes. Preserve Clerk production auth, Replit controls and domain boundaries. Define environment/data/provider-effect separation and scenario reset scope. Map every tracker entry into releases without marking later work complete. Missing credentials are a readiness condition, not a reason to replace the operational feature with a mock.
+
+**Acceptance:** A fictional walkthrough exercises the same business validations and permissions as the operational workflow. Scenario reset cannot alter live records; real users cannot invoke scenario privileges; sample data/results never contaminate operational reporting or outbound delivery. Failed/unconfigured providers never show successful real delivery. Verify UI and API boundaries, both languages, environment separation and migration/rollback strategy. Document actual current versus implemented/future scope for each release.
+
+**Implementation / retest:** None recorded / Not performed.
+
+<a id="p1-039"></a>
+
+### P1-039 — Structured catalogue, packages and accepted quotation versions
+
+**Area:** Service/product catalogue / quoting / customer agreement.
+**Severity / priority:** Medium / P2, proposed.
+**Evidence:** Source + Reported. [Facts GS-F014/GS-F016–GS-F020](../product/GO_STORES_FACTS_2026-11-16.md); [current Service/Vehicle/Booking types](../../packages/domain/src/types.ts) currently use a simple service/price label and single service linkage.
+**Related:** P1-026/P1-032, P1-034, P1-037, P1-040/P1-041.
+
+**Accepted behavior:** Define products/grades and service packages with vehicle model/category, thickness where applicable, covered areas, roof, add-ons, exclusions, currency and itemized agreed amount. Preserve quote revisions and the customer's accepted scope/price/terms, linked to enquiry, reservation, booking and job. Standalone services remain possible; a bundle is not a textual price label.
+
+**Sequence:** Collect vehicle/intent → choose eligible package and scope → obtain calculated or authorized inspection/manual quote → customer reviews/accepts the current revision → attach its immutable snapshot downstream. Changed scope creates a new revision and acceptance as required; old records retain historical meaning.
+
+**Dependencies / decisions:** Owner supplies current catalogue/prices, tax treatment, vehicle classification, discount/override authority, acceptance evidence and validity. Research prices are dated examples, not active defaults. Define package labor/capacity aggregation and multiple component warranties without double-counting job work. P1-034 owns finance definitions; no accounting/POS added implicitly.
+
+**Acceptance:** Sedan/SUV/roof variants yield explicit scope; missing/unsupported prices cannot silently become zero. Changed catalogue does not rewrite accepted quotes. Unauthorized edits/discounts fail server checks. Retry/double acceptance preserves one outcome; booking/job/warranty show the correct quote revision; Arabic/English and quote correction history are testable.
+
+**Implementation / retest:** None recorded / Not performed.
+
+<a id="p1-040"></a>
+
+### P1-040 — Deferred promotion reservations and later installation
+
+**Area:** Commercial reservation / promotion version / scheduling boundary.
+**Severity / priority:** Medium / P2, proposed.
+**Evidence:** Reported; facts GS-F020/GS-F021/GS-F023/GS-F025 show deferred execution and reservation/deposit mechanics.
+**Related:** P1-001/P1-002, P1-039, P1-044; P1-034 for deposit/collection meanings.
+
+**Accepted behavior:** Persist an accepted offer/quote version, qualifying customer/vehicle, eligibility evidence, reservation/effective dates, agreed amount, deposit reference/state and redemption history. Offer entitlement exists separately from a confirmed installation slot. When installation is scheduled, check live capacity and link the correct reservation; old offers remain traceable after catalogue changes.
+
+**Dependencies / decisions:** Confirm price-lock rules, deposit amount/source, cancellation/refund/expiry, vehicle/package changes, branch redemption and limited-offer allocation. Do not infer a mandatory two-year validity, unlimited availability or payment collection from a promotional post. Deposit reference is not a verified payment gateway/ledger.
+
+**Acceptance:** A reservation can exist without consuming workshop capacity; creating an installation booking reserves capacity atomically. Promotion expiry never rewrites already accepted entitlement under approved rules. Repeated redemption cannot create duplicate jobs/benefits. Cancellation/refund/correction retains audit history; unauthorized changes fail. Limited allocations and simultaneous reservations obey agreed constraints. Preserve compatibility with existing bookings.
+
+**Implementation / retest:** None recorded / Not performed.
+
+<a id="p1-041"></a>
+
+### P1-041 — Fixed-term and lifetime warranty coverage semantics
+
+**Area:** Warranty domain / persistence / issuance / claims / verification.
+**Severity / priority:** High / P1, proposed; incorrect expiry changes coverage meaning.
+**Evidence:** Source + Reported. Facts GS-F016/GS-F022 advertise lifetime options. [Domain expiry calculation](../../packages/domain/src/rules.ts) and [policy validation](../../apps/server/features/warranty/warranties.ts) restrict durations to 1–120 months; current warranty records require an expiry date.
+**Related:** P1-010/P1-022/P1-028/P1-035; P1-039/P1-042.
+
+**Accepted behavior:** Support fixed-term and explicitly defined lifetime coverage without substituting ten years, an arbitrary distant date or unlimited coverage inferred from an advertisement. Preserve the approved policy version/definition at issuance and in claim/verification/print views. Existing fixed-term dates and issued terms must remain unchanged by migration.
+
+**Dependencies / decisions:** The business owner defines lifetime subject, termination conditions, transferability, exclusions, maintenance conditions, issuer/remedy and approved public wording. Model unconfigured definitions honestly and prevent issuance of unsupported policy. Reuse existing policy versioning, issuance prerequisites, claim/evidence, audit and private/public boundaries.
+
+**Acceptance:** Fixed-term calculations still pass leap/month-end/expiry cases; lifetime can be represented without a fabricated date, but cannot bypass approval or eligibility. Claim/status/QR/print/UI/API handle both kinds consistently, preserving customer privacy. Migration retains old policy versions, dates and claim meaning; malformed/unauthorized requests fail. No global reseeding or rewriting of existing warranties.
+
+**Implementation / retest:** None recorded / Not performed.
+
+<a id="p1-042"></a>
+
+### P1-042 — Included benefits and aftercare entitlement redemption
+
+**Area:** Customer promises / fulfillment / aftercare.
+**Severity / priority:** Medium / P2, proposed.
+**Evidence:** Reported; facts GS-F021–GS-F026 advertise bundled extras, washing, maintenance and services.
+**Related:** P1-039–P1-041, P1-043/P1-044, P1-033/P1-036.
+
+**Accepted behavior:** Attach an explicit approved benefit snapshot to the accepted sale/job/customer/vehicle: benefit type, scope, eligibility, duration/frequency/quantity if applicable, responsible team and fulfillment/redemption history. Display outstanding promises and let authorized staff record redemption/correction. Distinguish optional aftercare, included service and warranty claim; completing a wash is not claim approval.
+
+**Dependencies / decisions:** Confirm beneficiary/vehicle transfer, limits, required checkups, eligible branches, scheduling, expiration, partial delivery, cancellation and correction authority. Do not invent unlimited free service or expire a benefit solely because its parent promotion changes. P1-043 owns transport execution; P1-044 qualification/redemption of promotions.
+
+**Acceptance:** Staff can identify the exact promised extras and remaining eligibility; repeated/concurrent redemption cannot exceed approved limits. Corrections retain actor/reason/history. Retired packages do not erase entitlements. Unauthorized access fails; due/exception queues reconcile with records. Test finite, recurring and unconfigured eligibility without fabricated automatic acceptance, and preserve Arabic/English clarity.
+
+**Implementation / retest:** None recorded / Not performed.
+
+<a id="p1-043"></a>
+
+### P1-043 — Vehicle transport and VIP service coordination
+
+**Area:** Collection/return / towing / courtesy transport.
+**Severity / priority:** Medium / P2, proposed.
+**Evidence:** Reported; facts GS-F026/GS-F032 and current owner replies mention towing and VIP transport.
+**Related:** P1-039/P1-040/P1-042, P1-033/P1-036, booking capacity and expected pickup.
+
+**Accepted behavior:** Link transport requests to customer/vehicle/booking/job and any qualifying entitlement. Record pickup versus return, destination, approved contact access, responsible internal/external provider, timing/commitment and progression through completion/cancellation/exception. VIP/courtesy arrangements have their own approved scope and availability. Begin with coordination, not a full fleet/GPS/dispatch platform.
+
+**Dependencies / decisions:** Confirm Cairo/service-area boundaries, return delivery, fees/free eligibility, transport provider responsibility, custody/inspection evidence and access to location/contact details. Workshop slots and transport resources are distinct; a social same-day reply does not establish a universal time promise. Do not send driver/customer notifications without configured approved delivery.
+
+**Acceptance:** Users can distinguish pickup from return and see responsible party/status. Unavailable resources do not become confirmed commitments; conflicting assignments follow approved constraints. Failures/cancellations retain audit/evidence and do not silently mark workshop delivery complete. Authorized scoped users see necessary data; customer/staff/private details are protected. Demonstration requests cannot contact actual providers.
+
+**Implementation / retest:** None recorded / Not performed.
+
+<a id="p1-044"></a>
+
+### P1-044 — Promotion qualification, referral and multi-car redemption
+
+**Area:** Offer qualification / controlled discount allocation.
+**Severity / priority:** Medium / P2, proposed.
+**Evidence:** Reported; facts GS-F021/GS-F023/GS-F026 describe group-member limits, warranty-card referral and multi-car offers.
+**Related:** P1-039/P1-040/P1-042 and P1-034 for financial classification.
+
+**Accepted behavior:** Record which approved promotion/version applies, qualifying evidence (existing warranty reference, membership verification or grouped vehicles), beneficiary, discount/benefit allocation and authorized redemption. Preserve consumption and corrections; do not grant eligibility based only on an uploaded card photo, social group count or unverified customer assertion.
+
+**Dependencies / decisions:** Confirm stackability, recipient/vehicle restrictions, limits, deposits, validity, grouped-car timing/price allocation, membership evidence/minimization and exception authority. Transferable discount does not imply transferable warranty. Qualification is this issue's domain; P1-040 owns reserved offer state and P1-042 downstream service fulfillment.
+
+**Acceptance:** Eligible/invalid/expired/used evidence follows the approved rule version. Concurrent or repeated redemption cannot consume the same entitlement twice or exceed allocation. Reversal is authorized, justified and auditable. Old accepted benefits survive offer edits under recorded rules; unauthorized discount/override fails server checks. Minimize stored identity/card evidence and protect it from unrelated roles.
+
+**Implementation / retest:** None recorded / Not performed.
+
+
 ## Change log
 
 | Date | Change | Runtime verification |
 |---|---|---|
 | 2026-11-15 | Created unified tracker with P1-001–P1-025; preserved CR/GO IDs and evidence; added technical approaches, acceptance criteria, source clarifications, and intake/status rules | Documentation/source inspection only; no fixes or new runtime tests |
+| 2026-11-16 | Added P1-026–P1-031 under WhatsApp, warranty, owner financial overview, cross-industry UX research, and next-task owner/business discovery; linked existing findings and initial research; advanced next ID to P1-032 | Documentation/source inspection and web research only; no implementation or runtime retests |
+| 2026-11-16 | Clarified P1-026/P1-027: specified demo-user workspace under RBAC; two-sided customer/agent WhatsApp demo with auto-replies and selectable list choices; synchronized research discussion notes | Documentation only; no implementation or runtime retests |
+| 2026-11-16 | Recorded user authorization to assume a full sequential WhatsApp demo; linked the complete flow proposal to P1-026/P1-027 and preserved the user's explicit no-code constraint | Documentation only; no implementation or runtime retests |
+| 2026-11-16 | Confirmed six-number shared inbox, requested-branch availability/time selection, automatic confirmed booking, and requested/unsupported-enquiry agent handoff; revised primary flow to remove proposed routine staff approval | Documentation only; no configuration changes, implementation, or runtime retests |
+| 2026-11-16 | Recorded one central team for all six numbers; replaced branch-team routing in the active proposal with a central queue and explicit central-team cross-branch access requirements | Documentation only; no code, configuration, or runtime changes |
+| 2026-11-16 | Added all six requested cross-industry adaptations as P1-032–P1-037, with source links, suggested Garage OS sequences, boundaries/dependencies, and acceptance criteria; linked P1-030 and advanced next ID to P1-038 | Documentation only; no implementation, configuration changes, or runtime retests |
+| 2026-11-16 | Recorded user approval of all Go Stores research additions and full operational-product direction; added P1-038–P1-044; extended existing inbox/reporting/warranty/discovery issues; linked next-session full-plan handover; total44, nextP1-045 | Documentation/source inspection only; no implementation, policy activation, migration, provider connection or runtime retest |

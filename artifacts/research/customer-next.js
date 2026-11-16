@@ -1,0 +1,1 @@
+(()=>{const d=[...document.querySelectorAll('[role="dialog"]')].find(e=>e.innerText.startsWith("GO stores's Post"));if(d){const c=[...d.querySelectorAll('[role="button"]')].find(e=>e.getAttribute('aria-label')==='Close');if(c)c.click()}return 'closed target post only'})()

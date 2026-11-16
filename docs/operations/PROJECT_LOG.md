@@ -2,6 +2,27 @@
 
 Use this file to record meaningful progress, not every minor edit.
 
+### 2026-11-16 — Recorded approved operational scope and planning handover
+**Completed**
+- Preserved business research in the33-fact register, sourced dossier and authenticated evidence ledgers, with observations/self-reports/advertisements distinguished from policy approval.
+- Recorded the user's approval of all researched additions and full operational-product direction, with isolated auxiliary demonstration/training and phased future versions.
+- Added P1-038–P1-044 and extended existing inbox, reporting, warranty and discovery issues without duplicating their scope. Tracker now44Open/Unassigned entries; nextP1-045.
+- Created a next-session handover for the full implementation plan covering every original defect, finding and accepted addition.
+
+**Changed**
+- Updated root/application/documentation instructions, README, accepted scope, PRD, assumptions, architecture/WhatsApp references, delivery plan and decision register.
+- Preserved earlier demo intake as history with dated superseding scope, and kept implementation status separate from approval.
+
+**Validation**
+- Verified44unique matching tracker detail/index/anchor IDs and nextIDP1-045; checked new handover/scope local links and all three instruction-file references. `git diff --check` passed; Git emitted its existing LF/CRLF advisory. No new runtime tests/results are claimed.
+
+**Open issues**
+- All44implementation issues remain Open; full detailed plan is the next-session deliverable.
+- Current prices, lifetime conditions, branch roster, benefit/referral/transport rules and live integration setup remain unverified or unconfigured where recorded.
+
+**Next**
+- Follow [full-plan handover](PHASE_1_FULL_PLAN_HANDOVER.md). Create the per-issue plan and release/dependency map; do not implement during that planning task.
+
 ## Entry template
 
 ### YYYY-MM-DD — Short title

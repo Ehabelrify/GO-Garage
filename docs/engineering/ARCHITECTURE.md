@@ -2,6 +2,13 @@
 
 ## 1. Architecture approach
 
+**Accepted target — 16 November 2026:** This serves a functional operations
+product. Auxiliary demonstration/training must isolate fictional data and
+external effects while reusing operational domain behavior. Future modules
+ship in phases. See [scope](../product/PRODUCT_DIRECTION_AND_RELEASES.md)
+and [full-plan handover](../operations/PHASE_1_FULL_PLAN_HANDOVER.md).
+Current implementation limits below remain factual until verified otherwise.
+
 The current meeting build uses a TypeScript React/Vite client, an Express API, PostgreSQL as the system of record, and Clerk for authentication. The API enforces membership, role, branch, and assigned-job access. Browser storage is limited to the language preference; customer and operational records are loaded from PostgreSQL.
 
 This is a deliberately narrow operating application, not the complete PRD. It is not yet configured for production deployment, backups, file storage, scheduled workers, or customer messaging. Keep future modules isolated and inactive until their workflows and integrations are implemented.

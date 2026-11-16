@@ -1,0 +1,1 @@
+(()=>{const m=document.querySelector('[role="main"]');if(!m)return 'no main';return JSON.stringify({text:m.innerText.slice(-15000).replace(/Comment as[^\n]*/g,'[entry omitted]'),buttons:[...m.querySelectorAll('[role="button"]')].map(e=>({t:e.innerText,a:e.getAttribute('aria-label')})).filter(x=>/comment/i.test(x.t+' '+x.a))})})()

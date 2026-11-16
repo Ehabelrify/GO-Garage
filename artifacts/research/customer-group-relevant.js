@@ -1,0 +1,1 @@
+(()=>{const m=[...document.querySelectorAll('[role="dialog"]')].find(e=>/^Mohamed[^\n]*Post/.test(e.innerText));if(!m)return 'no target';const b=[...m.querySelectorAll('[role="button"]')].find(e=>e.innerText.startsWith('All comments'));if(b)b.click();return 'opened sort'})()

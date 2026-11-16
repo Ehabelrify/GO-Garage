@@ -7,6 +7,15 @@
 **Product type:** Internal operations platform with WhatsApp customer interface  
 **Document status:** Baseline PRD; assumptions require owner validation
 
+**Accepted update — 16 November 2026:** Build the full functional operations
+product, with an isolated auxiliary demonstration/training layer and phased
+future versions. All researched recommendations/additions are approved in
+principle; see [accepted scope](PRODUCT_DIRECTION_AND_RELEASES.md) and
+P1-038–P1-044 in the [tracker](../testing/PHASE_1_ISSUES_TRACKER.md).
+The next task is the [full plan](../operations/PHASE_1_FULL_PLAN_HANDOVER.md).
+This is feature approval, not approval of advertised prices, warranty terms
+or unknown policies, and not a claim of production readiness.
+
 ## 1. Executive summary
 
 Garage OS is a unified operations platform for Go Stores, a two-branch car protection and modification agency. It connects customer conversations, bookings, workshop execution, quality checks, delivery, warranties, and management visibility in one system.
@@ -95,7 +104,7 @@ The owner has not yet confirmed detailed operating policies. Implemented setting
 
 ## 6. Scope
 
-### Current meeting-build settings
+### Current implemented operating settings
 
 - Owner Settings with business-wide or branch-specific values for the implemented operating rules.
 - Server validation, persistence, immediate application to supported booking checks, and audit history.

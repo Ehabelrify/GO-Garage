@@ -1,5 +1,15 @@
 # Garage OS — Delivery Plan
 
+**Accepted update — 16 November 2026:** The user approved all researched
+additions and requires a full functional operational product, with auxiliary
+demonstration/training and future versions. See [accepted scope](../product/PRODUCT_DIRECTION_AND_RELEASES.md)
+and [next-session full-plan handover](PHASE_1_FULL_PLAN_HANDOVER.md).
+The phases below are an existing planning outline, not evidence of completion.
+The next full plan must cover all44tracker issues, including the original
+defects and P1-038–P1-044, assign them to coherent releases and preserve the
+six-number central inbox as a core requirement. Do not turn a walkthrough into
+the primary product or silently drop later-version work.
+
 The implementation order may change after repository inspection. Avoid building all modules in parallel before the foundations are reliable.
 
 ## Phase 0 — Repository and product alignment

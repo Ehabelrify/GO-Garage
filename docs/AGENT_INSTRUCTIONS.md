@@ -5,6 +5,13 @@ first. This file is subordinate and applies only to `docs/`.
 
 ## Document ownership
 
+Use [accepted product direction](product/PRODUCT_DIRECTION_AND_RELEASES.md)
+and the [sourced facts](product/GO_STORES_FACTS_2026-11-16.md). The operational
+product is primary; demonstrations are auxiliary. Distinguish feature-scope
+approval, advertised/self-reported facts, approved operating policy and actual
+implementation. The [next-session handover](operations/PHASE_1_FULL_PLAN_HANDOVER.md)
+requires planning all Phase 1 issues while preserving original IDs/evidence.
+
 - `product/` holds product requirements, design guidance, owner discovery, and
   provisional decisions.
 - `engineering/` holds architecture, data model, security/privacy,

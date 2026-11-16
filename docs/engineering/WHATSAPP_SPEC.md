@@ -1,5 +1,14 @@
 # Garage OS — WhatsApp and Shared Inbox Specification
 
+**Accepted direction — 16 November 2026:** Six-number consolidation, one central
+team, requested-branch availability, automatic booking after customer
+confirmation and context-preserving handoff belong to the operational product.
+A fictional customer pane and transport simulator are auxiliary, isolated from
+live records and external effects. Current provider delivery remains disabled;
+scope approval does not establish a live connection. See
+[accepted scope](../product/PRODUCT_DIRECTION_AND_RELEASES.md) and
+[planning handover](../operations/PHASE_1_FULL_PLAN_HANDOVER.md).
+
 ## 1. Purpose
 
 WhatsApp is the primary customer-facing channel. Customers should be able to enquire, learn about services, request bookings, check supported job status, reschedule/cancel, and request a human agent. Staff should manage conversations from Garage OS rather than switching between several reception phones.

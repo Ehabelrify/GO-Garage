@@ -1,0 +1,1 @@
+(()=>{const m=[...document.querySelectorAll('[role="dialog"]')].find(e=>/^Mohamed[^\n]*Post/.test(e.innerText));if(!m)return 'no target';return JSON.stringify({controls:[...m.querySelectorAll('[role="button"],a')].filter(e=>/comments|replies|View more|Most relevant|Newest|All comments/.test(e.innerText)).map(e=>({t:e.innerText.slice(0,150),r:e.getAttribute('role')}))});})()

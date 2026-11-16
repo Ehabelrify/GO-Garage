@@ -13,6 +13,24 @@ Record decisions that affect architecture, user experience, business logic, inte
 - **Consequences:**
 - **Owner approval required:** Yes / No
 
+### DEC-002 — Full operational product with auxiliary demonstrations
+- **Date:** 2026-11-16
+- **Status:** Accepted by the user as product direction
+- **Context:** After reviewing sourced Go Stores findings and proposed applications, the user approved all recommendations/additions and explicitly rejected treating the project primarily as a demo.
+- **Decision:** Build functional operational workflows; isolate fictional demonstration/training over the same domain behavior; deliver future capabilities in phases/versions. Scope is mapped in [accepted direction](../product/PRODUCT_DIRECTION_AND_RELEASES.md) and P1-038–P1-044 plus existing inbox/reporting/warranty issues.
+- **Alternatives considered:** Continuing demo-first framing or creating an independent simplified demonstration app; neither matches the user's instruction.
+- **Consequences:** Existing simulator/provider/readiness limits remain factual. All original defects remain tracked. Feature acceptance does not approve researched prices or business policy, activate integrations, grant staff roles, or establish production readiness. DEC-001 remains applicable for authentication/settings; its meeting-only scope is superseded as the target product boundary.
+- **Owner approval required:** Product direction is already user-approved. Actual business terms and operational parameters require their authorized business approver.
+
+### DEC-003 — Hand over a complete tracker-based implementation plan
+- **Date:** 2026-11-16
+- **Status:** Accepted; direct user request
+- **Context:** The user requested tracker/instruction updates and a next-session handover covering all findings/issues.
+- **Decision:** Create the full plan from every current tracker issue before implementation, following [planning handover](PHASE_1_FULL_PLAN_HANDOVER.md). At recording there are44issues, nextP1-045. Include per-ID coverage, dependencies, releases, exact source/interface tasks, migrations and verification.
+- **Alternatives considered:** Implementing an isolated addition immediately or planning only the newest features; both omit the requested comprehensive handover.
+- **Consequences:** This session changes documentation only; all issue implementation statuses remain Open. Preserve already approved scope; do not ask the user to reselect features. Detailed unapproved business conditions remain explicit.
+- **Owner approval required:** No new approval needed for creating the requested plan; plan review and any new material implementation decisions remain separate.
+
 ### DEC-001 — Use authenticated, server-enforced role workspaces
 - **Date:** 2026-11-11
 - **Status:** Accepted for the current meeting build

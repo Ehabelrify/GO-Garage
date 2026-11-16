@@ -5,6 +5,13 @@ first. This file is subordinate and applies only to `apps/`.
 
 ## Boundaries
 
+The accepted target is a functional operational product with isolated
+demonstration/training and phased future releases. Follow [accepted scope](../docs/product/PRODUCT_DIRECTION_AND_RELEASES.md).
+Reuse domain behavior and actual RBAC in scenarios; do not mix live/fictional
+records, grant scenario users extra privileges, or show simulated provider
+success as real delivery. This is a requirement, not a claim the present
+simulator has already been replaced. The next task is the [full plan](../docs/operations/PHASE_1_FULL_PLAN_HANDOVER.md).
+
 - `web/` is the React/Vite client. Keep `src/main.tsx`, `index.html`, and
   `public/` paths stable unless the root instructions and Replit setup are
   updated together.

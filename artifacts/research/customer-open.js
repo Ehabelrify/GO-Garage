@@ -1,0 +1,1 @@
+(()=>{const m=document.querySelector('[role="main"]');if(!m)return 'no main';const bs=[...m.querySelectorAll('[role="button"]')].filter(e=>(e.getAttribute('aria-label')||'').includes('post, 2 comments'));if(bs[2])bs[2].click();return 'opened package post comments if present'})()

@@ -9,6 +9,14 @@ subordinate guides explicitly.
 
 ## Product and implementation truth
 
+**Accepted direction — 16 November 2026:** Garage OS is a full operational
+product. Demonstration/training is an isolated auxiliary layer over real
+workflows; future capabilities ship in phases/versions. The user approved all
+research-derived additions. Follow [accepted scope](docs/product/PRODUCT_DIRECTION_AND_RELEASES.md)
+and the [Phase 1 tracker](docs/testing/PHASE_1_ISSUES_TRACKER.md). Do not replace
+persisted operations with a simplified demo. Feature approval does not approve
+advertised prices or unverified business rules.
+
 Garage OS is a role-based operations app for Go Stores. It currently uses
 React/Vite, Express, PostgreSQL, Clerk, and the private workspace
 `@garage/domain`. Arabic/RTL and English/LTR are supported. The Owner's
@@ -82,6 +90,14 @@ been verified.
 - Product: [PRD](docs/product/PRD.md), [design system](docs/product/DESIGN_SYSTEM.md),
   [Owner meeting playbook](docs/product/OWNER_MEETING_PLAYBOOK.md), and
   [decisions and assumptions](docs/product/DECISIONS_AND_ASSUMPTIONS.md).
+- Business research: [sourced facts](docs/product/GO_STORES_FACTS_2026-11-16.md)
+  and [meeting dossier](docs/product/GO_STORES_MEETING_DOSSIER_2026-11-16.md).
+  These distinguish dated source observations, self-reports, advertised claims,
+  and analysis; none is approved operating policy without owner confirmation.
+- Accepted scope: [product direction and releases](docs/product/PRODUCT_DIRECTION_AND_RELEASES.md).
+  Next-session task: [full Phase 1 planning handover](docs/operations/PHASE_1_FULL_PLAN_HANDOVER.md).
+  Cover every tracker issue before implementation; preserve already approved
+  requirements and distinguish unresolved business policies.
 - Engineering: [architecture](docs/engineering/ARCHITECTURE.md),
   [data model](docs/engineering/DATA_MODEL.md),
   [security/privacy](docs/engineering/SECURITY_PRIVACY.md),
