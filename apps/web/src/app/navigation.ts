@@ -79,12 +79,19 @@ export const navigation: WorkspaceNavigationItem[] = [
 const primaryNavigationByRole: Record<GarageRole, PageId[]> = {
   owner: ["overview", "whatsapp", "bookings", "workshop"],
   "branch-manager": ["overview", "whatsapp", "bookings", "workshop"],
-  receptionist: ["whatsapp", "bookings", "customers", "workshop"],
+  receptionist: ["whatsapp", "customers", "bookings", "workshop"],
   technician: ["workshop"],
 };
 
 export function navigationForRole(role: GarageRole) {
-  return navigation.filter((item) => item.roles.includes(role));
+  const priority = primaryNavigationByRole[role];
+  return navigation
+    .filter((item) => item.roles.includes(role))
+    .sort((a, b) => {
+      const rankA = priority.indexOf(a.id);
+      const rankB = priority.indexOf(b.id);
+      return (rankA < 0 ? priority.length : rankA) - (rankB < 0 ? priority.length : rankB);
+    });
 }
 
 export function groupedNavigationForRole(role: GarageRole) {

@@ -53,6 +53,7 @@ Home screen:
 Rules:
 - One vehicle/job is the focus at a time.
 - Avoid complex dashboards, dense tables, settings, and multi-level menus.
+- Show assigned vehicles in next-action order and expose only the next valid technician action; assignment and exception controls stay with managers.
 - Large touch targets; usable with one hand.
 - No drag-and-drop.
 - Never hide the vehicle identity while the technician is updating it.
@@ -71,6 +72,7 @@ Home screen:
 
 Rules:
 - Fast keyboard-friendly workflows on desktop.
+- Put the inbox and customer/vehicle lookup before booking entry; reuse a selected branch and existing customer/vehicle records rather than retyping their identity.
 - No more than a few primary filters visible at once; advanced filters can be tucked away.
 - Make source number and branch visible.
 - Show booking capacity warnings before confirmation.
@@ -119,6 +121,7 @@ Keep navigation stable. On mobile, use a compact bottom navigation or a simple m
 
 - Tables: sortable columns, clear empty states, pagination or progressive loading, responsive treatment.
 - Forms: short sections, inline validation, preserve user input after recoverable errors.
+- Do not ask staff to type internal row IDs. Generate them in the UI; keep approved pricing, policy references, customer identity, evidence, and other safety/audit inputs explicit when no verified record can supply them.
 - Dialogs: use only for decisions that need focus; do not nest dialogs.
 - Toasts: brief confirmation for successful actions; errors must explain recovery.
 - Status tags: consistent text and color; never rely on color alone.

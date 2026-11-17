@@ -48,7 +48,7 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
     serviceId: "",
     branchId: defaultBranch,
     dropoffDate: "",
-    dropoffTime: "09:00",
+    dropoffTime: "",
   });
   const availableCustomers = state.customers;
   const draftIdentity = `${store.actor?.userId ?? "anonymous"}:${store.actor?.isDemo ? "demo" : "live"}`;
@@ -62,7 +62,7 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
     return draft as BookingForm;
   });
   const discardDraft = () => {
-    setForm({ customerId: "", vehicleId: "", serviceId: "", branchId: defaultBranch, dropoffDate: "", dropoffTime: "09:00" });
+    setForm({ customerId: "", vehicleId: "", serviceId: "", branchId: defaultBranch, dropoffDate: "", dropoffTime: "" });
     setStep(1); setInvalidated([]); setError(""); setShowForm(false);
   };
   const filtered = state.bookings.filter((booking) => {
@@ -76,8 +76,8 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
 
   useEffect(() => {
     const customer = availableCustomers.find((item) => item.id === form.customerId);
-    if (customer && !customer.vehicles.some((vehicle) => vehicle.id === form.vehicleId)) {
-      setForm((previous) => ({ ...previous, vehicleId: customer.vehicles[0]?.id ?? "" }));
+    if (customer && form.vehicleId && !customer.vehicles.some((vehicle) => vehicle.id === form.vehicleId)) {
+      setForm((previous) => ({ ...previous, vehicleId: "" }));
     }
   }, [form.customerId, form.vehicleId, availableCustomers]);
 
@@ -109,7 +109,7 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
     setSaving(false);
     if (result.ok) {
       setShowForm(false);
-      setForm({ customerId: "", vehicleId: "", serviceId: "", branchId: defaultBranch, dropoffDate: "", dropoffTime: "09:00" });
+       setForm({ customerId: "", vehicleId: "", serviceId: "", branchId: defaultBranch, dropoffDate: "", dropoffTime: "" });
       notify(result.status === "confirmed"
         ? t("Booking confirmed and added to the workshop.", "الحجز اتأكد واتضاف للورشة.")
         : t("Booking request saved for staff review.", "طلب الحجز اتحفظ عشان الفريق يراجعه."));

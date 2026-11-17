@@ -138,7 +138,7 @@ function ReadyWorkspace({
   const selectedPage = navItems.find((item) => item.id === page);
   const activeGroup = groupedNavItems.find((group) => group.id === selectedPage?.group);
   const workspaceTabs = selectedPage ? navItems.filter((item) => item.group === selectedPage.group) : [];
-  const defaultPage = actor.role === "receptionist" ? "bookings" : actor.role === "technician" ? "workshop" : "overview";
+  const defaultPage = actor.role === "receptionist" ? "whatsapp" : actor.role === "technician" ? "workshop" : "overview";
 
   useEffect(() => {
     setMobileMenuOpen(false);

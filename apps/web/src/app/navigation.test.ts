@@ -43,7 +43,7 @@ describe("workspace navigation", () => {
       "quotes", "promotions", "reservations", "benefits", "warranties",
     ]);
     expect(navigationForRole("receptionist").map((item) => item.id)).toEqual([
-      "whatsapp", "bookings", "customers", "transport", "quotes",
+      "whatsapp", "customers", "bookings", "transport", "quotes",
       "promotions", "reservations", "benefits", "warranties",
     ]);
     expect(navigationForRole("technician").map((item) => item.id)).toEqual(["workshop"]);

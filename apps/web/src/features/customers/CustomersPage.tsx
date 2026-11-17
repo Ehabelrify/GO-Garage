@@ -56,11 +56,12 @@ export function CustomersPage({ lang, t, state, notify, branchId }: CustomersPag
     <PageHeading
       eyebrow={t("Reception · Records", "الاستقبال · السجلات")}
       title={t("Customers & vehicles", "العملاء والمركبات")}
-      subtitle={t("Search customer and vehicle records available to your assigned branches.", "دوّر في بيانات العملاء والعربيات المتاحة للفروع المسندة ليك.")}
+      subtitle={t("Find the existing customer or vehicle first. Add a new record only when there is no match.", "ابحث عن العميل أو المركبة أولاً. أضف سجلاً جديداً فقط إذا لم تجد تطابقاً.")}
       action={<button className="btn btn-primary" type="button" onClick={() => { setShowForm((value) => !value); setError(""); }} disabled={!branchId}><Plus size={16} />{t("Add customer", "إضافة عميل")}</button>}
     />
 
-    {showForm && <form className="form-panel" onSubmit={(event) => void create(event)}>
+    <div className="customer-workspace">
+    {showForm && <form className="form-panel customer-form" onSubmit={(event) => void create(event)}>
       <div className="panel-title-row"><div><h2 className="panel-title">{t("Create customer record", "سجّل عميل جديد")}</h2><p className="panel-desc">{t("A customer and the first vehicle are stored together.", "بيانات العميل وأول عربية بتتحفظ مع بعض.")}</p></div></div>
       <div className="form-grid">
         <div className="form-field"><label className="field-label" htmlFor="customer-name">{t("Customer name", "اسم العميل")} *</label><input id="customer-name" className="field-input" required maxLength={120} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></div>
@@ -73,7 +74,7 @@ export function CustomersPage({ lang, t, state, notify, branchId }: CustomersPag
       <div className="form-actions"><button type="button" className="btn" onClick={() => setShowForm(false)}>{t("Close", "اقفل")}</button><button className="btn btn-primary" type="submit" disabled={saving}>{saving ? t("Saving…", "بنحفظ…") : t("Save customer", "احفظ بيانات العميل")}</button></div>
     </form>}
 
-    <div className="toolbar"><div className="toolbar-start"><label className="search-wrap"><Search size={16} /><span className="sr-only">{t("Search customers", "دوّر على العملاء")}</span><input className="search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search name, phone, plate or model…", "دوّر بالاسم أو رقم الموبايل أو اللوحة أو الموديل…")} /></label></div><span className="top-meta">{rows.length} {t("customers", "عميل")}</span></div>
+    <div className="toolbar customer-lookup"><div className="toolbar-start"><label className="search-wrap"><Search size={16} /><span className="sr-only">{t("Search customers", "دوّر على العملاء")}</span><input className="search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search name, phone, plate or model…", "دوّر بالاسم أو رقم الموبايل أو اللوحة أو الموديل…")} /></label></div><span className="top-meta">{rows.length} {t("customers", "عميل")}</span></div>
 
     <div className="table-wrap"><table><thead><tr><th>{t("Customer", "العميل")}</th><th>{t("Phone", "الهاتف")}</th><th>{t("Language", "اللغة")}</th><th>{t("Vehicle", "المركبة")}</th><th>{t("Plate", "اللوحة")}</th></tr></thead><tbody>
       {rows.flatMap((customer) => customer.vehicles.map((vehicle) => <tr key={`${customer.id}-${vehicle.id}`}>
@@ -82,5 +83,6 @@ export function CustomersPage({ lang, t, state, notify, branchId }: CustomersPag
       </tr>))}
       {!rows.length && <tr><td colSpan={5}><EmptyState title={t("No matching customers", "مفيش عملاء مطابقين")} text={t("Adjust your search or add a customer to this branch.", "غيّر كلمة البحث أو ضيف عميل للفرع ده.")} /></td></tr>}
     </tbody></table></div>
+    </div>
   </>;
 }

@@ -53,9 +53,17 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
   const jobs = state.jobs.filter((job) => {
     const vehicle = vehicleFor(job.customerId, job.vehicleId);
     const searchable = `${vehicle?.plate ?? ""} ${vehicle?.makeModel ?? ""} ${customerName(job.customerId)} ${job.id} ${serviceName(job.serviceId)}`.toLowerCase();
-    return searchable.includes(query.toLowerCase()) &&
+    return (role !== "technician" || (job.assignedUserId === store.actor?.userId && !["delivered", "cancelled", "no-show"].includes(job.stage))) &&
+      searchable.includes(query.toLowerCase()) &&
       (stage === "all" || job.stage === stage) &&
       (state.currentBranch === "all" || job.branchId === state.currentBranch);
+  }).sort((a, b) => {
+    const priority: JobStage[] = ["received", "in-service", "qc", "ready", "booked", "delivered", "cancelled", "no-show"];
+    const stageOrder = priority.indexOf(a.stage) - priority.indexOf(b.stage);
+    if (stageOrder !== 0) return stageOrder;
+    const pickupA = state.bookings.find((booking) => booking.id === a.bookingId)?.expectedPickup ?? "9999-12-31";
+    const pickupB = state.bookings.find((booking) => booking.id === b.bookingId)?.expectedPickup ?? "9999-12-31";
+    return pickupA.localeCompare(pickupB);
   });
 
   const move = async (jobId: string, target: JobStage) => {
@@ -88,15 +96,18 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
 
   return <>
     <PageHeading eyebrow={t("Workshop · Jobs", "الورشة · أوامر الشغل")} title={roleHeading} subtitle={roleDescription} />
-    <div className="toolbar"><div className="toolbar-start"><label className="search-wrap"><Search size={16} /><span className="sr-only">{t("Search workshop jobs", "دوّر في أوامر الشغل")}</span><input className="search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search plate, customer, service or job…", "دوّر باللوحة أو العميل أو الخدمة أو أمر الشغل…")} /></label>
+    {canAssign && <div className="toolbar"><div className="toolbar-start"><label className="search-wrap"><Search size={16} /><span className="sr-only">{t("Search workshop jobs", "دوّر في أوامر الشغل")}</span><input className="search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search plate, customer or service…", "دوّر باللوحة أو العميل أو الخدمة…")} /></label>
       <select className="filter-select" style={{ width: "auto" }} value={stage} onChange={(event) => setStage(event.target.value as JobStage | "all")}><option value="all">{t("All stages", "كل المراحل")}</option>{Object.entries(stageNames).map(([key, label]) => <option key={key} value={key}>{lang === "ar" ? label.ar : label.en}</option>)}</select>
-    </div><span className="top-meta">{jobs.length} {t("jobs", "أوامر شغل")}</span></div>
+    </div><span className="top-meta">{jobs.length} {t("jobs", "أوامر شغل")}</span></div>}
 
     <div className="job-list">
       {jobs.map((job) => {
         const vehicle = vehicleFor(job.customerId, job.vehicleId);
         const booking = state.bookings.find((item) => item.id === job.bookingId);
         const choices = nextJobStages(job.stage);
+        const availableChoices = role === "technician"
+          ? choices.filter((target) => target !== "cancelled" && target !== "no-show").slice(0, 1)
+          : choices;
         const branchTechnicians = technicians.filter((item) => item.branchIds.includes(job.branchId));
         const assignedTechnician = technicians.find((item) => item.userId === job.assignedUserId);
         const selected = selectedTechnician[job.id] ?? job.assignedUserId ?? "";
@@ -131,8 +142,8 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
                   </button>
                   <span id={`assign-reason-${job.id}`} className="assignment-empty" role="status">{assignmentReason || t("Ready to save this assignment.", "جاهز لحفظ إسناد الشغل.")}</span>
             </div>}
-            <div className="job-actions">{choices.length
-              ? choices.map((target) => <button key={target} className={`btn btn-sm ${target === "cancelled" || target === "no-show" ? "btn-danger" : "btn-primary"}`} onClick={() => void move(job.id, target)}>
+            <div className="job-actions">{availableChoices.length
+              ? availableChoices.map((target) => <button key={target} className={`btn btn-sm ${target === "cancelled" || target === "no-show" ? "btn-danger" : "btn-primary"}`} onClick={() => void move(job.id, target)}>
                 {target === "cancelled" || target === "no-show"
                   ? lang === "ar" ? stageNames[target].ar : stageNames[target].en
                   : lang === "ar" ? nextAction[job.stage].ar : nextAction[job.stage].en}

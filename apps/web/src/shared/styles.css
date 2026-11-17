@@ -173,6 +173,8 @@ tbody tr:hover { background:#f7faf8; }
 .form-subsection h3 { margin:0 0 12px; }
 .form-subsection > .btn { margin-top:10px; }
 .catalogue-record { padding:12px 0; border-top:1px solid var(--line); }
+.customer-workspace { display:flex; flex-direction:column; }
+.customer-lookup { order:-1; }
 .catalogue-record h3, .catalogue-record p { margin:0 0 7px; }
 .catalogue-record-list { display:grid; gap:3px; }
 .policy-options { min-width:0; padding:12px; border:1px solid var(--line); }
@@ -195,6 +197,11 @@ tbody tr:hover { background:#f7faf8; }
 .form-actions { display:flex; gap:9px; justify-content:flex-end; margin-top:15px; flex-wrap:wrap; }
 .form-error { color:var(--red); background:var(--red-soft); padding:9px 11px; margin-top:12px; font-size:12px; }
 .form-hint { color:var(--muted); font-size:11px; margin-top:5px; }
+.form-panel details, .panel details { color:var(--ink); }
+.form-panel details > summary, .panel details > summary { color:var(--teal-dark); font-size:13px; font-weight:600; cursor:pointer; padding:8px 0; }
+.form-panel details[open] > summary, .panel details[open] > summary { margin-bottom:9px; }
+.form-panel details > .form-grid, .panel details > .form-grid { margin-top:9px; }
+.form-panel fieldset, .panel fieldset { margin:0; min-width:0; }
 .history-list { display:grid; }
 .history-item { display:grid; grid-template-columns:140px minmax(0,1fr); gap:12px; padding:12px 0; border-top:1px solid #e6ecea; font-size:12px; }
 .history-date { color:var(--muted); font-size:11px; }
