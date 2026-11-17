@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Plus, Search } from "lucide-react";
 import type { BranchId, Locale } from "@garage/domain";
-import { useGarageStore } from "../../shared/store";
+import { unknownWriteOutcomeCopy, useGarageStore } from "../../shared/store";
 import { customerDisplay, EmptyState, PageHeading, type PageProps } from "../../shared/ui";
 
 interface CustomerForm {
@@ -49,7 +49,7 @@ export function CustomersPage({ lang, t, state, notify, branchId }: CustomersPag
       return;
     }
     const copy = customerErrorCopy[result.error];
-    setError(copy ? t(copy.en, copy.ar) : t("The customer record could not be saved.", "ماقدرناش نحفظ بيانات العميل."));
+    setError(unknownWriteOutcomeCopy(result.error, lang) ?? (copy ? t(copy.en, copy.ar) : t("The customer record could not be saved.", "ماقدرناش نحفظ بيانات العميل.")));
   };
 
   return <>

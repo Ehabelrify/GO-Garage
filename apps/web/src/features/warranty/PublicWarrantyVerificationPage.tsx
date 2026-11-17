@@ -10,6 +10,7 @@ export interface PublicWarrantyData {
   branchName?: { en: string; ar: string };
   startDate?: string;
   expiresOn?: string;
+  coverage?: { kind: "fixed" | "lifetime"; publicWording?: { ar: string; en: string } };
 }
 
 interface VerificationCardProps {
@@ -20,6 +21,7 @@ interface VerificationCardProps {
 const statusCopy: Record<WarrantyStatus, { en: string; ar: string }> = {
   active: { en: "Active coverage", ar: "الضمان ساري" },
   expired: { en: "Coverage expired", ar: "انتهت مدة الضمان" },
+  terminated: { en: "Coverage terminated", ar: "انتهت التغطية" },
   void: { en: "Coverage void", ar: "الضمان ملغي" },
 };
 
@@ -53,6 +55,7 @@ export function WarrantyVerificationCard({ data, lang }: VerificationCardProps) 
       {branchName && <div><dt><MapPin size={15} />{t("Branch", "الفرع")}</dt><dd>{branchName}</dd></div>}
       {data.startDate && <div><dt><CalendarDays size={15} />{t("Coverage starts", "بداية الضمان")}</dt><dd>{dateText(data.startDate, lang)}</dd></div>}
       {data.expiresOn && <div><dt><CalendarDays size={15} />{t("Coverage ends", "نهاية الضمان")}</dt><dd>{dateText(data.expiresOn, lang)}</dd></div>}
+      {data.coverage?.kind === "lifetime" && <div><dt><ShieldCheck size={15} />{t("Coverage", "التغطية")}</dt><dd>{data.coverage.publicWording?.[lang] ?? t("Lifetime terms apply; eligibility is reviewed against the approved conditions.", "تطبق شروط التغطية مدى الحياة؛ وتراجع الأهلية وفق الشروط المعتمدة.")}</dd></div>}
     </dl>
     <div className="public-card-foot">{t("Verified by Go Stores · No sign-in required", "تم التحقق بواسطة Go Stores · مش محتاج تسجل دخول")}</div>
   </article>;

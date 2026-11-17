@@ -120,7 +120,8 @@ function actorFromRow(row: {
   branch_ids: string[];
   status: string;
 }): GarageActor | null {
-  if (row.status !== "active" || !accountById(row.clerk_user_id)) return null;
+  if (row.status !== "active" || !accountById(row.clerk_user_id) ||
+      (row.role !== "owner" && !(row.branch_ids ?? []).length)) return null;
   return {
     userId: row.clerk_user_id,
     email: row.email,
@@ -147,8 +148,14 @@ export async function findDemoActor(req: Request): Promise<GarageActor | null> {
      FROM staff_memberships WHERE clerk_user_id = $1`,
     [account.id],
   );
+  if (result.rows.length !== 1) return null;
   const row = result.rows[0];
   if (!row || row.role !== account.role || row.email.toLowerCase() !== account.email.toLowerCase()) return null;
+  const conflictingEmail = await pool.query<{ clerk_user_id: string }>(
+    `SELECT clerk_user_id FROM staff_memberships WHERE lower(email) = lower($1) AND clerk_user_id <> $2`,
+    [account.email, account.id],
+  );
+  if (conflictingEmail.rows.length) return null;
   return actorFromRow(row);
 }
 
@@ -165,6 +172,13 @@ export async function provisionDemoActor(accountId: string): Promise<GarageActor
   let selectedActor: GarageActor | null = null;
   for (const demoAccount of accountsToEnsure) {
     const branchIds = demoAccount.role === "owner" ? [] : [branches.rows[0].id];
+    const conflictingEmail = await pool.query<{ clerk_user_id: string }>(
+      `SELECT clerk_user_id FROM staff_memberships WHERE lower(email) = lower($1) AND clerk_user_id <> $2`,
+      [demoAccount.email, demoAccount.id],
+    );
+    if (conflictingEmail.rows.length) {
+      throw new DemoAuthError("DEMO_ACCOUNT_CONFLICT", "A demo identity conflicts with an existing development membership.");
+    }
     await pool.query(
       `INSERT INTO staff_memberships
          (clerk_user_id, email, full_name, role, branch_ids, status)
@@ -185,12 +199,16 @@ export async function provisionDemoActor(accountId: string): Promise<GarageActor
        FROM staff_memberships WHERE clerk_user_id = $1`,
       [demoAccount.id],
     );
+    if (result.rows.length !== 1) throw new DemoAuthError("DEMO_ACCOUNT_CONFLICT", "A demo identity conflicts with an existing development membership.");
     const row = result.rows[0];
     if (!row || row.role !== demoAccount.role || row.email.toLowerCase() !== demoAccount.email.toLowerCase()) {
       throw new DemoAuthError("DEMO_ACCOUNT_CONFLICT", "A demo identity conflicts with an existing development membership.");
     }
     if (demoAccount.id === account.id) {
       if (row.status !== "active") throw new DemoAuthError("DEMO_ACCOUNT_DISABLED", "This demo account has been disabled.");
+      if (demoAccount.role !== "owner" && !(row.branch_ids ?? []).length) {
+        throw new DemoAuthError("DEMO_BRANCH_UNAVAILABLE", "No branch is assigned to this demo account.");
+      }
       selectedActor = actorFromRow(row);
     }
   }

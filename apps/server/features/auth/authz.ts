@@ -35,6 +35,14 @@ export function canManageBookings(actor: GarageActor) {
   return ["owner", "branch-manager", "receptionist"].includes(actor.role);
 }
 
+export function canCoordinateTransport(actor: GarageActor, branchId: string) {
+  return ["owner", "branch-manager", "receptionist"].includes(actor.role) && canAccessBranch(actor, branchId);
+}
+
+export function canReadTransportContact(actor: GarageActor, branchId: string) {
+  return !actor.isDemo && canCoordinateTransport(actor, branchId);
+}
+
 export function canUseWhatsAppInbox(actor: GarageActor, branchId: string) {
   return ["owner", "branch-manager", "receptionist"].includes(actor.role)
     && canAccessBranch(actor, branchId);

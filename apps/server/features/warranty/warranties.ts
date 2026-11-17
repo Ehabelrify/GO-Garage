@@ -3,8 +3,8 @@ import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import type { PoolClient } from "pg";
 import { z } from "zod";
-import { warrantyExpiryDate } from "@garage/domain";
-import type { WarrantyClaimStatus, WarrantyPolicy } from "@garage/domain";
+import { completeLifetimeDefinition, type Configured, type LifetimeDefinition } from "@garage/domain";
+import type { WarrantyClaimStatus } from "@garage/domain";
 import {
   canIssueWarranty,
   canManageWarrantyPolicies,
@@ -33,6 +33,8 @@ import {
   normalizeWarrantyVerificationFields,
 } from "./warranty-verification";
 import { ensureWarrantyInvoiceDraft } from "./warranty-invoices";
+import { issueCoverageInTransaction, retirePolicyVersion, duplicatePolicyDraft, WarrantyIssuanceError } from "./issuance-service";
+import { commercialContext } from "../commercial/policy-service";
 
 export const warrantyRouter = Router();
 export const publicWarrantyVerificationRouter = Router();
@@ -43,12 +45,20 @@ const policyBodySchema = z.object({
   eligibleServiceIds: z.array(z.string().trim().min(1)).min(1).max(30),
   autoIssue: z.boolean().default(false),
   startRule: z.enum(["job-delivery", "owner-selected-date"]),
-  durationMonths: z.number().int().min(1).max(120),
+  coverageKind: z.enum(["fixed", "lifetime"]).default("fixed"),
+  durationMonths: z.number().int().min(1).max(120).nullable(),
+  lifetimeDefinition: z.any().nullable().optional(),
   exclusions: z.string().trim().min(1).max(4000),
   evidenceRequirements: z.string().trim().min(1).max(4000),
   reviewRole: z.enum(["owner", "branch-manager"]),
   responseDays: z.number().int().min(1).max(365),
 }).superRefine((policy, context) => {
+  if (policy.coverageKind === "fixed" && policy.durationMonths === null) context.addIssue({ code: "custom", path: ["durationMonths"], message: "Fixed coverage needs a duration." });
+  if (policy.coverageKind === "lifetime" && policy.durationMonths !== null) context.addIssue({ code: "custom", path: ["durationMonths"], message: "Lifetime coverage has no month duration." });
+  if (policy.coverageKind === "lifetime" && policy.lifetimeDefinition != null &&
+      !["approved", "unconfigured"].includes(policy.lifetimeDefinition.state)) {
+    context.addIssue({ code: "custom", path: ["lifetimeDefinition"], message: "Complete approved bilingual lifetime terms are required." });
+  }
   if (policy.autoIssue && policy.startRule !== "job-delivery") {
     context.addIssue({
       code: "custom",
@@ -59,7 +69,7 @@ const policyBodySchema = z.object({
 });
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const verificationFieldSchema = z.enum(["service", "status", "startDate", "expiresOn", "branch"]);
+const verificationFieldSchema = z.enum(["service", "status", "startDate", "expiresOn", "branch", "coverage"]);
 const invoiceDraftInputSchema = z.object({
   items: z.array(z.object({
     description: z.string().trim().min(1).max(240),
@@ -130,6 +140,18 @@ function isValidDate(value: string) {
   return Number.isFinite(date.valueOf()) && date.toISOString().slice(0, 10) === value;
 }
 
+function lifetimeSnapshot(input: unknown, policyId: string, version: number, ownerId: string) {
+  if (!input || typeof input !== "object") return null;
+  const candidate = input as Record<string, unknown>;
+  if (candidate.state !== "approved") return { state: "unconfigured", missing: Array.isArray(candidate.missing) ? candidate.missing : [], draftValue: candidate.draftValue ?? null };
+  if (!completeLifetimeDefinition(candidate.value)) return null;
+  const approval = candidate.approval as Record<string, unknown> | undefined;
+  if (typeof approval?.evidenceRef !== "string" || !approval.evidenceRef.trim() || typeof approval.reason !== "string" || !approval.reason.trim()) return null;
+  return { state: "approved", value: candidate.value, policy: { id: policyId, version }, approval: {
+    approvedBy: ownerId, approvedAt: new Date().toISOString(), evidenceRef: approval.evidenceRef.trim(), reason: approval.reason.trim(),
+  } };
+}
+
 const claimEvidenceUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_CLAIM_EVIDENCE_BYTES, files: 1, fields: 0, parts: 1 },
@@ -152,7 +174,10 @@ publicWarrantyVerificationRouter.get("/:token", async (req, res) => {
     approved_fields: string[];
     record_status: "active" | "void";
     start_date: string;
-    expires_on: string;
+    expires_on: string | null;
+    coverage_kind: "fixed" | "lifetime";
+    lifetime_definition: Configured<LifetimeDefinition> | null;
+    terminated_on: string | null;
     cairo_today: string;
     service_name_en: string;
     service_name_ar: string;
@@ -163,6 +188,7 @@ publicWarrantyVerificationRouter.get("/:token", async (req, res) => {
             w.status AS record_status,
             to_char(w.start_date, 'YYYY-MM-DD') AS start_date,
             to_char(w.expires_on, 'YYYY-MM-DD') AS expires_on,
+            w.coverage_kind, w.lifetime_definition, w.terminated_on::text,
             to_char((now() AT TIME ZONE 'Africa/Cairo')::date, 'YYYY-MM-DD') AS cairo_today,
             s.name_en AS service_name_en, s.name_ar AS service_name_ar,
             b.name_en AS branch_name_en, b.name_ar AS branch_name_ar
@@ -184,6 +210,9 @@ publicWarrantyVerificationRouter.get("/:token", async (req, res) => {
     recordStatus: row.record_status,
     startDate: row.start_date,
     expiresOn: row.expires_on,
+    coverageKind: row.coverage_kind,
+    publicWording: row.coverage_kind === "lifetime" ? row.lifetime_definition?.state === "approved" ? row.lifetime_definition.value.publicWording : undefined : undefined,
+    terminatedOn: row.terminated_on,
     cairoToday: row.cairo_today,
     serviceNameEn: row.service_name_en,
     serviceNameAr: row.service_name_ar,
@@ -198,7 +227,7 @@ warrantyRouter.put("/verification-settings", async (req, res) => {
   if (!canManageWarrantyPolicies(currentActor)) return routeError(res, 403, "ROLE_FORBIDDEN", "Only the Owner can approve public verification fields.");
   const parsed = z.object({
     enabled: z.boolean(),
-    approvedFields: z.array(verificationFieldSchema).max(5),
+    approvedFields: z.array(verificationFieldSchema).max(6),
     approvedTerms: z.literal(true),
   }).safeParse(req.body);
   if (!parsed.success) return routeError(res, 400, "INVALID_VERIFICATION_SETTINGS", "Choose valid customer-facing fields and confirm the public display.");
@@ -414,8 +443,8 @@ warrantyRouter.post("/policies", async (req, res) => {
     await client.query(
       `INSERT INTO warranty_policies
          (policy_id, version, name, eligible_service_ids, auto_issue, start_rule, duration_months,
-          exclusions, evidence_requirements, review_role, response_days, created_by)
-       VALUES ($1, $2, $3, $4::text[], $5, $6, $7, $8, $9, $10, $11, $12)`,
+          exclusions, evidence_requirements, review_role, response_days, created_by, coverage_kind, lifetime_definition)
+       VALUES ($1, $2, $3, $4::text[], $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb)`,
       [
         policyId,
         version,
@@ -429,6 +458,8 @@ warrantyRouter.post("/policies", async (req, res) => {
         policy.reviewRole,
         policy.responseDays,
         currentActor.userId,
+        policy.coverageKind,
+        policy.coverageKind === "lifetime" ? JSON.stringify(lifetimeSnapshot(policy.lifetimeDefinition, policyId, version, currentActor.userId)) : null,
       ],
     );
     await addAuditEvent(client, {
@@ -474,7 +505,8 @@ warrantyRouter.patch("/policies/:policyId/:version", async (req, res) => {
       `UPDATE warranty_policies
        SET name = $3, eligible_service_ids = $4::text[], auto_issue = $5,
            start_rule = $6, duration_months = $7, exclusions = $8,
-           evidence_requirements = $9, review_role = $10, response_days = $11
+           evidence_requirements = $9, review_role = $10, response_days = $11,
+           coverage_kind = $12, lifetime_definition = $13::jsonb
        WHERE policy_id = $1 AND version = $2`,
       [
         req.params.policyId,
@@ -488,6 +520,8 @@ warrantyRouter.patch("/policies/:policyId/:version", async (req, res) => {
         parsed.data.evidenceRequirements,
         parsed.data.reviewRole,
         parsed.data.responseDays,
+        parsed.data.coverageKind,
+        parsed.data.coverageKind === "lifetime" ? JSON.stringify(lifetimeSnapshot(parsed.data.lifetimeDefinition, req.params.policyId, version, currentActor.userId)) : null,
       ],
     );
     await addAuditEvent(client, {
@@ -520,19 +554,24 @@ warrantyRouter.post("/policies/:policyId/:version/publish", async (req, res) => 
       eligible_service_ids: string[];
       auto_issue: boolean;
       start_rule: string;
-      duration_months: number;
+      duration_months: number | null;
+      coverage_kind: "fixed" | "lifetime";
+      lifetime_definition: Configured<LifetimeDefinition> | null;
       exclusions: string;
       evidence_requirements: string;
       review_role: string;
       response_days: number;
     }>(
-      `SELECT status, version, eligible_service_ids, auto_issue, start_rule, duration_months,
+      `SELECT status, version, eligible_service_ids, auto_issue, start_rule, duration_months, coverage_kind, lifetime_definition,
               exclusions, evidence_requirements, review_role, response_days
        FROM warranty_policies WHERE policy_id = $1 AND version = $2 FOR UPDATE`,
       [req.params.policyId, version],
     );
     if (!policy.rowCount) return "missing" as const;
     if (policy.rows[0].status !== "draft") return "locked" as const;
+    if (policy.rows[0].coverage_kind === "lifetime" &&
+        (policy.rows[0].lifetime_definition?.state !== "approved" ||
+          !completeLifetimeDefinition(policy.rows[0].lifetime_definition.value))) return "lifetime-unconfigured" as const;
     const latest = await client.query<{ version: number }>(
       "SELECT max(version) AS version FROM warranty_policies WHERE policy_id = $1",
       [req.params.policyId],
@@ -583,126 +622,80 @@ warrantyRouter.post("/policies/:policyId/:version/publish", async (req, res) => 
   if (result === "not-latest") return routeError(res, 409, "POLICY_VERSION_NOT_LATEST", "Publish the newest policy version.");
   if (result === "service-invalid") return routeError(res, 409, "POLICY_SERVICE_INACTIVE", "One or more eligible services are no longer active.");
   if (result === "auto-overlap") return routeError(res, 409, "AUTO_WARRANTY_POLICY_CONFLICT", "Another published automatic policy already covers one or more selected services.");
+  if (result === "lifetime-unconfigured") return routeError(res, 409, "LIFETIME_TERMS_UNCONFIGURED", "Complete approved bilingual lifetime terms before publishing.");
   res.json({ ok: true });
+});
+
+warrantyRouter.get("/retired-issuance-authority", async (req, res) => {
+  const currentActor = actor(req);
+  const parsed = z.object({ jobId: z.string().min(1), componentId: z.string().min(1),
+    policyId: z.string().min(1), policyVersion: z.coerce.number().int().positive() }).safeParse(req.query);
+  if (!parsed.success) return routeError(res, 400, "INVALID_WARRANTY", "Choose an exact job, component and policy version.");
+  const { jobId, componentId, policyId, policyVersion } = parsed.data;
+  const job = (await pool.query<{ branch_id: string; accepted_quote_id: string | null; accepted_quote_revision: number | null }>(
+    "SELECT j.branch_id,b.accepted_quote_id,b.accepted_quote_revision FROM jobs j JOIN bookings b ON b.id=j.booking_id WHERE j.id=$1", [jobId])).rows[0];
+  if (!job || !canIssueWarranty(currentActor, job.branch_id)) return routeError(res, 404, "JOB_NOT_FOUND", "The job is unavailable.");
+  const policy = (await pool.query<{ status: string }>("SELECT status FROM warranty_policies WHERE policy_id=$1 AND version=$2", [policyId, policyVersion])).rows[0];
+  if (policy?.status !== "retired") return res.json({ outcome: "not-retired" });
+  if (!job.accepted_quote_id || !job.accepted_quote_revision) return res.json({ outcome: "missing-accepted-binding" });
+  const accepted = (await pool.query<{ accepted_snapshot: { warrantyBindings?: Array<{ componentId: string; policy: { id: string; version: number }; issuanceAuthority: { id: string; version: number } }> } }>(
+    "SELECT accepted_snapshot FROM quote_acceptance_events WHERE quote_id=$1 AND revision=$2", [job.accepted_quote_id, job.accepted_quote_revision])).rows[0]?.accepted_snapshot;
+  const bindings = accepted?.warrantyBindings?.filter((binding) => binding.componentId === componentId &&
+    binding.policy.id === policyId && binding.policy.version === policyVersion) ?? [];
+  if (bindings.length !== 1) return res.json({ outcome: "missing-accepted-binding" });
+  const authority = (await pool.query<{ state: string; value: { honorRetiredAcceptedWarranty?: boolean } | null; approved_at: Date | null; evidence_ref: string | null }>(
+    "SELECT state,value,approved_at,evidence_ref FROM commercial_policy_versions WHERE policy_id=$1 AND version=$2",
+    [bindings[0].issuanceAuthority.id, bindings[0].issuanceAuthority.version])).rows[0];
+  return res.json({ outcome: authority?.state === "approved" && authority.approved_at && authority.evidence_ref &&
+    authority.value?.honorRetiredAcceptedWarranty === true ? "approved" : "owner-exception-required" });
 });
 
 warrantyRouter.post("/", async (req, res) => {
   const currentActor = actor(req);
-  const parsed = z.object({
-    policyId: z.string().min(1),
-    policyVersion: z.number().int().positive(),
-    jobId: z.string().min(1),
-    startDate: dateSchema.optional(),
-  }).safeParse(req.body);
+  const parsed = z.object({ policyId: z.string().min(1), policyVersion: z.number().int().positive(),
+    jobId: z.string().min(1), componentId: z.string().min(1).nullable().optional(), startDate: dateSchema.optional(),
+    idempotencyKey: z.string().min(1).optional() }).safeParse(req.body);
   if (!parsed.success) return routeError(res, 400, "INVALID_WARRANTY", "Choose an eligible completed job and policy.");
-
-  const result = await withTransaction(async (client) => {
-    const policyResult = await client.query<{
-      name: string;
-      eligible_service_ids: string[];
-      start_rule: WarrantyPolicy["startRule"];
-      duration_months: number;
-      status: string;
-    }>(
-      `SELECT name, eligible_service_ids, start_rule, duration_months, status
-       FROM warranty_policies WHERE policy_id = $1 AND version = $2 FOR SHARE`,
-      [parsed.data.policyId, parsed.data.policyVersion],
-    );
-    const policy = policyResult.rows[0];
-    if (!policy) return { error: "POLICY_NOT_FOUND" as const };
-    if (policy.status !== "published") return { error: "POLICY_NOT_ACTIVE" as const };
-
-    const jobResult = await client.query<{
-      branch_id: string;
-      job_stage: string;
-      customer_id: string;
-      vehicle_id: string;
-      service_id: string;
-      delivery_date: string | null;
-    }>(
-      `SELECT j.branch_id, j.stage AS job_stage, b.customer_id, b.vehicle_id, b.service_id,
-         (SELECT to_char((e.created_at AT TIME ZONE 'Africa/Cairo')::date, 'YYYY-MM-DD')
-          FROM job_events e
-          WHERE e.job_id = j.id AND e.to_stage = 'delivered'
-          ORDER BY e.created_at DESC LIMIT 1) AS delivery_date
-       FROM jobs j JOIN bookings b ON b.id = j.booking_id
-       WHERE j.id = $1
-       FOR UPDATE OF j`,
-      [parsed.data.jobId],
-    );
-    const job = jobResult.rows[0];
-    if (!job) return { error: "JOB_NOT_FOUND" as const };
-    if (!canIssueWarranty(currentActor, job.branch_id)) return { error: "ROLE_FORBIDDEN" as const };
-    if (job.job_stage !== "delivered") return { error: "JOB_NOT_DELIVERED" as const };
-    if (!policy.eligible_service_ids.includes(job.service_id)) return { error: "SERVICE_NOT_ELIGIBLE" as const };
-
-    let startDate: string;
-    if (policy.start_rule === "job-delivery") {
-      if (!job.delivery_date) return { error: "DELIVERY_DATE_MISSING" as const };
-      startDate = job.delivery_date;
-    } else {
-      if (!parsed.data.startDate || !isValidDate(parsed.data.startDate)) return { error: "START_DATE_REQUIRED" as const };
-      startDate = parsed.data.startDate;
-    }
-    const expiresOn = warrantyExpiryDate(startDate, policy.duration_months);
-    const warrantyId = makeId("warranty");
-    await client.query(
-      `INSERT INTO warranties
-         (id, policy_id, policy_version, job_id, customer_id, vehicle_id, branch_id, service_id,
-          start_date, expires_on, issued_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-      [
-        warrantyId,
-        parsed.data.policyId,
-        parsed.data.policyVersion,
-        parsed.data.jobId,
-        job.customer_id,
-        job.vehicle_id,
-        job.branch_id,
-        job.service_id,
-        startDate,
-        expiresOn,
-        currentActor.userId,
-      ],
-    );
-    await ensureWarrantyInvoiceDraft(client, {
-      warrantyId,
-      branchId: job.branch_id,
-      serviceId: job.service_id,
-      actorUserId: currentActor.userId,
-    });
-    await addAuditEvent(client, {
-      warrantyId,
-      action: "warranty-issued",
-      details: `Policy version ${parsed.data.policyVersion}; coverage ${startDate} through ${expiresOn}.`,
-      actorUserId: currentActor.userId,
-    });
-    await addAuditEvent(client, {
-      warrantyId,
-      action: "invoice-draft-created",
-      details: "A draft invoice was prepared with the covered service; amounts and tax remain unconfirmed.",
-      actorUserId: currentActor.userId,
-    });
-    return { warrantyId, startDate, expiresOn };
-  }).catch((error: unknown) => {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
-      return { error: "WARRANTY_ALREADY_ISSUED" as const };
-    }
+  try {
+    const result = await withTransaction(client => issueCoverageInTransaction(client, commercialContext, currentActor, {
+      jobId: parsed.data.jobId, componentId: parsed.data.componentId ?? null,
+      policyRef: { id: parsed.data.policyId, version: parsed.data.policyVersion },
+      startDate: parsed.data.startDate, source: "manual",
+      idempotencyKey: req.get("Idempotency-Key") || parsed.data.idempotencyKey || `manual:${parsed.data.jobId}:${parsed.data.componentId ?? "legacy"}:${parsed.data.policyId}:${parsed.data.policyVersion}`,
+    }));
+    res.status(201).json({ ok: true, ...result });
+  } catch (error) {
+    if (error instanceof WarrantyIssuanceError) return routeError(res, error.status, error.code, error.message);
     throw error;
-  });
-
-  if ("error" in result) {
-    if (result.error === "ROLE_FORBIDDEN") return routeError(res, 403, result.error, "This action is not available to your role or branch.");
-    if (result.error === "POLICY_NOT_FOUND") return routeError(res, 404, result.error, "The policy version was not found.");
-    if (result.error === "JOB_NOT_FOUND") return routeError(res, 404, result.error, "The workshop job was not found.");
-    if (result.error === "POLICY_NOT_ACTIVE") return routeError(res, 409, result.error, "Only a published policy can issue coverage.");
-    if (result.error === "JOB_NOT_DELIVERED") return routeError(res, 409, result.error, "Coverage can only be issued for a delivered job.");
-    if (result.error === "SERVICE_NOT_ELIGIBLE") return routeError(res, 409, result.error, "This service is not covered by the selected policy.");
-    if (result.error === "DELIVERY_DATE_MISSING") return routeError(res, 409, result.error, "The delivered job has no recorded delivery date.");
-    if (result.error === "START_DATE_REQUIRED") return routeError(res, 400, result.error, "Enter a valid Owner-approved coverage start date.");
-    return routeError(res, 409, "WARRANTY_ALREADY_ISSUED", "Coverage was already issued for this job and policy.");
   }
-  res.status(201).json({ ok: true, ...result });
+});
+
+warrantyRouter.post("/policies/:policyId/:version/retire", async (req, res) => {
+  const currentActor = actor(req);
+  const parsed = z.object({ reason: z.string().trim().min(1), expectedStatus: z.literal("published") }).safeParse(req.body);
+  const version = Number(req.params.version);
+  if (!parsed.success || !Number.isInteger(version) || version < 1) return routeError(res, 400, "INVALID_RETIREMENT", "Provide the current status and a reason.");
+  try {
+    await retirePolicyVersion(commercialContext, currentActor, { policyRef: { id: req.params.policyId, version }, ...parsed.data });
+    res.json({ ok: true });
+  } catch (error) {
+    if (error instanceof WarrantyIssuanceError) return routeError(res, error.status, error.code, error.message);
+    throw error;
+  }
+});
+
+warrantyRouter.post("/policies/:policyId/:version/duplicate", async (req, res) => {
+  const currentActor = actor(req);
+  const parsed = z.object({ target: z.enum(["next-version", "new-policy"]) }).safeParse(req.body);
+  const version = Number(req.params.version);
+  if (!parsed.success || !Number.isInteger(version) || version < 1) return routeError(res, 400, "INVALID_DUPLICATE", "Choose a valid source and target.");
+  try {
+    const ref = await duplicatePolicyDraft(commercialContext, currentActor, { sourceRef: { id: req.params.policyId, version }, target: parsed.data.target });
+    res.status(201).json({ ok: true, policyId: ref.id, version: ref.version });
+  } catch (error) {
+    if (error instanceof WarrantyIssuanceError) return routeError(res, error.status, error.code, error.message);
+    throw error;
+  }
 });
 
 warrantyRouter.post("/:warrantyId/invoice-draft", async (req, res) => {
@@ -848,6 +841,36 @@ warrantyRouter.post("/:warrantyId/void", async (req, res) => {
   res.json({ ok: true });
 });
 
+warrantyRouter.post("/:warrantyId/terminate", async (req, res) => {
+  const currentActor = actor(req);
+  if (!canManageWarrantyPolicies(currentActor)) return routeError(res, 403, "ROLE_FORBIDDEN", "Only the Owner can record lifetime termination.");
+  const parsed = z.object({
+    terminatedOn: dateSchema,
+    reason: z.string().trim().min(3).max(2000),
+    evidenceRef: z.string().trim().min(1).max(500),
+  }).safeParse(req.body);
+  if (!parsed.success || !isValidDate(parsed.data.terminatedOn)) return routeError(res, 400, "INVALID_TERMINATION", "Enter a valid date, reason, and evidence reference.");
+  const outcome = await withTransaction(async (client) => {
+    const coverage = await client.query<{ coverage_kind: string; start_date: string; terminated_on: string | null; status: string }>(
+      "SELECT coverage_kind, start_date::text, terminated_on::text, status FROM warranties WHERE id = $1 FOR UPDATE", [req.params.warrantyId],
+    );
+    if (!coverage.rowCount) return "missing" as const;
+    const row = coverage.rows[0];
+    if (row.coverage_kind !== "lifetime" || row.terminated_on || row.status !== "active") return "invalid-state" as const;
+    if (parsed.data.terminatedOn < row.start_date) return "invalid-date" as const;
+    await client.query(
+      `INSERT INTO warranty_termination_events (id, warranty_id, terminated_on, actor_user_id, reason, evidence_ref)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [makeId("warranty-termination"), req.params.warrantyId, parsed.data.terminatedOn, currentActor.userId, parsed.data.reason, parsed.data.evidenceRef],
+    );
+    await addAuditEvent(client, { warrantyId: req.params.warrantyId, action: "lifetime-terminated", details: parsed.data.reason, actorUserId: currentActor.userId });
+    return "ok" as const;
+  });
+  if (outcome === "missing") return routeError(res, 404, "WARRANTY_NOT_FOUND", "Warranty record not found.");
+  if (outcome !== "ok") return routeError(res, 409, "TERMINATION_NOT_ALLOWED", "This coverage cannot be terminated on the chosen date.");
+  res.json({ ok: true });
+});
+
 warrantyRouter.post("/:warrantyId/claims", async (req, res) => {
   const currentActor = actor(req);
   const parsed = z.object({
@@ -860,10 +883,13 @@ warrantyRouter.post("/:warrantyId/claims", async (req, res) => {
     const warranty = await client.query<{
       branch_id: string;
       status: string;
-      expires_on: string;
+      expires_on: string | null;
+      coverage_kind: "fixed" | "lifetime";
+      terminated_on: string | null;
       cairo_today: string;
     }>(
-      `SELECT branch_id, status, to_char(expires_on, 'YYYY-MM-DD') AS expires_on,
+      `SELECT branch_id, status, coverage_kind, terminated_on::text,
+              to_char(expires_on, 'YYYY-MM-DD') AS expires_on,
               to_char((now() AT TIME ZONE 'Africa/Cairo')::date, 'YYYY-MM-DD') AS cairo_today
        FROM warranties WHERE id = $1 FOR SHARE`,
       [req.params.warrantyId],
@@ -872,7 +898,8 @@ warrantyRouter.post("/:warrantyId/claims", async (req, res) => {
     const record = warranty.rows[0];
     if (!canOpenWarrantyClaim(currentActor, record.branch_id)) return { error: "ROLE_FORBIDDEN" as const };
     if (record.status === "void") return { error: "WARRANTY_VOID" as const };
-    if (isWarrantyExpired(record.expires_on, record.cairo_today)) return { error: "WARRANTY_EXPIRED" as const };
+    if (record.coverage_kind === "lifetime" && record.terminated_on && record.terminated_on <= record.cairo_today) return { error: "WARRANTY_TERMINATED" as const };
+    if (record.coverage_kind === "fixed" && record.expires_on && isWarrantyExpired(record.expires_on, record.cairo_today)) return { error: "WARRANTY_EXPIRED" as const };
 
     const claimId = makeId("warranty-claim");
     await client.query(
@@ -892,6 +919,7 @@ warrantyRouter.post("/:warrantyId/claims", async (req, res) => {
     if (result.error === "WARRANTY_NOT_FOUND") return routeError(res, 404, result.error, "Warranty record not found.");
     if (result.error === "ROLE_FORBIDDEN") return routeError(res, 403, result.error, "This warranty is outside your branch access.");
     if (result.error === "WARRANTY_EXPIRED") return routeError(res, 409, result.error, "A claim cannot be opened after warranty coverage has expired.");
+    if (result.error === "WARRANTY_TERMINATED") return routeError(res, 409, result.error, "Coverage was terminated; contact a reviewer about any disputed claim.");
     return routeError(res, 409, "WARRANTY_VOID", "A claim cannot be opened for a void warranty.");
   }
   res.status(201).json({ ok: true, claimId: result.claimId });

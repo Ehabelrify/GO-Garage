@@ -1,11 +1,11 @@
 # Garage OS — Phase 1 Issues Tracker
 
-**Created / last updated:** 15 November 2026 / 16 November 2026
+**Created / last updated:** 15 November 2026 / 17 November 2026
 **Purpose:** Single working tracker for Phase 1 defects, investigation, implementation handoff, and retesting.  
 **Initial intake:** 25 entries: 7 code-review findings, 15 UI-test findings, and 3 engineering follow-ups.  
 **Current intake:** 44 entries: the original 25, 6 user-feedback/discovery follow-ups, 6 cross-industry research improvements, and 7 approved business/product additions recorded on 16 November 2026.
 **Next available ID:** `P1-045`
-**Current ownership:** All 44 entries are unassigned and Open. The user approved all researched recommendations/additions and the operational-product direction. This update records requirements and the next-session full-plan handover; no implementation or new runtime retests were performed.
+**Current ownership:** 2 entries remain Open/Unassigned and 42 entries are Ready for retest after implementation. Ready entries are P1-001–P1-029 and P1-032–P1-044. No runtime retests were performed.
 
 ## Sources and application context
 
@@ -42,50 +42,50 @@ Garage OS uses React/Vite, Express, PostgreSQL, Clerk, and `@garage/domain`. It 
 
 | ID | Source | Issue | Severity | Priority | Status | Evidence |
 |---|---|---|---|---|---|---|
-| [P1-001](#p1-001) | CR-01 | Booking date mapping breaks capacity and confirmation | High | P1 | Open | Reproduced |
-| [P1-002](#p1-002) | CR-02 | Date-only values shift on Cairo-time hosts | Medium | P1 | Open | Reproduced |
-| [P1-003](#p1-003) | CR-03 | Printing reveals multiple expanded invoices | Medium | P2 | Open | Source |
-| [P1-004](#p1-004) | CR-04 | Refresh failure misreports a successful save | Medium | P2 | Open | Source |
-| [P1-005](#p1-005) | CR-05 | Mobile workspace lacks sign-out control | Medium | P2 | Open | Source |
-| [P1-006](#p1-006) | CR-06 | Receptionist sees seeded service durations | Medium | P2 | Open | Source |
-| [P1-007](#p1-007) | CR-07 | Simulator state follows conversation selection | Medium | P2 | Open | Source |
-| [P1-008](#p1-008) | GO-01 | Receptionist demo session fails | High | P1 | Open | Reported |
-| [P1-009](#p1-009) | GO-02 | Technician demo session fails | High | P1 | Open | Reported |
-| [P1-010](#p1-010) | GO-03 | Published-policy option appears to be a draft | High | P1 | Open | Reported |
-| [P1-011](#p1-011) | GO-04 | Account-access page language differs from Arabic journey | Medium | P2 | Open | Reported |
-| [P1-012](#p1-012) | GO-05 | Received/delivered Arabic labels are ambiguous | Medium | P2 | Open | Reported |
-| [P1-013](#p1-013) | GO-06 | Disabled technician assignment has no clear reason | Medium | P2 | Open | Reported |
-| [P1-014](#p1-014) | GO-07 | Vehicle dropdown overlaps/clips labels | Medium | P2 | Open | Reported |
-| [P1-015](#p1-015) | GO-08 | Landing header brand alignment | Low | P3 | Open | Reported |
-| [P1-016](#p1-016) | GO-09 | Access-model card appears skewed | Low | P3 | Open | Source + Reported |
-| [P1-017](#p1-017) | GO-10 | Scrollbar appearance conflicts with theme | Low | P3 | Open | Reported |
-| [P1-018](#p1-018) | GO-11 | Booking date/time digits and alignment differ | Low | P3 | Open | Source + Reported |
-| [P1-019](#p1-019) | GO-12 | Required marker placement in Arabic booking form | Low | P3 | Open | Reported |
-| [P1-020](#p1-020) | GO-13 | Native time field shows English AM text | Low | P3 | Open | Source + Reported |
-| [P1-021](#p1-021) | GO-14 | Warranty tabs show stray scroll arrows | Low | P3 | Open | Reported |
-| [P1-022](#p1-022) | GO-15 | Disabled warranty issuance lacks prerequisite guidance | Low | P2 | Open | Reported |
-| [P1-023](#p1-023) | Review workflow concern 1 | Post-merge migrations precede build validation | Medium | P1 | Open | Risk |
-| [P1-024](#p1-024) | Review workflow concern 2 | Build omits server type checking | Medium | P1 | Open | Source |
-| [P1-025](#p1-025) | Review workflow concern 3 | Large eagerly loaded JavaScript bundle | Low | P3 | Open | Historical build |
-| [P1-026](#p1-026) | User feedback / accepted operational scope | Operational WhatsApp journey and auxiliary scenario entry | Medium | P2 | Open | Reported |
-| [P1-027](#p1-027) | User feedback / accepted operational scope | Six-number operational inbox and isolated demonstration layer | Medium | P2 | Open | Reported |
-| [P1-028](#p1-028) | User feedback 2026-11-16 | Warranty workspace is overloaded and needs contextual editing | Medium | P2 | Open | Reported |
-| [P1-029](#p1-029) | User feedback 2026-11-16 | Owner overview needs financial metrics and monthly trends | Medium | P2 | Open | Reported |
+| [P1-001](#p1-001) | CR-01 | Booking date mapping breaks capacity and confirmation | High | P1 | Ready for retest | Reproduced |
+| [P1-002](#p1-002) | CR-02 | Date-only values shift on Cairo-time hosts | Medium | P1 | Ready for retest | Reproduced |
+| [P1-003](#p1-003) | CR-03 | Printing reveals multiple expanded invoices | Medium | P2 | Ready for retest | Source |
+| [P1-004](#p1-004) | CR-04 | Refresh failure misreports a successful save | Medium | P2 | Ready for retest | Source |
+| [P1-005](#p1-005) | CR-05 | Mobile workspace lacks sign-out control | Medium | P2 | Ready for retest | Source |
+| [P1-006](#p1-006) | CR-06 | Receptionist sees seeded service durations | Medium | P2 | Ready for retest | Source |
+| [P1-007](#p1-007) | CR-07 | Simulator state follows conversation selection | Medium | P2 | Ready for retest | Source |
+| [P1-008](#p1-008) | GO-01 | Receptionist demo session fails | High | P1 | Ready for retest | Reported |
+| [P1-009](#p1-009) | GO-02 | Technician demo session fails | High | P1 | Ready for retest | Reported |
+| [P1-010](#p1-010) | GO-03 | Published-policy option appears to be a draft | High | P1 | Ready for retest | Reported |
+| [P1-011](#p1-011) | GO-04 | Account-access page language differs from Arabic journey | Medium | P2 | Ready for retest | Reported |
+| [P1-012](#p1-012) | GO-05 | Received/delivered Arabic labels are ambiguous | Medium | P2 | Ready for retest | Reported |
+| [P1-013](#p1-013) | GO-06 | Disabled technician assignment has no clear reason | Medium | P2 | Ready for retest | Reported |
+| [P1-014](#p1-014) | GO-07 | Vehicle dropdown overlaps/clips labels | Medium | P2 | Ready for retest | Reported |
+| [P1-015](#p1-015) | GO-08 | Landing header brand alignment | Low | P3 | Ready for retest | Reported |
+| [P1-016](#p1-016) | GO-09 | Access-model card appears skewed | Low | P3 | Ready for retest | Source + Reported |
+| [P1-017](#p1-017) | GO-10 | Scrollbar appearance conflicts with theme | Low | P3 | Ready for retest | Reported |
+| [P1-018](#p1-018) | GO-11 | Booking date/time digits and alignment differ | Low | P3 | Ready for retest | Source + Reported |
+| [P1-019](#p1-019) | GO-12 | Required marker placement in Arabic booking form | Low | P3 | Ready for retest | Reported |
+| [P1-020](#p1-020) | GO-13 | Native time field shows English AM text | Low | P3 | Ready for retest | Source + Reported |
+| [P1-021](#p1-021) | GO-14 | Warranty tabs show stray scroll arrows | Low | P3 | Ready for retest | Reported |
+| [P1-022](#p1-022) | GO-15 | Disabled warranty issuance lacks prerequisite guidance | Low | P2 | Ready for retest | Reported |
+| [P1-023](#p1-023) | Review workflow concern 1 | Post-merge migrations precede build validation | Medium | P1 | Ready for retest | Risk |
+| [P1-024](#p1-024) | Review workflow concern 2 | Build omits server type checking | Medium | P1 | Ready for retest | Source |
+| [P1-025](#p1-025) | Review workflow concern 3 | Large eagerly loaded JavaScript bundle | Low | P3 | Ready for retest | Historical build |
+| [P1-026](#p1-026) | User feedback / accepted operational scope | Operational WhatsApp journey and auxiliary scenario entry | Medium | P2 | Ready for retest | Reported |
+| [P1-027](#p1-027) | User feedback / accepted operational scope | Six-number operational inbox and isolated demonstration layer | Medium | P2 | Ready for retest | Reported |
+| [P1-028](#p1-028) | User feedback 2026-11-16 | Warranty workspace is overloaded and needs contextual editing | Medium | P2 | Ready for retest | Reported |
+| [P1-029](#p1-029) | User feedback 2026-11-16 | Owner overview needs financial metrics and monthly trends | Medium | P2 | Ready for retest | Reported |
 | [P1-030](#p1-030) | User feedback 2026-11-16 | Cross-industry UI/UX and workflow improvement discovery | Low | P2 | Open | Reported |
 | [P1-031](#p1-031) | User follow-up 2026-11-16 | Owner and business discovery after product discussion | Low | P2 | Open | Reported |
-| [P1-032](#p1-032) | Front research / user intake | Central inbox ownership, handoff, and unanswered-work visibility | Medium | P2 | Open | Reported |
-| [P1-033](#p1-033) | Housecall Pro research / user intake | Owner report filters, trend views, and drill-down | Low | P2 | Open | Reported |
-| [P1-034](#p1-034) | Jobber research / user intake | Separate quotes, collections, balances, costs, and profit | Medium | P2 | Open | Reported |
-| [P1-035](#p1-035) | Fresha research / user intake | Contextual warranty forms and safe template lifecycle | Low | P2 | Open | Reported |
-| [P1-036](#p1-036) | RepairDesk research / user intake | Stage-based action queues and optional operational columns | Low | P2 | Open | Reported |
-| [P1-037](#p1-037) | Process Street research / user intake | Sequential forms with conditional steps and retained input | Low | P2 | Open | Reported |
-| [P1-038](#p1-038) | User approval / product direction | Operational product, isolated demonstration layer and phased delivery | High | P1 | Open | Reported |
-| [P1-039](#p1-039) | Approved Go Stores research additions | Structured catalogue, packages and accepted quotation versions | Medium | P2 | Open | Source + Reported |
-| [P1-040](#p1-040) | Approved Go Stores research additions | Deferred promotion reservations and later installation | Medium | P2 | Open | Reported |
-| [P1-041](#p1-041) | Approved Go Stores research additions | Fixed-term and lifetime warranty coverage semantics | High | P1 | Open | Source + Reported |
-| [P1-042](#p1-042) | Approved Go Stores research additions | Included benefits and aftercare entitlement redemption | Medium | P2 | Open | Reported |
-| [P1-043](#p1-043) | Approved Go Stores research additions | Vehicle transport and VIP service coordination | Medium | P2 | Open | Reported |
-| [P1-044](#p1-044) | Approved Go Stores research additions | Promotion qualification, referral and multi-car redemption | Medium | P2 | Open | Reported |
+| [P1-032](#p1-032) | Front research / user intake | Central inbox ownership, handoff, and unanswered-work visibility | Medium | P2 | Ready for retest | Reported |
+| [P1-033](#p1-033) | Housecall Pro research / user intake | Owner report filters, trend views, and drill-down | Low | P2 | Ready for retest | Reported |
+| [P1-034](#p1-034) | Jobber research / user intake | Separate quotes, collections, balances, costs, and profit | Medium | P2 | Ready for retest | Reported |
+| [P1-035](#p1-035) | Fresha research / user intake | Contextual warranty forms and safe template lifecycle | Low | P2 | Ready for retest | Reported |
+| [P1-036](#p1-036) | RepairDesk research / user intake | Stage-based action queues and optional operational columns | Low | P2 | Ready for retest | Reported |
+| [P1-037](#p1-037) | Process Street research / user intake | Sequential forms with conditional steps and retained input | Low | P2 | Ready for retest | Reported |
+| [P1-038](#p1-038) | User approval / product direction | Operational product, isolated demonstration layer and phased delivery | High | P1 | Ready for retest | Reported |
+| [P1-039](#p1-039) | Approved Go Stores research additions | Structured catalogue, packages and accepted quotation versions | Medium | P2 | Ready for retest | Source + Reported |
+| [P1-040](#p1-040) | Approved Go Stores research additions | Deferred promotion reservations and later installation | Medium | P2 | Ready for retest | Reported |
+| [P1-041](#p1-041) | Approved Go Stores research additions | Fixed-term and lifetime warranty coverage semantics | High | P1 | Ready for retest | Source + Reported |
+| [P1-042](#p1-042) | Approved Go Stores research additions | Included benefits and aftercare entitlement redemption | Medium | P2 | Ready for retest | Reported |
+| [P1-043](#p1-043) | Approved Go Stores research additions | Vehicle transport and VIP service coordination | Medium | P2 | Ready for retest | Reported |
+| [P1-044](#p1-044) | Approved Go Stores research additions | Promotion qualification, referral and multi-car redemption | Medium | P2 | Ready for retest | Reported |
 
 ## Technical issue details
 
@@ -94,6 +94,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 <a id="p1-001"></a>
 
 ### P1-001 — Booking date mapping breaks capacity and confirmation
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Added a validated SQL DATE text boundary, canonical branch/date locks, a shared transaction-owned confirmed-booking service, durable idempotency migration `0010_booking_idempotency.sql`, and shared confirmed-write routing for operations and the guarded WhatsApp simulator. Capacity-setting writes now serialize with confirmed reservations. Migration not applied.
+
+**Retest:** Not performed by explicit user direction. No test, typecheck, build, migration, seed, or runtime command was run; acceptance remains unverified.
 
 **Source:** CR-01; [operations API](../../apps/server/features/operations/api.ts), `capacityIssue` and pending-booking confirmation; [domain rule](../../packages/domain/src/rules.ts), `checkBookingCapacity`.
 
@@ -109,6 +115,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 
 ### P1-002 — Date-only values shift on Cairo-time hosts
 
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Booking/bootstrap/simulator DATE reads owned by O01 now project canonical date-only text and validate it without constructing JavaScript `Date` values. Lock inputs use the same canonical value; existing persisted dates were not rewritten.
+
+**Retest:** Not performed by explicit user direction. UTC/Cairo, leap-day, year-boundary, warranty, and database round trips remain unverified.
+
 **Source:** CR-02; [bootstrap](../../apps/server/features/operations/bootstrap.ts), `dateValue`; [simulator date helpers](../../apps/server/features/whatsapp/whatsapp.ts); audit warranty date mappings as well.
 
 **Observed / technical basis:** A SQL calendar date parsed at local midnight becomes the preceding UTC date when sliced through `toISOString()`. The historical `Africa/Cairo` reproduction changed `2026-11-15` into `2026-11-14`. UTC servers can mask the defect.
@@ -120,6 +132,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 <a id="p1-003"></a>
 
 ### P1-003 — Printing reveals multiple expanded invoices
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Invoice print state now marks and reveals only the selected existing invoice target. A shared print session keeps invoice/QR modes mutually exclusive and clears classes, markers, and listeners after print, focus return, timeout, subsequent print, and unmount. Print styles retain direction and multi-page break handling.
+
+**Retest:** Not performed by explicit user direction. Multi-invoice preview/PDF, Arabic/English, cancellation, subsequent print, QR interaction, page breaks, margins, selectable text, and browser/physical behavior remain unverified.
 
 **Source:** CR-03; [invoice panel](../../apps/web/src/features/warranty/WarrantyInvoicePanel.tsx), `startBrowserPrint`; [print styles](../../apps/web/src/features/warranty/WarrantiesPage.css), `.w-invoice-print-area`.
 
@@ -133,6 +151,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 
 ### P1-004 — Refresh failure misreports a successful save
 
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Store mutations now distinguish acknowledged writes plus fresh/failed refresh from definite write failures and unknown transport outcomes. Recoverable refresh failures retain the last authorized workspace with bilingual stale-data guidance and a GET-only retry; 401/403 clears protected state. Unknown write outcomes preserve input and direct the user to refresh/check state before trying again rather than replaying automatically.
+
+**Retest:** Not performed by explicit user direction. Browser behavior, request counts, revocation handling, localization, typecheck, and runtime acceptance remain unverified.
+
 **Source:** CR-04; [store](../../apps/web/src/shared/store.tsx), `refresh` and mutation helpers; [app shell](../../apps/web/src/app/App.tsx), `WorkspaceError`.
 
 **Observed / technical basis:** A mutation can commit before the subsequent bootstrap GET fails. `refresh` swallows its failure, sets global error status, and unmounts the workspace. The helper returns success while the error screen says nothing was saved.
@@ -144,6 +168,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 <a id="p1-005"></a>
 
 ### P1-005 — Mobile workspace lacks sign-out control
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Added a visible keyboard-operable mobile-header sign-out while retaining desktop sign-out. Demo sign-out waits for a successful server DELETE before leaving; Clerk retains its sign-out flow. A copied stateless demo token remains valid until its existing expiry.
+
+**Retest:** Not performed by explicit user direction; mobile/desktop layout, keyboard access, cookie clearing, and protected-request behavior remain unverified.
 
 **Source:** CR-05; [app shell](../../apps/web/src/app/App.tsx), sidebar sign-out and mobile navigation; [responsive CSS](../../apps/web/src/shared/styles.css).
 
@@ -157,6 +187,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 
 ### P1-006 — Receptionist sees seeded service durations
 
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Authorized bootstrap data now projects effective tint/ceramic hours by branch using the same configured-duration helper as capacity, while non-Owners do not receive raw Owner decision records. The booking form shows the projected effective hours. Owner-only settings writes remain unchanged.
+
+**Retest:** Not performed by explicit user direction. Owner update/Receptionist refresh, branch isolation, capacity consistency, UI localization, and typecheck remain unverified. Provisional defaults remain pending Owner approval.
+
 **Source:** CR-06; [bootstrap](../../apps/server/features/operations/bootstrap.ts), operating-settings query; [booking page](../../apps/web/src/features/bookings/BookingsPage.tsx), service selector; shared `configuredServiceHours`.
 
 **Observed / technical basis:** Live setting rows are read only for owners/managers. Receptionists receive seed definitions marked active, although server capacity and pickup calculations use saved operating values. The current booking page does not perform client-side capacity rejection.
@@ -169,6 +205,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 
 ### P1-007 — Simulator state follows conversation selection
 
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Simulator draft, request, error, result, guided-journey, and delayed-response state is now keyed by branch/conversation. Async completions are guarded so a late response cannot overwrite another visible conversation. Existing server conversation/draft authorization predicates were retained after source review.
+
+**Retest:** Not performed by explicit user direction. Conversation switching, delayed responses, branch/session reset, draft restoration, server rejection, TypeScript, and browser behavior remain unverified.
+
 **Source:** CR-07; [WhatsApp simulation page](../../apps/web/src/features/whatsapp/WhatsAppSimulationPage.tsx), selection effect, booking drafts, status results, and composer.
 
 **Observed / technical basis:** Draft/result/composer state is independent of selected conversation. Switching A→B can display A's state under B. Server draft ownership checks reject mismatched confirmation; no authorization bypass was established.
@@ -180,6 +222,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 <a id="p1-008"></a>
 
 ### P1-008 — Receptionist demo session fails
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Demo provisioning/session lookup now rejects duplicate email identities and invalid branchless non-owner memberships while retaining production-disable, role, branch, and server authorization gates. Receptionist permissions were not widened.
+
+**Retest:** Not performed by explicit user direction; POST, cookie, bootstrap, permitted actions, and denied Owner/other-branch actions remain unverified.
 
 **Source:** GO-01; [screenshot 8](assets/garage-os-ui-test-report/screenshot-08.png); [demo UI](../../apps/web/src/features/demo-auth/DemoAccountPanel.tsx), `startSession`; [session endpoint](../../apps/server/features/operations/api.ts), `POST /demo/session`; [demo provisioning](../../apps/server/features/auth/demo-auth.ts), `provisionDemoActor`.
 
@@ -195,6 +243,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 
 ### P1-009 — Technician demo session fails
 
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Applied the same explicit identity/membership validation while preserving technician assignment scoping. An empty assigned-job set remains a successful empty workspace; no fictional or real assignments were added.
+
+**Retest:** Not performed by explicit user direction; empty/assigned workspaces and unassigned-job/customer-phone denial remain unverified.
+
 **Source:** GO-02; [screenshot 9](assets/garage-os-ui-test-report/screenshot-09.png); same demo flow as P1-008 plus [membership authorization](../../apps/server/features/auth/auth.ts) and technician bootstrap queries.
 
 **Observed:** The original Demo Technician attempt displayed the same generic session error. Further technician testing was blocked.
@@ -206,6 +260,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 <a id="p1-010"></a>
 
 ### P1-010 — Published-policy option appears to be a draft
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Issuance eligibility now derives from explicit complete published lifecycle state and service eligibility, not words in policy names. Published options show explicit Published/version context while preserving historical names. Server issuance retains publication, branch, duplicate, and immutability guards.
+
+**Retest:** Not performed by explicit user direction. Draft/retired/incomplete/direct API paths and published policies containing lifecycle words remain unverified.
 
 **Source:** GO-03; [screenshot 7](assets/garage-os-ui-test-report/screenshot-07.png); [warranty UI](../../apps/web/src/features/warranty/WarrantiesPage.tsx), `publishedPolicies` and `issue-policy`; [warranty routes](../../apps/server/features/warranty/warranties.ts); [development seed](../../apps/server/features/seed/seed-dev.ts).
 
@@ -221,6 +281,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 
 ### P1-011 — Account-access page language differs from Arabic journey
 
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Added a shared saved-locale hook for document direction/language and auth/workspace landing, loading, pending, error, and sign-out states. Clerk localization now follows the saved app locale: Arabic localization for Arabic and default English for English.
+
+**Retest:** Not performed by explicit user direction; clean/saved locale, RTL/LTR, Clerk widget, refresh, and access-state behavior remain unverified.
+
 **Source:** GO-04; [screenshot 2](assets/garage-os-ui-test-report/screenshot-02.png); [app shell](../../apps/web/src/app/App.tsx), `AccessPending`; [auth shell](../../apps/web/src/app/AuthApp.tsx); [locale state](../../apps/web/src/shared/store.tsx).
 
 **Observed:** The original account-not-assigned page was English-only in an Arabic journey, with only Sign out and no route back to demo selection.
@@ -235,6 +301,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 
 ### P1-012 — Received/delivered Arabic labels are ambiguous
 
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Shared stage presentation now uses distinct Arabic phrases for branch receipt and customer delivery while retaining unchanged stored keys and filtering.
+
+**Retest:** Not performed by explicit user direction; bilingual labels and stored-key filters remain unverified.
+
 **Source:** GO-05; [screenshot 3](assets/garage-os-ui-test-report/screenshot-03.png); [shared UI](../../apps/web/src/shared/ui.tsx), stage labels; [workshop page](../../apps/web/src/features/workshop/WorkshopPage.tsx).
 
 **Technical basis:** Received and delivered are rendered as `اتسلمت` and `اتسلّمت`, distinguished by a shadda. Native select highlighting is also noted in the original observation, but it is separate from business-stage ambiguity.
@@ -246,6 +318,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 <a id="p1-013"></a>
 
 ### P1-013 — Disabled technician assignment has no clear reason
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Assignment controls now derive localized accessible reasons for no selection, no eligible staff, unchanged selection, and saving; a valid changed eligible choice enables the action.
+
+**Retest:** Not performed by explicit user direction; all disabled/enabled states and accessibility association remain unverified.
 
 **Source:** GO-06; [screenshot 4](assets/garage-os-ui-test-report/screenshot-04.png); [workshop assignment controls](../../apps/web/src/features/workshop/WorkshopPage.tsx); shared button styles.
 
@@ -259,6 +337,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 
 ### P1-014 — Vehicle dropdown overlaps/clips labels
 
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Native vehicle selector styling now preserves long label readability without speculative native-popup z-index behavior.
+
+**Retest:** Not performed by explicit user direction; open/closed controls, keyboard/mobile behavior, RTL/LTR, zoom, and target viewports remain unverified.
+
 **Source:** GO-07; [screenshot 6](assets/garage-os-ui-test-report/screenshot-06.png); [booking form](../../apps/web/src/features/bookings/BookingsPage.tsx), native vehicle select; [form styles](../../apps/web/src/shared/styles.css).
 
 **Observed / technical investigation:** An open vehicle list obscures labels and appears to show underlying text. Native dropdown popups can cover content by design and are browser/OS-rendered. Capture browser, OS, zoom, native popup behavior, computed heights/line-height, and clipping/overflow before attributing the screenshot to a z-index defect.
@@ -270,6 +354,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 <a id="p1-015"></a>
 
 ### P1-015 — Landing header brand alignment
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Landing brand, divider, and primary action layout styles were adjusted for responsive RTL/LTR alignment and overflow containment.
+
+**Retest:** Not performed by explicit user direction; 375/768/1024/1440px, 200% zoom, RTL/LTR, clipping, and horizontal overflow remain unverified.
 
 **Source:** GO-08; [screenshot 1](assets/garage-os-ui-test-report/screenshot-01.png); [landing markup](../../apps/web/src/app/AuthApp.tsx); shared `.landing-header` and `.brand` styles.
 
@@ -283,6 +373,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 
 ### P1-016 — Access-model card appears skewed
 
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Removed the desktop access-model card rotation while preserving its informational content and responsive structure.
+
+**Retest:** Not performed by explicit user direction; visual layout and responsive behavior remain unverified.
+
 **Source:** GO-09; [screenshot 1](assets/garage-os-ui-test-report/screenshot-01.png); shared `.landing-preview` styles.
 
 **Technical basis:** The current stylesheet deliberately applies `transform: rotate(-1.3deg)` on larger layouts and removes it at a mobile breakpoint. The tester perceived that design choice as a rendering bug.
@@ -294,6 +390,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 <a id="p1-017"></a>
 
 ### P1-017 — Scrollbar appearance conflicts with theme
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Added theme-aware supported-browser scrollbar styling with native/forced-color fallback and retained scrolling/focus behavior.
+
+**Retest:** Not performed by explicit user direction; light/dark, forced colors, keyboard/touch/mouse scrolling, OS/browser rendering, and screenshots remain unverified.
 
 **Source:** GO-10; [screenshot 1](assets/garage-os-ui-test-report/screenshot-01.png); global page and scroll-container CSS in [shared styles](../../apps/web/src/shared/styles.css).
 
@@ -307,6 +409,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 
 ### P1-018 — Booking date/time digits and alignment differ
 
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Shared date/time presentation centralizes locale numbering and bidi isolation while leaving canonical stored `YYYY-MM-DD` and `HH:mm` unchanged.
+
+**Retest:** Not performed by explicit user direction; bilingual formatting, alignment, narrow tables, and stored-value preservation remain unverified.
+
 **Source:** GO-11; [screenshot 5](assets/garage-os-ui-test-report/screenshot-05.png); [booking table](../../apps/web/src/features/bookings/BookingsPage.tsx), `dateLabel` output beside raw `booking.dropoffTime`; shared numeric and secondary-cell CSS.
 
 **Technical basis:** Dates are localized, but times are rendered as raw `HH:mm` strings. Bidirectional text and differing cell styles can make time alignment inconsistent.
@@ -318,6 +426,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 <a id="p1-019"></a>
 
 ### P1-019 — Required marker placement in Arabic booking form
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Required markers now wrap with associated labels while preserving native required semantics.
+
+**Retest:** Not performed by explicit user direction; Arabic wrapping, screen-reader association, zoom, and validation remain unverified.
 
 **Source:** GO-12; [screenshot 6](assets/garage-os-ui-test-report/screenshot-06.png); booking form labels and shared form CSS.
 
@@ -331,6 +445,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 
 ### P1-020 — Native time field shows English AM text
 
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** The native time input remains canonical and now carries a 24-hour locale hint plus bilingual explanation, preserving validated `HH:mm` submission.
+
+**Retest:** Not performed by explicit user direction; browser/OS picker language, midnight/noon, leading zeros, invalid input, keyboard, and mobile behavior remain unverified.
+
 **Source:** GO-13; [screenshot 6](assets/garage-os-ui-test-report/screenshot-06.png); `booking-time` input in the booking page.
 
 **Technical basis:** The field uses native `input type="time"` with a canonical `HH:mm` value. Its visible picker and AM/PM labels can depend on browser/OS locale and hour-cycle settings; document language alone may not control them.
@@ -342,6 +462,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 <a id="p1-021"></a>
 
 ### P1-021 — Warranty tabs show stray scroll arrows
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Warranty tab overflow/focus styling was adjusted to keep horizontal reachability and visible focus without stray controls or clipped tabs.
+
+**Retest:** Not performed by explicit user direction. RTL/LTR, narrow viewports, zoom, keyboard focus, and browser-specific scrollbar behavior remain unverified.
 
 **Source:** GO-14; [screenshot 7](assets/garage-os-ui-test-report/screenshot-07.png); [warranty tabs](../../apps/web/src/features/warranty/WarrantiesPage.tsx), `.w-tabs`; [warranty styles](../../apps/web/src/features/warranty/WarrantiesPage.css).
 
@@ -355,6 +481,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 
 ### P1-022 — Disabled warranty issuance lacks prerequisite guidance
 
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** The issuance action now exposes localized, accessible reasons for missing published policy, eligible delivered job, selections/data, conditional start date, duplicates, pending state, and insufficient role/branch. Guidance is associated through `aria-describedby`; server guards remain authoritative.
+
+**Retest:** Not performed by explicit user direction. Each disabled reason, valid single issuance, duplicate, other-branch, and accessibility behavior remain unverified.
+
 **Source:** GO-15; [screenshot 7](assets/garage-os-ui-test-report/screenshot-07.png); warranty `currentIssuePolicy`, `eligibleIssueJobs`, issuance guards, and submit button.
 
 **Technical basis:** The current button checks pending issuance, available delivered jobs, selected policy, and selected job. The page already explains absence of published policies/eligible work in some states, but missing selections may still leave the action disabled without an adjacent reason. The original screenshot is not a fresh reproduction.
@@ -366,6 +498,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 <a id="p1-023"></a>
 
 ### P1-023 — Post-merge migrations precede build validation
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** `scripts/post-merge.sh` now stops on install, typecheck, test, or build failure before migration. Migration additionally requires an explicit disposable-target opt-in and exact credential-free host/port/database identity match; the guard does not print `DATABASE_URL`.
+
+**Retest:** Not performed by explicit user direction. Stub-command ordering, mismatched/approved targets, migration behavior, and recovery rehearsal remain unverified.
 
 **Source:** Repository review workflow concern 1; [post-merge script](../../scripts/post-merge.sh); [Replit hook](../../.replit); [migration runner](../../apps/server/infrastructure/database/migrate.ts).
 
@@ -379,6 +517,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 
 ### P1-024 — Build omits server type checking
 
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** The root build command now runs the existing client/server `typecheck` script before Vite, and the post-merge gate invokes typecheck explicitly before tests/build.
+
+**Retest:** Not performed by explicit user direction. No typecheck or build command was run.
+
 **Source:** Repository review workflow concern 2; [npm scripts](../../package.json), [root references](../../tsconfig.json), and [server TypeScript config](../../tsconfig.server.json).
 
 **Technical basis:** `build` runs `tsc -b` using app/node references; the server config is checked separately by `typecheck`. Build-only validation can therefore miss backend TypeScript failures, even though the historical standalone typecheck passed.
@@ -390,6 +534,12 @@ Unless overridden in a dated update, every entry below inherits **Status: Open; 
 <a id="p1-025"></a>
 
 ### P1-025 — Large eagerly loaded JavaScript bundle
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** Large workspace feature pages and public warranty verification now load through route-level React lazy/Suspense boundaries with localized loading and truthful chunk-failure reload UI. Current URL and persisted auth/locale survive reload; unsaved in-memory edits may be lost and the UI says so.
+
+**Retest:** Not performed by explicit user direction. Bundle size, transfer/parse, direct routes, auth, warranty/QR/print, browser recovery, and performance impact remain unmeasured and unverified.
 
 **Source:** Repository review workflow concern 3; historical 654.68 kB minified bundle; [app imports](../../apps/web/src/app/App.tsx) and [Vite config](../../vite.config.ts).
 
@@ -496,6 +646,12 @@ These are product-change requests and discovery tasks, not newly reproduced defe
 
 ### P1-026 — Operational WhatsApp journey and auxiliary scenario entry
 
+**Status / owner:** Ready for retest / Engineering (inline implementation).
+
+**Implementation — 2026-11-17:** Added deterministic bilingual journey state, configured availability consumption, verified customer-confirmation routing through the shared atomic booking service, retained status/change paths, explicit handoff, conversation-keyed UI state and an isolated scenario transport. Customer confirmation creates one persisted booking/job or returns a truthful conflict; no routine staff approval claim is made.
+
+**Retest:** Not performed by explicit user direction. No test, build, typecheck, migration, seed, scenario deployment or browser command was run.
+
 **Title updated — 2026-11-16:** Formerly WhatsApp simulator experience and direct demo entry. Historical intake below is preserved; the accepted operational-scope update supersedes its demo-first framing.
 
 **Area:** WhatsApp simulation / external demo-user selection.
@@ -531,6 +687,12 @@ These are product-change requests and discovery tasks, not newly reproduced defe
 <a id="p1-027"></a>
 
 ### P1-027 — Six-number operational inbox and isolated demonstration layer
+
+**Status / owner:** Ready for retest / Engineering (inline implementation).
+
+**Implementation — 2026-11-17:** Added non-secret channel records, explicit central memberships with audit/revocation, server-side cross-branch inbox scope, operational inbound signature/deduplication and protected contact mapping, disconnected provider adapter, delivery-state event storage, dataset marker enforcement, scenario provider-secret rejection and messaging-scoped branch discovery. No business asset, number, credential or provider was configured.
+
+**Retest:** Not performed by explicit user direction. Six-channel sandbox evidence, separate deployment/database proof, provider ownership and live readiness remain outstanding gates.
 
 **Title updated — 2026-11-16:** Formerly shared WhatsApp inbox in production and demo views. Historical intake below is preserved; functional operational behavior is primary and scenario controls are auxiliary.
 
@@ -568,6 +730,12 @@ These are product-change requests and discovery tasks, not newly reproduced defe
 
 ### P1-028 — Warranty workspace is overloaded and needs contextual editing
 
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** C08 splits the workspace into compact policy, coverage, and claim summaries/details with one permitted primary action, expandable terms/history/evidence, component-aware issuance, conditional fixed/lifetime editing, explicit discard, and identity/dataset/entity/version-isolated drafts. Existing invoice/QR isolation and evidence restrictions remain intact.
+
+**Retest:** Not performed by explicit user direction. Role journeys, browser layout, keyboard/focus, mobile/zoom, print interactions, recovery, and runtime remain unverified.
+
 **Area:** Warranty policies / coverage / claims / history / verification.
 **Severity / priority:** Medium / P2, proposed; information overload affects workflow usability.
 **Related:** P1-003 (invoice printing), P1-010 (policy naming/status), P1-021 (tabs), P1-022 (issuance guidance).
@@ -589,6 +757,14 @@ These are product-change requests and discovery tasks, not newly reproduced defe
 <a id="p1-029"></a>
 
 ### P1-029 — Owner overview needs financial metrics and monthly trends
+
+**Status / owner:** Ready for retest / Engineering (inline implementation).
+
+**Implementation — 2026-11-17:** The Owner overview now consumes the authorized C12 finance report contract with month, year-to-date and custom filters, branch and grouping controls, explicit available/incomplete/unavailable states, configured currency precision, previous-period comparison, an accessible trend table and source-record drill-down. Current operational queues are labeled separately from financial periods.
+
+**Retest:** Not performed by explicit user direction. No test, typecheck, build, migration, seed or runtime command was run; financial definitions B09 and independent acceptance remain required.
+
+**GPT-6 domain review correction — 2026-11-17:** Corrected finance periods to one approved IANA reporting timezone with half-open local-day bounds, made outstanding balances an as-of-period-end obligation minus all linked collections/refunds through that boundary, rejected mismatched customer/vehicle/sale links, and rejected reports whose active metric definitions disagree on timezone. Review was static; runtime reconciliation remains unverified.
 
 **Area:** Owner dashboard / reporting / financial data.
 **Severity / priority:** Medium / P2, proposed; missing owner decision support.
@@ -629,6 +805,8 @@ These are product-change requests and discovery tasks, not newly reproduced defe
 **Progress:** 2026-11-16 — Initial web research recorded; user discussion and selection pending.
 
 **User intake update — 2026-11-16:** The user requested adding **all six researched patterns**, including suggested Garage OS behavior, to Phase 1. Concrete follow-ups are P1-032–P1-037 below. Inclusion in the tracker is confirmed; detailed interaction choices, financial definitions, and business policies remain proposals where noted. This discovery entry remains Open as an umbrella; future progress should be recorded against the specific follow-up criteria without duplicating their implementation work.
+
+**Commercial implementation progress — 2026-11-17:** C01–C13 now provide the commercial source services, immutable/versioned records, fail-closed policy boundaries, minimal shared action projections, and migration/rollback procedure. This umbrella remains Open because Operations O11–O13, Messaging, consolidated domain review, runtime verification, and business-policy approval are still outstanding.
 
 **History:** 2026-11-16 — Intake recorded; no product redesign or feature implementation authorized by this discovery entry alone.
 
@@ -673,6 +851,12 @@ The user explicitly requested all six findings and their Garage OS adaptations i
 
 ### P1-032 — Central inbox ownership, handoff, and unanswered-work visibility
 
+**Status / owner:** Ready for retest / Engineering (inline implementation).
+
+**Implementation — 2026-11-17:** Added versioned conversation ownership, central and branch-scoped access, row-locked optimistic claims, assignment/handoff audit, bot pause, role-restricted replies and staff-only notes. New inbound reopens work without silently resuming automation. No SLA, escalation or external alert was inferred.
+
+**Retest:** Not performed by explicit user direction; concurrency, revocation, filtering, note privacy and bilingual/mobile acceptance remain unverified.
+
 **Reported / updated:** 2026-11-16; user-requested research intake.
 **Area:** WhatsApp / central-team triage.
 **Severity / priority:** Medium / P2, proposed; handling responsibility can affect customer follow-up.
@@ -688,13 +872,19 @@ The user explicitly requested all six findings and their Garage OS adaptations i
 
 **Acceptance:** Authorized central staff can triage all six channels and find unassigned/human-response-due conversations. Competing claims preserve a single owner; only permitted agents reply. Internal notes never reach the customer side. Handoff carries original enquiry, branch, slot, and booking context; branch changes preserve ownership. Filters do not hide relevant work permanently, automated success is not labeled overdue, and unauthorized users cannot read conversations through UI/API. Cover both languages, keyboard use, and mobile layouts.
 
-**Implementation / retest:** None recorded / Not performed. No new provider integration or alerts enabled.
+**Implementation / retest:** Source implementation recorded above / Not performed. Provider delivery and alerts remain disabled.
 
 **Accepted fact-informed handoff — 2026-11-16:** Carry model/category, service intent, chosen grade/package, coverage/roof/add-ons, relevant promotion reservation and prior quote reference into the central queue. Support enquiries outside fixed packages (standalone insulation, modifications, transport/aftercare) without inventing prices or eligibility. Preserve source-channel and selected-branch context; agents see only authorized data. P1-039 owns structured quote data and P1-040 offer reservation, so this issue consumes those interfaces rather than building separate copies.
 
 <a id="p1-033"></a>
 
 ### P1-033 — Owner report filters, trend views, and drill-down
+
+**Status / owner:** Ready for retest / Engineering (inline implementation).
+
+**Implementation — 2026-11-17:** Added the shared report filter presentation, accessible metric/trend tables, zero-base comparison wording, incomplete/unavailable explanations and same-filter drill-down in `OverviewPage.tsx`, backed by the Owner-only finance endpoints and source rows implemented under C12.
+
+**Retest:** Not performed by explicit user direction; accessibility, RTL/LTR, mobile, reconciliation and permission acceptance remain unverified.
 
 **Reported / updated:** 2026-11-16; user-requested research intake.
 **Area:** Owner dashboard / reporting interaction.
@@ -711,13 +901,15 @@ The user explicitly requested all six findings and their Garage OS adaptations i
 
 **Acceptance:** Every card/chart/report uses the same selected filters and states its period, grouping, currency, and comparison. Drill-down reconciles with the selected total under the documented calculation/rounding rules. Empty periods and zero comparison bases do not yield misleading percentages. Optional customization supports reset to default and does not affect calculations. Financial endpoints enforce the approved role permissions. Verify accessible tables, Arabic/RTL, English/LTR, and mobile chart readability.
 
-**Implementation / retest:** None recorded / Not performed. Recording this suggestion does not add reporting endpoints or financial data.
+**Implementation / retest:** Source implementation recorded above / Not performed.
 
 **Accepted exception-reporting extension — 2026-11-16:** Apply the same period/branch filters and record drill-down to approved operational exception cards: unanswered quote work, recorded pickup commitments, pending promised benefits, transport issues and claim decisions. Counts reconcile to P1-036 queues and underlying records, with clear definitions and unavailable states for missing modules/data. Distinguish overdue commitments from changing estimates; do not claim real-time provider data or implement financial calculations twice.
 
 <a id="p1-034"></a>
 
 ### P1-034 — Separate quotes, collections, balances, costs, and profit
+
+**Status / owner:** Ready for retest / Engineering (inline implementation).
 
 **Reported / updated:** 2026-11-16; user-requested research intake.
 **Area:** Financial definitions / reporting data integrity.
@@ -734,11 +926,17 @@ The user explicitly requested all six findings and their Garage OS adaptations i
 
 **Acceptance:** Agreed fictional fixtures cover draft-only work, unpaid and partially paid work, cancellation/refund, ongoing jobs, missing costs, and finalized jobs. Each input is counted once; drafts do not inflate collections/revenue. Figures reconcile to drill-down records using approved date/branch/currency rules. Missing cost or payment data is visibly incomplete; net profit is not claimed without its required inputs. Permission checks protect detailed financial records as well as summaries.
 
-**Implementation / retest:** None recorded / Not performed. No accounting module, ledger, payment integration, or policy has been added.
+**Implementation — 2026-11-17:** C12 adds an Owner-only append-only operational money ledger, reversals, source identity locks, exact approved finance definitions and completeness attestations, accepted-quote and recorded-event adapters, shared filter/trend/comparison/drill-down calculations, and explicit unavailable/incomplete states. Draft invoices and deposit references do not become collections or revenue; a reservation deposit becomes recorded only through one linked audited collection event. Mixed currencies are never converted or summed, and profit is unavailable without recognized-revenue/direct-cost dependencies and approved completeness rules. This is not a general ledger, bank reconciliation, tax invoice, payroll, or gateway settlement. **Retest:** Not performed by user direction; migrations not applied; no finance policies or money events activated.
 
 <a id="p1-035"></a>
 
 ### P1-035 — Contextual warranty forms and safe template lifecycle
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** C07/C08 add non-destructive duplicate/retire lifecycle actions, draft-only editing, immutable issued/evidence records, prerequisite-driven component/terms/start-date forms, stale-version guards, safe retired-version authority guidance, and reducer-based dependent-field invalidation without a second generic wizard.
+
+**Retest:** Not performed by explicit user direction. Draft lifecycle, stale selection, conditional fields, Back/discard, authority outcomes, role/branch denial, and bilingual accessibility remain unverified.
 
 **Reported / updated:** 2026-11-16; user-requested research intake.
 **Area:** Warranty / progressive detail / record lifecycle.
@@ -763,6 +961,14 @@ The user explicitly requested all six findings and their Garage OS adaptations i
 
 ### P1-036 — Stage-based action queues and optional operational columns
 
+**Status / owner:** Ready for retest / Engineering (inline implementation).
+
+**Implementation — 2026-11-17:** Added the server-owned work-queue coordinator and route, merged scoped operational and commercial contributors, assigned-technician restriction, branch/kind filters, counts derived from returned items, optional record/next-action columns and direct navigation to source workspaces. Queue rows use stored stages and recorded contributor facts without introducing workflow states.
+
+**Retest:** Not performed by explicit user direction; transitions, role/branch isolation, bilingual/mobile and keyboard acceptance remain unverified.
+
+**GPT-6 domain review correction — 2026-11-17:** Confirmed scheduling now fails closed without approved availability configuration; direct-service slot listing uses the same configured service duration as confirmation; slot and reschedule capacity enforce end-of-day bounds and peak interval overlap rather than day totals alone. Review was static; concurrency and runtime acceptance remain unverified.
+
 **Reported / updated:** 2026-11-16; user-requested research intake.
 **Area:** Booking / workshop / claims / operational navigation.
 **Severity / priority:** Low / P2, proposed; staff work discovery and prioritization.
@@ -778,13 +984,19 @@ The user explicitly requested all six findings and their Garage OS adaptations i
 
 **Acceptance:** Queue counts reconcile with matching authorized records; filters neither reveal out-of-scope work nor claim completion prematurely. Actions obey existing transition/QC/assignment rules. Completed actions update the relevant queues, and empty views explain the selected filter. Optional columns do not remove essential identifying/status information. Verify role access, clear bilingual stage labels, keyboard navigation, and mobile usability.
 
-**Implementation / retest:** None recorded / Not performed. No stages or approval rules added.
+**Implementation / retest:** Source implementation recorded above / Not performed. No new stages or approval rules were added.
 
 **Accepted business-work extension — 2026-11-16:** Include useful authorized queues for quote follow-up, due recorded pickup promises, benefit fulfillment, transport exceptions and claim decisions when their source workflows exist. P1-039–P1-043 own records/state and eligibility; queues derive from those persisted facts rather than inventing new completion states. Shared counts reconcile with P1-033 owner drill-down. Same-day social replies do not establish universal due times.
 
 <a id="p1-037"></a>
 
 ### P1-037 — Sequential forms with conditional steps and retained input
+
+**Status / owner:** Ready for retest / Engineering (inline implementation).
+
+**Implementation — 2026-11-17:** Added shared booking and warranty task-step reconciliation. Booking now guides customer/vehicle, service/branch and available-slot steps with Back and explicit discard; prerequisite changes clear only dependent selections and stale availability requests remain guarded. Warranty issuance shows guided progress, isolates drafts by user/dataset/entity/version and clears component/date when the selected job changes.
+
+**Retest:** Not performed by explicit user direction; focus behavior, malicious omission, retry, responsive layout, identity switching and full bilingual acceptance remain unverified.
 
 **Reported / updated:** 2026-11-16; user-requested research intake.
 **Area:** Shared task interaction / booking and warranty journeys.
@@ -801,7 +1013,7 @@ The user explicitly requested all six findings and their Garage OS adaptations i
 
 **Acceptance:** Forward/Back navigation retains valid values; prerequisite changes clear/revalidate dependent choices and explain why. Irrelevant hidden fields do not block a legitimate task, while malicious requests cannot omit server-required data. Validation identifies the affected step and focuses the error. Final confirmation commits once; save/refresh failures report the real outcome and avoid duplicate mutation. Verify successful completion, exit, retry, conversation/identity isolation, Arabic/English, keyboard use, and narrow screens across the selected booking and warranty tasks.
 
-**Implementation / retest:** None recorded / Not performed. No form components or workflow rules changed.
+**Implementation / retest:** Source implementation recorded above / Not performed.
 
 
 ## Approved operational-product additions — 16 November 2026
@@ -814,6 +1026,12 @@ The user approved all recommendations and valuable additions derived from the Go
 
 ### P1-038 — Operational product, isolated demonstration layer and phased delivery
 
+**Status / owner:** Ready for retest / Engineering (inline implementation).
+
+**Implementation — 2026-11-17:** Added a startup-enforced operational/scenario database marker, separate scenario transport with no provider path, environment-scoped commercial records, scenario provider-secret rejection and a runbook requiring distinct deployment credentials. The application cannot switch DSN per request. Migration `0024_messaging_foundation.sql` is unapplied and no dataset marker was written.
+
+**Retest:** Not performed by explicit user direction. Separate deployment/credential denial, reset isolation, operational-report exclusion and backup/restore remain unverified.
+
 **Area:** Product architecture / environment isolation / phased scope.
 **Severity / priority:** High / P1, proposed; mixing simulated and operational results risks data and trust.
 **Evidence:** Reported; direct user approval. Related P1-007–P1-009, P1-026/P1-027, P1-039–P1-044.
@@ -824,11 +1042,17 @@ The user approved all recommendations and valuable additions derived from the Go
 
 **Acceptance:** A fictional walkthrough exercises the same business validations and permissions as the operational workflow. Scenario reset cannot alter live records; real users cannot invoke scenario privileges; sample data/results never contaminate operational reporting or outbound delivery. Failed/unconfigured providers never show successful real delivery. Verify UI and API boundaries, both languages, environment separation and migration/rollback strategy. Document actual current versus implemented/future scope for each release.
 
-**Implementation / retest:** None recorded / Not performed.
+**Implementation / retest:** Source implementation recorded above / Not performed.
 
 <a id="p1-039"></a>
 
 ### P1-039 — Structured catalogue, packages and accepted quotation versions
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — completed 2026-11-17:** C01–C04 provide typed unconfigured policies, immutable vehicle-aware catalogue/package versions, non-destructive retirement, quote revisions, canonical totals/digests, explicit acceptance evidence, idempotent recovery, exact accepted revision attachment, one component-aware booking/job, and safe downstream summaries. C07 carries exact component/accepted revision into warranty issuance and its unpriced draft; C12 keeps monetary recognition separate and source-linked. No prices, tax rules, discounts, terms, or researched claims were activated or seeded.
+
+**Retest:** Not performed by explicit user direction. Migrations `0011`–`0013` are unapplied; runtime, database, browser, concurrency, and acceptance criteria remain unverified.
 
 **Area:** Service/product catalogue / quoting / customer agreement.
 **Severity / priority:** Medium / P2, proposed.
@@ -849,6 +1073,12 @@ The user approved all recommendations and valuable additions derived from the Go
 
 ### P1-040 — Deferred promotion reservations and later installation
 
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** C05 persists immutable accepted-offer reservations without consuming workshop capacity, then schedules single or configured grouped reservations through the shared O14/C04 transaction. Qualification/allocation, reservation, capacity, booking/job, and events commit atomically. Installation-time redemption is wired to job delivery; reference-only deposits remain non-financial; scheduled cancellation uses O14 and never implies refund; restoration requires rescheduling.
+
+**Retest:** Not performed by explicit user direction. Migration `0017` is unapplied; final-slot concurrency, retries, correction history, expiry, deposit truth, grouped scheduling, delivery redemption, and UI remain unverified.
+
 **Area:** Commercial reservation / promotion version / scheduling boundary.
 **Severity / priority:** Medium / P2, proposed.
 **Evidence:** Reported; facts GS-F020/GS-F021/GS-F023/GS-F025 show deferred execution and reservation/deposit mechanics.
@@ -865,6 +1095,12 @@ The user approved all recommendations and valuable additions derived from the Go
 <a id="p1-041"></a>
 
 ### P1-041 — Fixed-term and lifetime warranty coverage semantics
+
+**Status / owner:** In progress / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** C06–C08 add discriminated fixed/lifetime semantics, preserve existing fixed dates/terms, store complete approved lifetime definitions without fabricated expiry, record append-only termination, require human review for unknown eligibility, centralize component-bound manual/delivery issuance, retain exact accepted versions, and expose conditional lifecycle-aware UI/public verification. No lifetime wording or policy was activated.
+
+**Retest:** Not performed by explicit user direction. Migrations `0018`–`0019` are unapplied; legacy preservation, leap/month-end behavior, constraints, issuance uniqueness, termination, claims, print, public privacy, UI, and runtime remain unverified.
 
 **Area:** Warranty domain / persistence / issuance / claims / verification.
 **Severity / priority:** High / P1, proposed; incorrect expiry changes coverage meaning.
@@ -883,6 +1119,8 @@ The user approved all recommendations and valuable additions derived from the Go
 
 ### P1-042 — Included benefits and aftercare entitlement redemption
 
+**Status / owner:** Ready for retest / Engineering (inline implementation).
+
 **Area:** Customer promises / fulfillment / aftercare.
 **Severity / priority:** Medium / P2, proposed.
 **Evidence:** Reported; facts GS-F021–GS-F026 advertise bundled extras, washing, maintenance and services.
@@ -894,11 +1132,13 @@ The user approved all recommendations and valuable additions derived from the Go
 
 **Acceptance:** Staff can identify the exact promised extras and remaining eligibility; repeated/concurrent redemption cannot exceed approved limits. Corrections retain actor/reason/history. Retired packages do not erase entitlements. Unauthorized access fails; due/exception queues reconcile with records. Test finite, recurring and unconfigured eligibility without fabricated automatic acceptance, and preserve Arabic/English clarity.
 
-**Implementation / retest:** None recorded / Not performed.
+**Implementation — 2026-11-16:** C09 adds immutable accepted-quote benefit snapshots with exact policy version, customer, vehicle, branches, activation trigger, finite/recurring/policy-evaluated limits, explicit transfer/cancellation/expiry rules, responsible team, accepted/delivered materialization, row-locked idempotent fulfillment, append-only evidence-backed reversal, branch-scoped UI, and an outstanding/exception queue projection without invented due dates or warranty-claim effects. No benefit policy or researched entitlement was activated. **Retest:** Not performed by user direction; migration not applied.
 
 <a id="p1-043"></a>
 
 ### P1-043 — Vehicle transport and VIP service coordination
+
+**Status / owner:** Ready for retest / Engineering (inline implementation).
 
 **Area:** Collection/return / towing / courtesy transport.
 **Severity / priority:** Medium / P2, proposed.
@@ -911,11 +1151,17 @@ The user approved all recommendations and valuable additions derived from the Go
 
 **Acceptance:** Users can distinguish pickup from return and see responsible party/status. Unavailable resources do not become confirmed commitments; conflicting assignments follow approved constraints. Failures/cancellations retain audit/evidence and do not silently mark workshop delivery complete. Authorized scoped users see necessary data; customer/staff/private details are protected. Demonstration requests cannot contact actual providers.
 
-**Implementation / retest:** None recorded / Not performed.
+**Implementation — 2026-11-16:** C11 adds distinct pickup/return/courtesy coordination, exact approved provider/service-area/capacity/fee snapshots, truthful proposal/request/commitment states, provider-window concurrency locks, protected custody evidence, append-only cancellation/exception history, scoped private contact reads, a bilingual workspace, and minimal queue facts. Transport completion never delivers the workshop job or changes warranty state, and no provider notification is sent. **Retest:** Not performed by user direction; migration not applied; no provider or transport policy activated.
 
 <a id="p1-044"></a>
 
 ### P1-044 — Promotion qualification, referral and multi-car redemption
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+
+**Implementation — 2026-11-16:** C10 provides versioned fail-closed qualification rules, protected warranty/membership verification facts, grouped-vehicle ownership checks, deterministic exact allocations, promotion-pool limits, evidence-consumption locking, idempotent consumption, and append-only reversal. C05 enforces configured grouped/same-window scheduling and booking-versus-installation redemption timing. No researched promotion or discount was activated.
+
+**Retest:** Not performed by explicit user direction. Migrations `0016`–`0017` are unapplied; authorization, concurrency, privacy, allocation totals, grouped scheduling, consumption/reversal, and UI remain unverified.
 
 **Area:** Offer qualification / controlled discount allocation.
 **Severity / priority:** Medium / P2, proposed.
@@ -943,3 +1189,22 @@ The user approved all recommendations and valuable additions derived from the Go
 | 2026-11-16 | Recorded one central team for all six numbers; replaced branch-team routing in the active proposal with a central queue and explicit central-team cross-branch access requirements | Documentation only; no code, configuration, or runtime changes |
 | 2026-11-16 | Added all six requested cross-industry adaptations as P1-032–P1-037, with source links, suggested Garage OS sequences, boundaries/dependencies, and acceptance criteria; linked P1-030 and advanced next ID to P1-038 | Documentation only; no implementation, configuration changes, or runtime retests |
 | 2026-11-16 | Recorded user approval of all Go Stores research additions and full operational-product direction; added P1-038–P1-044; extended existing inbox/reporting/warranty/discovery issues; linked next-session full-plan handover; total44, nextP1-045 | Documentation/source inspection only; no implementation, policy activation, migration, provider connection or runtime retest |
+| 2026-11-16 | Implemented O01 canonical date and atomic confirmed-booking boundary; advanced P1-001/P1-002 to Ready for retest and synchronized the Operations plan | Retest not performed by user direction; migration not applied |
+| 2026-11-16 | Implemented O02 truthful mutation/refresh outcomes; advanced P1-004 to Ready for retest and synchronized the Operations plan | Retest not performed by user direction |
+| 2026-11-16 | Implemented O04 demo identity/session safeguards, responsive sign-out, and shared auth locale; advanced P1-005/P1-008/P1-009/P1-011 to Ready for retest | Retest not performed by user direction; copied demo tokens remain valid until expiry |
+| 2026-11-16 | Implemented O05 authorized effective service-duration projection and booking display; advanced P1-006 to Ready for retest | Retest not performed by user direction; provisional defaults remain unapproved |
+| 2026-11-16 | Implemented O10 validation-before-migration gate, server-inclusive build checking, and lazy feature routes; advanced P1-023–P1-025 to Ready for retest | Retest and performance measurement not performed by user direction; migrations not run |
+| 2026-11-16 | Implemented O03 conversation-scoped simulator and async result isolation; advanced P1-007 to Ready for retest | Retest not performed by user direction; provider delivery remains disabled |
+| 2026-11-16 | Implemented O06 selected-invoice print targeting and shared invoice/QR cleanup; advanced P1-003 to Ready for retest | Retest and print inspection not performed by user direction |
+| 2026-11-16 | Implemented O07 explicit warranty lifecycle labels/guards, issuance guidance, and reachable tab overflow; advanced P1-010/P1-021/P1-022 to Ready for retest | Retest and viewport/browser verification not performed by user direction |
+| 2026-11-16 | Implemented O08 shared stage/assignment/date-time/required/time-field UI corrections; advanced P1-012–P1-014 and P1-018–P1-020 to Ready for retest | Retest, measurement, and browser/device verification not performed by user direction |
+| 2026-11-16 | Implemented O09 landing alignment, unrotated access card, and theme-aware scrollbar fallback; advanced P1-015–P1-017 to Ready for retest | Retest, measurements, and screenshots not performed by user direction |
+| 2026-11-16 | Implemented Commercial C01–C03 foundations and moved P1-039 to In progress pending accepted-quote booking/job attachment in C04 | Retest not performed; migrations not applied; business values remain unconfigured |
+| 2026-11-16 | Implemented C10 promotion qualification/allocation foundation and moved P1-044 to In progress pending C05 scheduling/redemption integration | Retest not performed; migration not applied; no promotion values activated |
+| 2026-11-16 | Implemented C05 deferred reservations/grouped scheduling/redemption; advanced P1-040 and P1-044 to Ready for retest | Retest not performed; migrations not applied; no payment/refund inferred |
+| 2026-11-16 | Implemented C06 fixed/lifetime warranty semantics and moved P1-041 to In progress pending unified issuance in C07 | Retest not performed; migration not applied; no lifetime terms activated |
+| 2026-11-16 | Completed C07/C08 unified component issuance and contextual warranty workspace; advanced P1-028/P1-035/P1-041 to Ready for retest | Retest not performed; migration not applied; no lifetime terms activated |
+| 2026-11-16 | Implemented C09 included-benefit snapshots, fulfillment/reversal history, and queue projection; advanced P1-042 to Ready for retest | Retest not performed; migration not applied; no benefits activated |
+| 2026-11-16 | Implemented C11 transport coordination, private contact isolation, provider capacity, and custody history; advanced P1-043 to Ready for retest | Retest not performed; migration not applied; no provider message or policy activated |
+| 2026-11-17 | Implemented C12 append-only operational finance, approved definitions, source adapters, report/drill-down pipeline, and deposit-event linkage; advanced P1-034 and completed P1-039 dependency synchronization to Ready for retest | Retest not performed; migrations not applied; no financial policy or event activated |
+| 2026-11-17 | Completed allowed C13 source integration with commercial action projections, quote environment scoping, and migration/rollback runbook | Journey tests, migration/restore rehearsal, builds, browser checks, and domain review not performed by user direction |

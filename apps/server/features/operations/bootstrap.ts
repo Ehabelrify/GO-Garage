@@ -1,4 +1,5 @@
 import { initialState } from "../seed/seed-data";
+import { configuredServiceHours } from "@garage/domain";
 import type {
   AuditEvent, Branch, BranchId, Booking, Customer, GarageState, Job, JobEvent, Service,
   WarrantyAuditEvent, WarrantyClaim, WarrantyClaimAttachment, WarrantyInvoiceDraft,
@@ -7,6 +8,7 @@ import type {
 } from "@garage/domain";
 import { allowedBranchIds, canReadCustomers, canViewWarrantyRecords, type GarageActor } from "../auth/authz";
 import { pool } from "../../infrastructure/database/db";
+import { dateOnlyFromSql } from "../../infrastructure/database/date-only";
 import { normalizeWarrantyVerificationFields } from "../warranty/warranty-verification";
 
 function dateValue(value: string | Date) {
@@ -62,7 +64,7 @@ export async function loadGarageBootstrap(actor: GarageActor) {
     priceLabel: service.price_label,
   }));
 
-  const settingResult = actor.role === "owner" || actor.role === "branch-manager"
+  const settingResult = actor.role === "owner"
     ? await pool.query<{ setting_id: string; scope_key: string; value: string; version: number; effective_date: string | Date }>(
       `SELECT setting_id, scope_key, value, version, effective_date
        FROM operating_settings
@@ -70,6 +72,33 @@ export async function loadGarageBootstrap(actor: GarageActor) {
       [branchIds],
     )
     : { rows: [] as { setting_id: string; scope_key: string; value: string; version: number; effective_date: string | Date }[] };
+
+  // Read only the operational duration values for staff who cannot view settings.
+  const durationRows = actor.role === "owner"
+    ? settingResult.rows.filter((row) => row.scope_key === "business")
+    : (await pool.query<{ setting_id: string; value: string }>(
+      "SELECT setting_id, value FROM operating_settings WHERE scope_key = 'business' AND setting_id = ANY($1::text[])",
+      [["tint-hours", "ceramic-hours"]],
+    )).rows;
+  const durationDecisions = initialState.decisions
+    .filter((definition) => definition.id === "tint-hours" || definition.id === "ceramic-hours")
+    .map((definition) => ({
+      ...definition,
+      valueByScope: {
+        ...definition.valueByScope,
+        business: durationRows.find((row) => row.setting_id === definition.id)?.value ?? definition.valueByScope.business,
+      },
+    }));
+  const effectiveServiceHoursByBranch: NonNullable<GarageState["effectiveServiceHoursByBranch"]> = {};
+  for (const branchId of branchIds) {
+    const hours: Partial<Record<"tint" | "ceramic", number>> = {};
+    for (const service of services) {
+      if (service.id === "tint" || service.id === "ceramic") {
+        hours[service.id] = configuredServiceHours(service, durationDecisions);
+      }
+    }
+    effectiveServiceHoursByBranch[branchId as BranchId] = hours;
+  }
 
   const settings = initialState.decisions
     .filter((definition) => ["booking-confirmation", "daily-dropoff-limit", "branch-working-hours", "clean-bays", "general-bays", "weekly-day-off", "tint-hours", "ceramic-hours"].includes(definition.id))
@@ -135,21 +164,25 @@ export async function loadGarageBootstrap(actor: GarageActor) {
     ? visibleJobIds.length
       ? await pool.query<{
         id: string; customer_id: string; vehicle_id: string; service_id: string; branch_id: string;
-        dropoff_date: string | Date; dropoff_time: string; expected_pickup: string | Date; status: Booking["status"];
+        dropoff_date: string; dropoff_time: string; expected_pickup: string; status: Booking["status"]; work_summary_en:string|null;work_summary_ar:string|null;accepted_quote_id:string|null;accepted_quote_revision:number|null;
       }>(
         `SELECT DISTINCT b.id, b.customer_id, b.vehicle_id, b.service_id, b.branch_id,
-                b.dropoff_date, b.dropoff_time, b.expected_pickup, b.status
+                b.dropoff_date::text AS dropoff_date, b.dropoff_time, b.expected_pickup::text AS expected_pickup, b.status,b.accepted_quote_id,b.accepted_quote_revision,
+                (SELECT string_agg(s.name_en, ', ' ORDER BY w.position) FROM booking_work_components w JOIN services s ON s.id=w.service_id WHERE w.booking_id=b.id) AS work_summary_en,
+                (SELECT string_agg(s.name_ar, '، ' ORDER BY w.position) FROM booking_work_components w JOIN services s ON s.id=w.service_id WHERE w.booking_id=b.id) AS work_summary_ar
          FROM bookings b JOIN jobs j ON j.booking_id = b.id
-         WHERE j.id = ANY($1::text[]) ORDER BY b.dropoff_date, b.dropoff_time`,
+         WHERE j.id = ANY($1::text[]) ORDER BY dropoff_date, b.dropoff_time`,
         [visibleJobIds],
       )
-      : { rows: [] as { id: string; customer_id: string; vehicle_id: string; service_id: string; branch_id: string; dropoff_date: string | Date; dropoff_time: string; expected_pickup: string | Date; status: Booking["status"] }[] }
+      : { rows: [] as { id: string; customer_id: string; vehicle_id: string; service_id: string; branch_id: string; dropoff_date: string; dropoff_time: string; expected_pickup: string; status: Booking["status"];work_summary_en:string|null;work_summary_ar:string|null;accepted_quote_id:string|null;accepted_quote_revision:number|null }[] }
     : await pool.query<{
       id: string; customer_id: string; vehicle_id: string; service_id: string; branch_id: string;
-      dropoff_date: string | Date; dropoff_time: string; expected_pickup: string | Date; status: Booking["status"];
+      dropoff_date: string; dropoff_time: string; expected_pickup: string; status: Booking["status"];work_summary_en:string|null;work_summary_ar:string|null;accepted_quote_id:string|null;accepted_quote_revision:number|null;
     }>(
-      `SELECT id, customer_id, vehicle_id, service_id, branch_id, dropoff_date, dropoff_time, expected_pickup, status
-       FROM bookings WHERE branch_id = ANY($1::text[]) ORDER BY dropoff_date, dropoff_time`,
+      `SELECT b.id, b.customer_id, b.vehicle_id, b.service_id, b.branch_id, b.dropoff_date::text AS dropoff_date, b.dropoff_time, b.expected_pickup::text AS expected_pickup, b.status,b.accepted_quote_id,b.accepted_quote_revision,
+       (SELECT string_agg(s.name_en, ', ' ORDER BY w.position) FROM booking_work_components w JOIN services s ON s.id=w.service_id WHERE w.booking_id=b.id) AS work_summary_en,
+       (SELECT string_agg(s.name_ar, '، ' ORDER BY w.position) FROM booking_work_components w JOIN services s ON s.id=w.service_id WHERE w.booking_id=b.id) AS work_summary_ar
+       FROM bookings b WHERE b.branch_id = ANY($1::text[]) ORDER BY b.dropoff_date, b.dropoff_time`,
       [branchIds],
     );
   const bookings: Booking[] = bookingResult.rows.map((booking) => ({
@@ -157,10 +190,12 @@ export async function loadGarageBootstrap(actor: GarageActor) {
     customerId: booking.customer_id,
     vehicleId: booking.vehicle_id,
     serviceId: booking.service_id,
+    workSummary: booking.work_summary_en && booking.work_summary_ar ? {en:booking.work_summary_en,ar:booking.work_summary_ar} : undefined,
+    acceptedQuoteRef:booking.accepted_quote_id&&booking.accepted_quote_revision?{quoteId:booking.accepted_quote_id,revision:booking.accepted_quote_revision}:undefined,
     branchId: booking.branch_id as BranchId,
-    dropoffDate: dateValue(booking.dropoff_date),
+    dropoffDate: dateOnlyFromSql(booking.dropoff_date),
     dropoffTime: booking.dropoff_time.slice(0, 5),
-    expectedPickup: dateValue(booking.expected_pickup),
+    expectedPickup: dateOnlyFromSql(booking.expected_pickup),
     status: booking.status,
   }));
 
@@ -265,15 +300,15 @@ export async function loadGarageBootstrap(actor: GarageActor) {
     : (await pool.query<{
       policy_id: string; version: number; name: string; eligible_service_ids: string[];
       auto_issue: boolean;
-      start_rule: WarrantyPolicy["startRule"]; duration_months: number; exclusions: string;
+      start_rule: WarrantyPolicy["startRule"]; duration_months: number | null; coverage_kind: "fixed" | "lifetime"; lifetime_definition: WarrantyPolicy["lifetimeDefinition"]; exclusions: string;
       evidence_requirements: string; review_role: WarrantyPolicy["reviewRole"];
       response_days: number; status: WarrantyPolicy["status"]; created_at: Date; published_at: Date | null;
     }>(
       actor.role === "owner"
-        ? `SELECT policy_id, version, name, eligible_service_ids, auto_issue, start_rule, duration_months,
+        ? `SELECT policy_id, version, name, eligible_service_ids, auto_issue, start_rule, duration_months, coverage_kind, lifetime_definition,
                   exclusions, evidence_requirements, review_role, response_days, status, created_at, published_at
            FROM warranty_policies ORDER BY policy_id, version DESC`
-        : `SELECT policy_id, version, name, eligible_service_ids, auto_issue, start_rule, duration_months,
+        : `SELECT policy_id, version, name, eligible_service_ids, auto_issue, start_rule, duration_months, coverage_kind, lifetime_definition,
                   exclusions, evidence_requirements, review_role, response_days, status, created_at, published_at
            FROM warranty_policies p
            WHERE status = 'published'
@@ -292,6 +327,8 @@ export async function loadGarageBootstrap(actor: GarageActor) {
       autoIssue: policy.auto_issue,
       startRule: policy.start_rule,
       durationMonths: policy.duration_months,
+      coverageKind: policy.coverage_kind,
+      lifetimeDefinition: policy.lifetime_definition,
       exclusions: policy.exclusions,
       evidenceRequirements: policy.evidence_requirements,
       reviewRole: policy.review_role,
@@ -324,13 +361,14 @@ export async function loadGarageBootstrap(actor: GarageActor) {
     const warrantyResult = await pool.query<{
       id: string; policy_id: string; policy_version: number; policy_name: string; job_id: string;
       customer_id: string; vehicle_id: string; branch_id: string; service_id: string;
-      start_date: string | Date; expires_on: string | Date; status: WarrantyRecord["status"];
+      start_date: string | Date; expires_on: string | Date | null; coverage_kind: "fixed" | "lifetime"; lifetime_definition: { value?: WarrantyRecord["lifetimeDefinition"] } | null; terminated_on: string | null; status: WarrantyRecord["status"];
       void_reason: string | null; issued_at: Date; verification_token_active: boolean;
     }>(
       `SELECT w.id, w.policy_id, w.policy_version, p.name AS policy_name, w.job_id,
               w.customer_id, w.vehicle_id, w.branch_id, w.service_id, w.start_date,
-              w.expires_on,
+              w.expires_on, w.coverage_kind, w.lifetime_definition, w.terminated_on::text,
               CASE WHEN w.status = 'void' THEN 'void'
+                   WHEN w.coverage_kind = 'lifetime' AND w.terminated_on <= (now() AT TIME ZONE 'Africa/Cairo')::date THEN 'terminated'
                    WHEN w.expires_on < (now() AT TIME ZONE 'Africa/Cairo')::date THEN 'expired'
                    ELSE 'active' END AS status,
                w.void_reason, w.issued_at,
@@ -355,7 +393,10 @@ export async function loadGarageBootstrap(actor: GarageActor) {
       branchId: warranty.branch_id as BranchId,
       serviceId: warranty.service_id,
       startDate: dateValue(warranty.start_date),
-      expiresOn: dateValue(warranty.expires_on),
+      expiresOn: warranty.expires_on ? dateValue(warranty.expires_on) : null,
+      coverageKind: warranty.coverage_kind,
+      lifetimeDefinition: warranty.coverage_kind === "lifetime" ? warranty.lifetime_definition?.value ?? null : null,
+      terminatedOn: warranty.terminated_on,
       status: warranty.status,
       voidReason: warranty.void_reason ?? undefined,
       issuedAt: warranty.issued_at.toISOString(),
@@ -574,7 +615,8 @@ export async function loadGarageBootstrap(actor: GarageActor) {
     currentBranch,
     branches,
     services,
-    decisions: settings,
+    decisions: actor.role === "owner" ? settings : [],
+    effectiveServiceHoursByBranch,
     drafts: [],
     auditEvents,
     customers,

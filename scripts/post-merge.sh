@@ -8,7 +8,7 @@ npm run typecheck
 npm test -- --run
 npm run build
 
-# Database migrations target DATABASE_URL and must be run only after the
-# operator verifies the intended environment and database. Keep them out of
-# this automatic post-merge hook.
-echo "Post-merge checks passed. Database migrations were not run."
+# Migration requires an explicit disposable-target approval and an exact
+# sanitized database identity match. The guard never logs DATABASE_URL.
+node scripts/approve-post-merge-target.mjs
+npm run db:migrate

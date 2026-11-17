@@ -3,5 +3,8 @@ export function isWhatsAppSimulationWriteEnabled(environment = process.env.NODE_
 }
 
 export function isWhatsAppProviderDeliveryEnabled() {
-  return false;
+  return process.env.NODE_ENV === "production"
+    && process.env.GARAGE_DATASET_CLASS === "operational"
+    && process.env.WHATSAPP_PROVIDER_ENABLED === "true"
+    && Boolean(process.env.WHATSAPP_WEBHOOK_SECRET);
 }

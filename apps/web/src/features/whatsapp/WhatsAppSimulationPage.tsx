@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import {
   AlertTriangle, ArrowRightLeft, Check, Clock3, MessageSquareText, Plus, RefreshCw,
   Send, ShieldCheck, UserRound, Wrench,
@@ -10,6 +10,7 @@ import "./WhatsAppSimulationPage.css";
 
 type ConversationStatus = "open" | "pending" | "resolved";
 type MessageKind = "customer" | "reply" | "bot" | "internal-note";
+type InboxBranchId = BranchId | "all";
 interface Conversation {
   id: string;
   branchId: BranchId;
@@ -23,6 +24,7 @@ interface Conversation {
   preview: string;
   relatedBookingId?: string | null;
   verificationCode?: string;
+  version: number;
 }
 interface ConversationMessage {
   id: string;
@@ -75,6 +77,8 @@ interface BookingChangeDraft {
 }
 interface StatusResult {
   status: string;
+  acceptedWorkSummary?:{en:string;ar:string};
+    acceptedQuoteRef?:{quoteId:string;revision:number};
   stage: string;
   expectedPickup?: string;
   etaReason?: string;
@@ -114,54 +118,95 @@ function localDate() {
   return local.toISOString().slice(0, 10);
 }
 
-export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, role }: WhatsAppSimulationPageProps) {
+// Values are retained only for the lifetime of this mounted, authenticated page.
+// A setter closes over its conversation key, so an old request cannot write into
+// the conversation selected while that request was in flight.
+function useConversationValue<T>(key: string | null, initial: T | (() => T)): [T, Dispatch<SetStateAction<T>>] {
+  const [values, setValues] = useState<Record<string, T>>({});
+  const fallback = useRef<T | null>(null);
+  if (fallback.current === null) fallback.current = typeof initial === "function" ? (initial as () => T)() : initial;
+  const value = key && Object.prototype.hasOwnProperty.call(values, key) ? values[key] : fallback.current;
+  const setValue: Dispatch<SetStateAction<T>> = (next) => {
+    if (!key) return;
+    setValues((previous) => {
+      const current = Object.prototype.hasOwnProperty.call(previous, key) ? previous[key] : fallback.current as T;
+      return { ...previous, [key]: typeof next === "function" ? (next as (value: T) => T)(current) : next };
+    });
+  };
+  return [value as T, setValue];
+}
+
+export function WhatsAppSimulationPage(props: WhatsAppSimulationPageProps) {
+  const actor = useGarageStore().actor;
+  return <WhatsAppSimulationContent key={`${actor?.userId ?? "anonymous"}:${props.role}:${props.state.currentBranch}`} {...props} />;
+}
+
+function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }: WhatsAppSimulationPageProps) {
   const rtl = lang === "ar";
   const msg = (en: string, ar: string) => t(en, ar);
   const currentUserId = useGarageStore().actor?.userId;
   const staffAllowed = role === "owner" || role === "branch-manager" || role === "receptionist";
-  const branchOptions = useMemo(() => state.branches, [state.branches]);
-  const [branchId, setBranchId] = useState<BranchId>(() => {
+  const [branchOptions,setBranchOptions]=useState<Array<{id:InboxBranchId;label:{en:string;ar:string}}>>(()=>state.branches.map(branch=>({id:branch.id,label:{en:String(branch.name),ar:String(branch.nameAr??branch.name)}})));
+  const inboxBranchName=(id:InboxBranchId)=>branchOptions.find(branch=>branch.id===id)?.label[lang]??(id==="all"?msg("All branches","كل الفروع"):branchName(id));
+  const [branchId, setBranchId] = useState<InboxBranchId>(() => {
     const current = state.currentBranch;
     return current === "all" ? state.branches[0]?.id ?? "branch-a" : current;
   });
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const scopeKey = selectedId ? `${branchId}:${selectedId}` : null;
   const [filter, setFilter] = useState<"all" | ConversationStatus>("all");
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState("");
   const [detail, setDetail] = useState<Detail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState("");
+  const [detailLoading, setDetailLoading] = useConversationValue(scopeKey, false);
+  const [detailError, setDetailError] = useConversationValue(scopeKey, "");
   const [services, setServices] = useState<ServiceOption[]>([]);
   const [staff, setStaff] = useState<StaffOption[]>([]);
   const [staffError, setStaffError] = useState("");
   const [servicesError, setServicesError] = useState("");
   const [servicesLoading, setServicesLoading] = useState(true);
-  const [busy, setBusy] = useState("");
-  const [composerKind, setComposerKind] = useState<MessageKind>("reply");
-  const [text, setText] = useState("");
-  const [serviceId, setServiceId] = useState("");
-  const [bookingDate, setBookingDate] = useState(localDate);
-  const [availability, setAvailability] = useState<Availability | null>(null);
-  const [availabilityError, setAvailabilityError] = useState("");
-  const [bookingDraft, setBookingDraft] = useState<BookingDraft | null>(null);
-  const [bookingMessage, setBookingMessage] = useState("");
-  const [bookingChangeDraft, setBookingChangeDraft] = useState<BookingChangeDraft | null>(null);
-  const [bookingId, setBookingId] = useState("");
-  const [changeDate, setChangeDate] = useState(localDate);
-  const [changeTime, setChangeTime] = useState("");
-  const [verificationCode, setVerificationCode] = useState("");
-  const [statusResult, setStatusResult] = useState<StatusResult | null>(null);
-  const [lookupMessage, setLookupMessage] = useState("");
+  const [busy, setBusy] = useConversationValue(scopeKey, "");
+  const [createBusy, setCreateBusy] = useState(false);
+  const [composerKind, setComposerKind] = useConversationValue<MessageKind>(scopeKey, "reply");
+  const [text, setText] = useConversationValue(scopeKey, "");
+  const [serviceId, setServiceId] = useConversationValue(scopeKey, "");
+  const [bookingDate, setBookingDate] = useConversationValue(scopeKey, localDate);
+  const [availability, setAvailability] = useConversationValue<Availability | null>(scopeKey, null);
+  const [availabilityError, setAvailabilityError] = useConversationValue(scopeKey, "");
+  const [bookingDraft, setBookingDraft] = useConversationValue<BookingDraft | null>(scopeKey, null);
+  const [bookingMessage, setBookingMessage] = useConversationValue(scopeKey, "");
+  const [bookingChangeDraft, setBookingChangeDraft] = useConversationValue<BookingChangeDraft | null>(scopeKey, null);
+  const [bookingId, setBookingId] = useConversationValue(scopeKey, "");
+  const [changeDate, setChangeDate] = useConversationValue(scopeKey, localDate);
+  const [changeTime, setChangeTime] = useConversationValue(scopeKey, "");
+  const [verificationCode, setVerificationCode] = useConversationValue(scopeKey, "");
+  const [statusResult, setStatusResult] = useConversationValue<StatusResult | null>(scopeKey, null);
+  const [lookupMessage, setLookupMessage] = useConversationValue(scopeKey, "");
   const threadRef = useRef<HTMLDivElement>(null);
   const listRequestRef = useRef(0);
   const detailRequestRef = useRef(0);
+  const activeSelectionRef = useRef(scopeKey);
+  activeSelectionRef.current = scopeKey;
+  const activeBranchRef = useRef(branchId);
+  activeBranchRef.current = branchId;
+  const chooseConversation = (id: string) => {
+    activeSelectionRef.current = `${branchId}:${id}`;
+    detailRequestRef.current += 1;
+    setSelectedId(id);
+  };
+  const chooseBranch = (id: InboxBranchId) => {
+    activeSelectionRef.current = null;
+    listRequestRef.current += 1;
+    detailRequestRef.current += 1;
+    setBranchId(id);
+  };
   const roleLabel = role === "owner" ? msg("Owner", "المالك")
     : role === "branch-manager" ? msg("Branch manager", "مدير الفرع")
       : role === "receptionist" ? msg("Receptionist", "موظف الاستقبال")
         : msg("Technician", "فني");
 
-  const loadList = async (id: BranchId) => {
+  const loadList = async (id: InboxBranchId) => {
     const requestId = ++listRequestRef.current;
     setListLoading(true);
     setListError("");
@@ -169,17 +214,17 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
       const result = await request<{ conversations: Conversation[] }>(
         `/api/whatsapp/conversations?branchId=${encodeURIComponent(id)}`,
       );
-      if (requestId !== listRequestRef.current) return false;
+      if (requestId !== listRequestRef.current || id !== branchId) return false;
       setConversations(result.conversations);
       setSelectedId((current) => current && result.conversations.some((item) => item.id === current)
         ? current : result.conversations[0]?.id ?? null);
       return true;
     } catch (error) {
-      if (requestId !== listRequestRef.current) return false;
+      if (requestId !== listRequestRef.current || id !== branchId) return false;
       setListError(error instanceof Error ? error.message : msg("Could not load conversations.", "تعذر تحميل المحادثات."));
       return false;
     } finally {
-      if (requestId === listRequestRef.current) setListLoading(false);
+      if (requestId === listRequestRef.current && id === branchId) setListLoading(false);
     }
   };
 
@@ -189,21 +234,31 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
     setDetailError("");
     try {
       const result = await request<Detail>(`/api/whatsapp/conversations/${encodeURIComponent(id)}`);
-      if (requestId !== detailRequestRef.current) return false;
+      if (requestId !== detailRequestRef.current || activeSelectionRef.current !== `${branchId}:${id}` || result.conversation.id !== id) return false;
       setDetail(result);
-      setBookingId(result.conversation.relatedBookingId ?? "");
-      setVerificationCode(result.conversation.verificationCode ?? "");
+      setBookingId((current) => current || result.conversation.relatedBookingId || "");
+      setVerificationCode((current) => current || result.conversation.verificationCode || "");
       return true;
     } catch (error) {
-      if (requestId !== detailRequestRef.current) return false;
+      if (requestId !== detailRequestRef.current || activeSelectionRef.current !== `${branchId}:${id}`) return false;
       setDetailError(error instanceof Error ? error.message : msg("Could not load this conversation.", "تعذر تحميل المحادثة."));
       return false;
     } finally {
-      if (requestId === detailRequestRef.current) setDetailLoading(false);
+      if (requestId === detailRequestRef.current && activeSelectionRef.current === `${branchId}:${id}`) setDetailLoading(false);
     }
   };
 
   useEffect(() => {
+    let alive=true;
+    request<{branches:Array<{id:InboxBranchId;label:{en:string;ar:string}}>}>('/api/whatsapp/branches').then(result=>{if(alive){setBranchOptions(result.branches);if(!result.branches.some(branch=>branch.id===branchId)&&result.branches[0])chooseBranch(result.branches[0].id);}}).catch(()=>undefined);
+    return()=>{alive=false};
+  // actor identity remounts this page; branch discovery is messaging-scoped
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
+  useEffect(() => {
+    listRequestRef.current += 1;
+    detailRequestRef.current += 1;
     setSelectedId(null);
     setDetail(null);
     setConversations([]);
@@ -216,6 +271,12 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
   // branch changes intentionally start a fresh branch inbox
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId]);
+
+  useEffect(() => {
+    if (selectedId && !serviceId && services.length) setServiceId(services[0].id);
+  // The catalogue default is written only to the selected conversation.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, services]);
 
   useEffect(() => {
     if (selectedId) void loadDetail(selectedId);
@@ -246,23 +307,26 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
       setStaffError("");
       return;
     }
+    const assignmentBranchId=branchId==="all"?conversations.find(item=>item.id===selectedId)?.branchId:branchId;
+    if(!assignmentBranchId){setStaff([]);setStaffError("");return;}
     let alive = true;
-    request<{ staff: StaffOption[] }>(`/api/whatsapp/staff?branchId=${encodeURIComponent(branchId)}`)
+    request<{ staff: StaffOption[] }>(`/api/whatsapp/staff?branchId=${encodeURIComponent(assignmentBranchId)}`)
       .then((result) => { if (alive) { setStaff(result.staff); setStaffError(""); } })
       .catch((error: unknown) => { if (alive) setStaffError(error instanceof Error ? error.message : msg("Could not load staff.", "تعذر تحميل قائمة الفريق.")); });
     return () => { alive = false; };
   // Branch changes load a fresh, branch-scoped assignment list.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [branchId, role]);
+  }, [branchId, role,selectedId,conversations]);
 
   useEffect(() => {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
   }, [detail?.messages.length]);
 
-  const branchConversations = conversations.filter((item) => item.branchId === branchId);
+  const branchConversations = branchId==="all"?conversations:conversations.filter((item) => item.branchId === branchId);
   const filteredConversations = branchConversations.filter((item) => filter === "all" || item.status === filter);
-  const selectedDetail = detail?.conversation.id === selectedId && detail.conversation.branchId === branchId ? detail : null;
+  const selectedDetail = detail?.conversation.id === selectedId && (branchId==="all"||detail.conversation.branchId === branchId) ? detail : null;
   const selectedConversation = selectedDetail?.conversation ?? branchConversations.find((item) => item.id === selectedId);
+  const actionBranchId=selectedConversation?.branchId??(branchId==="all"?null:branchId);
   const formatTime = (value: string) => {
     const date = new Date(value);
     if (Number.isNaN(date.valueOf())) return value;
@@ -291,29 +355,30 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
   };
 
   const createConversation = async () => {
-    if (!staffAllowed) return;
-    setBusy("create");
+    if (!staffAllowed||branchId==="all") return;
+    const origin = activeSelectionRef.current;
+    setCreateBusy(true);
     try {
       const result = await request<{ conversation: Conversation }>("/api/whatsapp/conversations", {
         method: "POST", body: JSON.stringify({ branchId }),
       });
       await loadList(branchId);
-      setSelectedId(result.conversation.id);
-      notify(msg("Simulated conversation created for this branch.", "تم إنشاء محادثة تجريبية للفرع."));
+      if (activeBranchRef.current === branchId && (activeSelectionRef.current === origin || origin === null)) chooseConversation(result.conversation.id);
+      if (activeSelectionRef.current === `${branchId}:${result.conversation.id}`) notify(msg("Simulated conversation created for this branch.", "تم إنشاء محادثة تجريبية للفرع."));
     } catch (error) {
       setListError(error instanceof Error ? error.message : msg("Could not create a conversation.", "تعذر إنشاء المحادثة."));
-    } finally { setBusy(""); }
+    } finally { setCreateBusy(false); }
   };
 
   const performAction = async (action: "claim" | "resolve" | "pending" | "reopen" | "mark-read" | "handoff") => {
-    if (!selectedId || !staffAllowed) return;
+    if (!selectedId || !selectedConversation || !staffAllowed) return;
     setBusy(action);
     try {
       await request(`/api/whatsapp/conversations/${encodeURIComponent(selectedId)}/action`, {
-        method: "POST", body: JSON.stringify({ action }),
+        method: "POST", body: JSON.stringify({ action,expectedVersion:selectedConversation?.version }),
       });
       await refresh(selectedId);
-      notify(action === "handoff"
+      if (activeSelectionRef.current === scopeKey) notify(action === "handoff"
         ? msg("Simulated handoff recorded in the branch inbox.", "تم تسجيل تحويل تجريبي في صندوق وارد الفرع.")
         : msg("Conversation updated in simulated data.", "تم تحديث المحادثة في البيانات التجريبية."));
     } catch (error) {
@@ -322,15 +387,15 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
   };
 
   const assignConversation = async (userId: string) => {
-    if (!selectedId || !staffAllowed || role === "receptionist") return;
+    if (!selectedId || !selectedConversation || !staffAllowed || role === "receptionist") return;
     setBusy("assign");
     try {
       await request(`/api/whatsapp/conversations/${encodeURIComponent(selectedId)}/action`, {
         method: "POST",
-        body: JSON.stringify(userId ? { action: "assign", userId } : { action: "release" }),
+        body: JSON.stringify(userId ? { action: "assign", userId,expectedVersion:selectedConversation?.version } : { action: "release",expectedVersion:selectedConversation?.version }),
       });
       await refresh(selectedId);
-      notify(userId
+      if (activeSelectionRef.current === scopeKey) notify(userId
         ? msg("Conversation assigned to branch staff.", "تم إسناد المحادثة لموظف الفرع.")
         : msg("Conversation returned to the unassigned branch queue.", "عادت المحادثة إلى قائمة الفرع غير المسندة."));
     } catch (error) {
@@ -349,7 +414,7 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
       });
       setText("");
       await refresh(selectedId);
-      notify(composerKind === "internal-note"
+      if (activeSelectionRef.current === scopeKey) notify(composerKind === "internal-note"
         ? msg("Internal note saved; it is not a customer reply.", "تم حفظ الملاحظة الداخلية؛ دي مش رد للعميل.")
         : msg("Simulated message added to the conversation.", "تمت إضافة رسالة تجريبية للمحادثة."));
     } catch (error) {
@@ -359,10 +424,10 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
 
   const checkAvailability = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!serviceId || !bookingDate) return;
+    if (!serviceId || !bookingDate||!actionBranchId) return;
     setBusy("availability"); setAvailability(null); setAvailabilityError(""); setBookingDraft(null); setBookingMessage("");
     try {
-      const query = new URLSearchParams({ branchId, serviceId, date: bookingDate, lang });
+      const query = new URLSearchParams({ branchId:actionBranchId, serviceId, date: bookingDate, lang });
       const result = await request<{ available: boolean; slots: Slot[]; alternatives: Slot[]; reason?: string }>(`/api/whatsapp/availability?${query}`);
       setAvailability(result);
     } catch (error) {
@@ -372,6 +437,7 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
 
   const runGuidedJourney = async () => {
     if (!selectedId || !serviceId || !staffAllowed || busy) return;
+    const journeyKey = scopeKey;
     setBusy("walkthrough");
     setAvailability(null);
     setAvailabilityError("");
@@ -383,8 +449,11 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
         method: "POST",
         body: JSON.stringify({ serviceId, lang }),
       });
-      const query = new URLSearchParams({ branchId, serviceId, date: bookingDate, lang });
+      if (activeSelectionRef.current !== journeyKey) return;
+      if(!actionBranchId)throw new Error(msg("Choose a branch conversation first.","اختر محادثة فرع أولاً."));
+      const query = new URLSearchParams({ branchId:actionBranchId, serviceId, date: bookingDate, lang });
       const result = await request<Availability>(`/api/whatsapp/availability?${query}`);
+      if (activeSelectionRef.current !== journeyKey) return;
       setAvailability(result);
       const slot = result.slots[0] ?? result.alternatives[0];
       if (!slot) {
@@ -400,13 +469,14 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
         method: "POST",
         body: JSON.stringify({ serviceId, date: slot.date, time: slot.time, lang }),
       });
+      if (activeSelectionRef.current !== journeyKey) return;
       setBookingDraft(draft);
       setBookingMessage(msg(
         "The assistant prepared a booking draft. It will not become a booking until confirmation.",
         "المساعد جهّز مسودة حجز. مش هيتعمل حجز إلا بعد التأكيد.",
       ));
       await loadDetail(selectedId);
-      notify(msg("Guided journey ready for review.", "رحلة المحاكاة جاهزة للمراجعة."));
+      if (activeSelectionRef.current === journeyKey) notify(msg("Guided journey ready for review.", "رحلة المحاكاة جاهزة للمراجعة."));
     } catch (error) {
       const message = error instanceof Error ? error.message : msg("The guided journey could not be completed.", "تعذر إكمال رحلة المحاكاة.");
       if (selectedId) await loadDetail(selectedId);
@@ -425,7 +495,7 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
         body: JSON.stringify({ serviceId, lang }),
       });
       await refresh(selectedId);
-      notify(msg("Service answer added from the current Garage OS catalogue.", "تمت إضافة إجابة الخدمة من قائمة Garage OS الحالية."));
+      if (activeSelectionRef.current === scopeKey) notify(msg("Service answer added from the current Garage OS catalogue.", "تمت إضافة إجابة الخدمة من قائمة Garage OS الحالية."));
     } catch (error) {
       setDetailError(error instanceof Error ? error.message : msg("Service information could not be loaded.", "تعذر تحميل معلومات الخدمة."));
     } finally { setBusy(""); }
@@ -440,7 +510,7 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
       });
       setBookingDraft(result);
       await loadDetail(selectedId);
-      notify(msg("A simulated booking draft is ready for staff confirmation.", "مسودة الحجز التجريبية جاهزة لتأكيد الموظف."));
+      if (activeSelectionRef.current === scopeKey) notify(msg("A simulated booking draft is ready for staff confirmation.", "مسودة الحجز التجريبية جاهزة لتأكيد الموظف."));
     } catch (error) {
       setAvailabilityError(error instanceof Error ? error.message : msg("Could not prepare this booking draft.", "تعذر تجهيز مسودة الحجز."));
     } finally { setBusy(""); }
@@ -458,7 +528,7 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
       if (result.bookingId) setBookingId(result.bookingId);
       if (result.ok) setBookingDraft(null);
       await refresh(selectedId);
-      notify(msg("Booking confirmation recorded in simulated data.", "تم تسجيل تأكيد الحجز في البيانات التجريبية."));
+      if (activeSelectionRef.current === scopeKey) notify(msg("Booking confirmation recorded in simulated data.", "تم تسجيل تأكيد الحجز في البيانات التجريبية."));
     } catch (error) {
       setBookingMessage(error instanceof Error ? error.message : msg("Could not confirm this draft.", "تعذر تأكيد المسودة."));
     } finally { setBusy(""); }
@@ -552,7 +622,7 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
           "صندوق الوارد ده بيستخدم بيانات تطوير افتراضية فقط. مافيش اتصال بمزود واتساب أو رسائل للعملاء أو تنبيهات للفريق.",
         )}</p>
       </div>
-      <div className="wa-safety-meta"><span>{msg("Branch workspace", "مساحة الفرع")}</span><strong>{branchName(branchId)}</strong></div>
+      <div className="wa-safety-meta"><span>{msg("Branch workspace", "مساحة الفرع")}</span><strong>{inboxBranchName(branchId)}</strong></div>
     </section>
 
     <div className="wa-workspace">
@@ -564,12 +634,12 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
           </div>
           <div className="wa-branch-control">
             <label htmlFor="wa-branch">{msg("Branch ownership", "مسؤولية الفرع")}</label>
-            <select id="wa-branch" value={branchId} onChange={(event) => setBranchId(event.target.value as BranchId)}>
-              {branchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branchName(branch.id)}</option>)}
+            <select id="wa-branch" value={branchId} onChange={(event) => chooseBranch(event.target.value as InboxBranchId)}>
+              {branchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branch.label[lang]}</option>)}
             </select>
           </div>
-          <button className="wa-new-thread" type="button" onClick={createConversation} disabled={!staffAllowed || busy === "create"}>
-            <Plus size={15} />{busy === "create" ? msg("Creating…", "جاري الإنشاء…") : msg("New simulated conversation", "محادثة تجريبية جديدة")}
+          <button className="wa-new-thread" type="button" onClick={createConversation} disabled={!staffAllowed || createBusy||branchId==="all"}>
+            <Plus size={15} />{createBusy ? msg("Creating…", "جاري الإنشاء…") : msg("New simulated conversation", "محادثة تجريبية جديدة")}
           </button>
         </header>
         <div className="wa-toolbar" aria-label={msg("Filter conversations", "تصفية المحادثات")}>
@@ -586,7 +656,7 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
                 type="button"
                 className={`wa-conversation-item ${selectedId === conversation.id ? "selected" : ""}`}
                 key={conversation.id}
-                onClick={() => setSelectedId(conversation.id)}
+                onClick={() => chooseConversation(conversation.id)}
                 aria-current={selectedId === conversation.id ? "true" : undefined}
               >
                 <span className="wa-avatar">{conversation.customerLabel.trim().slice(0, 1) || "S"}</span>
@@ -610,7 +680,7 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
               <span className="wa-contact-mark"><MessageSquareText size={17} /></span>
               <div className="wa-contact-copy">
                 <strong>{selectedConversation.customerLabel}</strong>
-                <small>{msg("Fictional contact · no phone number", "جهة اتصال افتراضية · من غير رقم موبايل")} · {branchName(selectedConversation.branchId)}</small>
+                <small>{selectedConversation.simulation ? msg("Fictional contact · no phone number", "جهة اتصال افتراضية · من غير رقم موبايل") : msg("Operational contact · protected details", "جهة اتصال تشغيلية · بيانات محمية")} · {inboxBranchName(selectedConversation.branchId)}</small>
               </div>
             </div>
             <div className="wa-chat-head-meta">
@@ -753,6 +823,8 @@ export function WhatsAppSimulationPage({ lang, t, state, notify, branchName, rol
             </form>
             {lookupMessage && <div className="wa-result warning" role="alert">{lookupMessage}</div>}
             {statusResult && <div className="wa-result" role="status">
+              {statusResult.acceptedWorkSummary&&<div>{msg("Accepted work","العمل المقبول")}: {statusResult.acceptedWorkSummary[lang]}</div>}
+              {statusResult.acceptedQuoteRef&&<div className="mono">{msg("Accepted quote","عرض السعر المقبول")}: {statusResult.acceptedQuoteRef.quoteId} · {msg("revision","الإصدار")} {statusResult.acceptedQuoteRef.revision}</div>}
               <strong>{msg("Verified fictional status", "الحالة الافتراضية بعد التحقق")}</strong>
               <br />{statusResult.status === "confirmed" ? msg("Confirmed", "مؤكد") : statusResult.status === "pending" ? msg("Pending staff review", "بانتظار مراجعة الفريق") : msg("Cancelled", "ملغي")}
               {statusResult.stage && <> · {jobStageLabel(statusResult.stage)}</>}

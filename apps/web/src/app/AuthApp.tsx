@@ -5,10 +5,18 @@ import { shadcn } from "@clerk/themes";
 import { arSA } from "@clerk/localizations";
 import { Redirect, Route, Router, Switch, Link, useLocation } from "wouter";
 import { App } from "./App";
+import { RouteChunk } from "./RouteChunk";
 import { GarageStoreProvider } from "../shared/store";
 import { DemoAccountPanel } from "../features/demo-auth/DemoAccountPanel";
 import { ArrowUpLeft, ShieldCheck, Wrench } from "lucide-react";
-import { PublicWarrantyVerificationPage } from "../features/warranty/PublicWarrantyVerificationPage";
+import { useSavedLocale } from "../shared/locale";
+
+const publicWarrantyPage = () => import("../features/warranty/PublicWarrantyVerificationPage").then((m) => ({ default: m.PublicWarrantyVerificationPage }));
+
+function PublicWarrantyRoute({ params }: { params: { token: string } }) {
+  const { locale } = useSavedLocale();
+  return <RouteChunk loader={publicWarrantyPage} lang={locale} pageProps={{ params }} />;
+}
 
 const clerkPubKey = publishableKeyFromHost(
   window.location.hostname,
@@ -90,45 +98,48 @@ const clerkAppearance = {
 };
 
 function LoadingScreen() {
-  return <div className="auth-loading"><div className="brand-mark"><Wrench size={20} /></div><span>Garage OS</span><div className="loading-line" /></div>;
+  const { locale } = useSavedLocale();
+  return <div className="auth-loading" role="status" dir={locale === "ar" ? "rtl" : "ltr"}><div className="brand-mark"><Wrench size={20} /></div><span>{locale === "ar" ? "بنحمّل Garage OS..." : "Loading Garage OS..."}</span><div className="loading-line" /></div>;
 }
 
 function LandingPage() {
   const [, setLocation] = useLocation();
-  return <main className="landing-shell" dir="rtl">
+  const { locale, setLocale } = useSavedLocale();
+  const t = (en: string, ar: string) => locale === "ar" ? ar : en;
+  return <main className="landing-shell" dir={locale === "ar" ? "rtl" : "ltr"}>
     <header className="landing-header">
       <a className="brand brand-link" href="/" aria-label="Garage OS home">
         <span className="brand-mark"><Wrench size={19} /></span>
         <span><strong className="brand-name">Garage OS</strong><small className="brand-sub">GO STORES · EGYPT</small></span>
       </a>
-      <Link className="btn btn-primary landing-sign-in" href="/sign-in">دخول الفريق <ArrowUpLeft size={15} /></Link>
+      <div className="landing-header-actions"><button type="button" className="btn" onClick={() => setLocale(locale === "ar" ? "en" : "ar")}>{locale === "ar" ? "English" : "العربية"}</button><Link className="btn btn-primary landing-sign-in" href="/sign-in">{t("Team sign in", "دخول الفريق")} <ArrowUpLeft size={15} /></Link></div>
     </header>
     <section className="landing-hero">
       <div className="landing-copy">
-        <div className="landing-kicker"><ShieldCheck size={15} /> مساحة تشغيل للفريق</div>
-        <h1>كل عربية في مكانها.<br />وكل واحد عارف دوره.</h1>
-        <p>مساحة واحدة لتنظيم الحجوزات ومتابعة العربيات بين فرعي Go Stores، بإعدادات تشغيل واضحة وصلاحيات مناسبة لكل دور.</p>
+        <div className="landing-kicker"><ShieldCheck size={15} /> {t("Team operations workspace", "مساحة تشغيل للفريق")}</div>
+        <h1>{t("Every vehicle in its place.", "كل عربية في مكانها.")}<br />{t("Everyone knows their role.", "وكل واحد عارف دوره.")}</h1>
+        <p>{t("One workspace for bookings and vehicle progress across Go Stores branches, with clear operating settings and access for each role.", "مساحة واحدة لتنظيم الحجوزات ومتابعة العربيات بين فرعي Go Stores، بإعدادات تشغيل واضحة وصلاحيات مناسبة لكل دور.")}</p>
         <div className="landing-actions">
-          <Link className="btn btn-primary" href="/sign-in">ادخل مساحة الشغل <ArrowUpLeft size={16} /></Link>
-          <span>كل فرد في الفريق له دعوة خاصة</span>
+          <Link className="btn btn-primary" href="/sign-in">{t("Open workspace", "ادخل مساحة الشغل")} <ArrowUpLeft size={16} /></Link>
+          <span>{t("Each team member has an individual invitation", "كل فرد في الفريق له دعوة خاصة")}</span>
         </div>
-        {import.meta.env.DEV && <DemoAccountPanel lang="ar" onSignedIn={() => setLocation("/workspace/overview")} />}
+        {import.meta.env.DEV && <DemoAccountPanel lang={locale} onSignedIn={() => setLocation("/workspace/overview")} />}
       </div>
       <div className="landing-preview" aria-hidden="true">
         <div className="preview-top"><span className="preview-dot" /><span>GARAGE OS · ACCESS MODEL</span><span className="preview-date">ROLE-BASED WORKSPACE</span></div>
-        <div className="preview-title">كل حساب له مسؤوليات واضحة</div>
+        <div className="preview-title">{t("Clear responsibilities for each account", "كل حساب له مسؤوليات واضحة")}</div>
         <div className="role-preview-list">
-          <div><strong>المالك</strong><span>نظرة عامة وإعدادات التشغيل</span></div>
-          <div><strong>مدير الفرع</strong><span>الفريق والحجوزات ومتابعة الشغل</span></div>
-          <div><strong>الاستقبال</strong><span>العملاء ومواعيد الفرع</span></div>
-          <div><strong>الفني</strong><span>العربيات وأوامر الشغل المسندة</span></div>
+          <div><strong>{t("Owner", "المالك")}</strong><span>{t("Overview and operating settings", "نظرة عامة وإعدادات التشغيل")}</span></div>
+          <div><strong>{t("Branch manager", "مدير الفرع")}</strong><span>{t("Team, bookings and workshop", "الفريق والحجوزات ومتابعة الشغل")}</span></div>
+          <div><strong>{t("Reception", "الاستقبال")}</strong><span>{t("Customers and branch appointments", "العملاء ومواعيد الفرع")}</span></div>
+          <div><strong>{t("Technician", "الفني")}</strong><span>{t("Assigned jobs", "العربيات وأوامر الشغل المسندة")}</span></div>
         </div>
-        <div className="preview-footer"><span>الصلاحيات بيتأكد منها النظام</span><span>دعوة لكل فرد · صلاحيات واضحة لكل فرع</span></div>
+        <div className="preview-footer"><span>{t("Access is checked by the system", "الصلاحيات بيتأكد منها النظام")}</span><span>{t("Individual invitations · branch access", "دعوة لكل فرد · صلاحيات واضحة لكل فرع")}</span></div>
       </div>
     </section>
     <section className="landing-footer">
       <span>GO STORES · INTERNAL OPERATIONS</span>
-      <span>المالك · مدير الفرع · الاستقبال · الفني</span>
+      <span>{t("Owner · Branch manager · Reception · Technician", "المالك · مدير الفرع · الاستقبال · الفني")}</span>
     </section>
   </main>;
 }
@@ -142,16 +153,18 @@ function HomeRoute() {
 function SignInRoute() {
   const { isLoaded, isSignedIn } = useAuth();
   const [, setLocation] = useLocation();
+  const { locale, setLocale } = useSavedLocale();
+  const t = (en: string, ar: string) => locale === "ar" ? ar : en;
   if (!isLoaded) return <LoadingScreen />;
   if (isSignedIn) return <Redirect to="/workspace/overview" />;
-  return <div className="auth-layout" dir="rtl">
+  return <div className="auth-layout" dir={locale === "ar" ? "rtl" : "ltr"}>
     <div className="auth-story">
       <a className="brand brand-link" href="/"><span className="brand-mark"><Wrench size={19} /></span><span><strong className="brand-name">Garage OS</strong><small className="brand-sub">GO STORES · EGYPT</small></span></a>
-      <div className="auth-story-copy"><div className="landing-kicker"><ShieldCheck size={15} /> دخول الفريق</div><h1>كل حساب بيشوف شغله بس.</h1><p>المالك هو اللي بيحدد الوصول، والصلاحيات بتتطبق حسب الدور والفرع على البيانات والإجراءات.</p></div>
-      <div className="auth-story-footer"><span>دعوة خاصة لكل فرد</span><span>الصلاحيات حسب الدور والفرع</span></div>
+      <div className="auth-story-copy"><div className="landing-kicker"><ShieldCheck size={15} /> {t("Team sign in", "دخول الفريق")}</div><h1>{t("Each account sees its own work.", "كل حساب بيشوف شغله بس.")}</h1><p>{t("The owner controls access. Role and branch permissions apply to data and actions.", "المالك هو اللي بيحدد الوصول، والصلاحيات بتتطبق حسب الدور والفرع على البيانات والإجراءات.")}</p></div>
+      <div className="auth-story-footer"><span>{t("Individual invitation", "دعوة خاصة لكل فرد")}</span><span>{t("Role and branch access", "الصلاحيات حسب الدور والفرع")}</span></div>
     </div>
     <div className="auth-card-area">
-      <div className="auth-card-top"><Link href="/">ارجع لـ Garage OS</Link><span>تسجيل دخول آمن</span></div>
+      <div className="auth-card-top"><Link href="/">{t("Back to Garage OS", "ارجع لـ Garage OS")}</Link><button type="button" className="btn" onClick={() => setLocale(locale === "ar" ? "en" : "ar")}>{locale === "ar" ? "English" : "العربية"}</button><span>{t("Secure sign in", "تسجيل دخول آمن")}</span></div>
       <SignIn
         routing="path"
         path={`${basePath}/sign-in`}
@@ -159,7 +172,7 @@ function SignInRoute() {
         forceRedirectUrl={`${basePath}/workspace/overview`}
         appearance={clerkAppearance}
       />
-      {import.meta.env.DEV && <DemoAccountPanel lang="ar" onSignedIn={() => setLocation("/workspace/overview")} />}
+      {import.meta.env.DEV && <DemoAccountPanel lang={locale} onSignedIn={() => setLocation("/workspace/overview")} />}
     </div>
   </div>;
 }
@@ -225,18 +238,19 @@ function ProtectedWorkspace() {
 
 function ClerkRoutes() {
   const [, setLocation] = useLocation();
+  const { locale } = useSavedLocale();
   return <ClerkProvider
     publishableKey={clerkPubKey}
     proxyUrl={clerkProxyUrl}
     appearance={clerkAppearance}
-    localization={clerkLocalization}
+    localization={locale === "ar" ? clerkLocalization : undefined}
     signInUrl={`${basePath}/sign-in`}
     signUpUrl={`${basePath}/sign-up`}
     routerPush={(to) => setLocation(stripBase(to))}
     routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
   >
     <Switch>
-      <Route path="/warranty/verify/:token" component={PublicWarrantyVerificationPage} />
+      <Route path="/warranty/verify/:token" component={PublicWarrantyRoute} />
       <Route path="/" component={HomeRoute} />
       <Route path="/sign-in/*?" component={SignInRoute} />
       <Route path="/sign-up/*?" component={SignUpRoute} />

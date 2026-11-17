@@ -1,21 +1,29 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import {
   Activity, CalendarDays, CheckCircle2, ChevronDown, CircleDollarSign, ClipboardList,
-  Gauge, Package, ShieldAlert, ShieldCheck, Settings2, UserRoundCog, Users, Wrench, MessageCircle,
+  Gauge, Gift, Package, ShieldAlert, ShieldCheck, Settings2, Truck, UserRoundCog, Users, Wrench, MessageCircle,
 } from "lucide-react";
 import { useClerk, useUser } from "@clerk/react";
 import { Link, useLocation } from "wouter";
 import { useGarageStore, type GarageActor } from "../shared/store";
-import type { BranchId, GarageRole, PageId } from "@garage/domain";
+import { RouteChunk } from "./RouteChunk";
+import type { GarageRole, PageId } from "@garage/domain";
 import { branchDisplay, customerDisplay, serviceDisplay, type Lang, type ModalConfig } from "../shared/ui";
-import { OverviewPage } from "../features/overview/OverviewPage";
-import { SettingsPage } from "../features/settings/SettingsPage";
-import { BookingsPage } from "../features/bookings/BookingsPage";
-import { WorkshopPage } from "../features/workshop/WorkshopPage";
-import { CustomersPage } from "../features/customers/CustomersPage";
-import { StaffPage } from "../features/staff/StaffPage";
-import { WarrantiesPage } from "../features/warranty/WarrantiesPage";
-import { WhatsAppSimulationPage } from "../features/whatsapp/WhatsAppSimulationPage";
+const overviewPage = () => import("../features/overview/OverviewPage").then((m) => ({ default: m.OverviewPage }));
+const settingsPage = () => import("../features/settings/SettingsPage").then((m) => ({ default: m.SettingsPage }));
+const bookingsPage = () => import("../features/bookings/BookingsPage").then((m) => ({ default: m.BookingsPage }));
+const workshopPage = () => import("../features/workshop/WorkshopPage").then((m) => ({ default: m.WorkshopPage }));
+const customersPage = () => import("../features/customers/CustomersPage").then((m) => ({ default: m.CustomersPage }));
+const staffPage = () => import("../features/staff/StaffPage").then((m) => ({ default: m.StaffPage }));
+const warrantiesPage = () => import("../features/warranty/WarrantiesPage").then((m) => ({ default: m.WarrantiesPage }));
+  const whatsappPage = () => import("../features/whatsapp/MessagingWorkspacePage").then((m) => ({ default: m.MessagingWorkspacePage }));
+const cataloguePage = () => import("../features/catalogue/CataloguePage").then((m) => ({ default: m.CataloguePage }));
+const quotesPage = () => import("../features/quotes/QuoteWorkspace").then((m) => ({ default: m.QuoteWorkspace }));
+const promotionsPage = () => import("../features/promotions/QualificationForm").then((m) => ({ default: m.QualificationForm }));
+const reservationsPage = () => import("../features/reservations/ReservationsPage").then((m) => ({ default: m.ReservationsPage }));
+const benefitsPage = () => import("../features/benefits/BenefitsPage").then((m) => ({ default: m.BenefitsPage }));
+const transportPage = () => import("../features/transport/TransportPage").then((m) => ({ default: m.TransportPage }));
+const financePage = () => import("../features/finance/FinancePage").then((m) => ({ default: m.FinancePage }));
 
 const roleLabels: Record<GarageRole, { en: string; ar: string }> = {
   owner: { en: "Owner", ar: "المالك" },
@@ -32,6 +40,13 @@ const navigation: Array<{
   ar: string;
   roles: GarageRole[];
 }> = [
+  { id: "catalogue", path: "/workspace/catalogue", icon: Package, en: "Catalogue", ar: "الكتالوج", roles: ["owner"] },
+  { id: "quotes", path: "/workspace/quotes", icon: ClipboardList, en: "Quotes", ar: "عروض الأسعار", roles: ["owner", "branch-manager", "receptionist"] },
+  { id: "promotions", path: "/workspace/promotions", icon: CircleDollarSign, en: "Promotions", ar: "العروض الترويجية", roles: ["owner", "branch-manager", "receptionist"] },
+  { id: "reservations", path: "/workspace/reservations", icon: CalendarDays, en: "Reservations", ar: "الحجوزات المؤجلة", roles: ["owner", "branch-manager", "receptionist"] },
+  { id: "benefits", path: "/workspace/benefits", icon: Gift, en: "Benefits", ar: "المنافع", roles: ["owner", "branch-manager", "receptionist"] },
+  { id: "transport", path: "/workspace/transport", icon: Truck, en: "Transport", ar: "النقل", roles: ["owner", "branch-manager", "receptionist"] },
+  { id: "finance", path: "/workspace/finance", icon: CircleDollarSign, en: "Operational finance", ar: "المالية التشغيلية", roles: ["owner"] },
   { id: "overview", path: "/workspace/overview", icon: Gauge, en: "Overview", ar: "نظرة عامة", roles: ["owner", "branch-manager"] },
   { id: "bookings", path: "/workspace/bookings", icon: CalendarDays, en: "Bookings", ar: "الحجوزات", roles: ["owner", "branch-manager", "receptionist"] },
   { id: "workshop", path: "/workspace/workshop", icon: Wrench, en: "Workshop", ar: "الورشة", roles: ["owner", "branch-manager", "technician"] },
@@ -39,7 +54,7 @@ const navigation: Array<{
   { id: "warranties", path: "/workspace/warranties", icon: ShieldCheck, en: "Warranties", ar: "الضمانات", roles: ["owner", "branch-manager", "receptionist"] },
   { id: "settings", path: "/workspace/settings", icon: Settings2, en: "Settings", ar: "الإعدادات", roles: ["owner"] },
   { id: "staff", path: "/workspace/staff", icon: UserRoundCog, en: "Staff access", ar: "صلاحيات الموظفين", roles: ["owner"] },
-  { id: "whatsapp", path: "/workspace/whatsapp", icon: MessageCircle, en: "WhatsApp simulation", ar: "محاكاة واتساب", roles: ["owner", "branch-manager", "receptionist"] },
+  { id: "whatsapp", path: "/workspace/whatsapp", icon: MessageCircle, en: "Messaging inbox", ar: "صندوق الرسائل", roles: ["owner", "branch-manager", "receptionist"] },
 ];
 
 const holdItems = [
@@ -48,12 +63,11 @@ const holdItems = [
   { en: "Payments", ar: "المدفوعات", icon: CircleDollarSign },
 ];
 
-function LoadingWorkspace() {
-  return <div className="workspace-state" role="status"><div className="brand-mark"><Wrench size={19} /></div><strong>Garage OS</strong><span>بنحمّل مساحة العمل...</span><div className="loading-line" /></div>;
+function LoadingWorkspace({ lang }: { lang: Lang }) {
+  return <div className="workspace-state" role="status" dir={lang === "ar" ? "rtl" : "ltr"}><div className="brand-mark"><Wrench size={19} /></div><strong>Garage OS</strong><span>{lang === "ar" ? "بنحمّل مساحة العمل..." : "Loading your workspace..."}</span><div className="loading-line" /></div>;
 }
 
-function AccessPending({ onSignOut }: { onSignOut: () => void }) {
-  const lang = document.documentElement.lang === "en" ? "en" : "ar";
+function AccessPending({ onSignOut, lang }: { onSignOut: () => void; lang: Lang }) {
   return <main className="access-state" dir={lang === "ar" ? "rtl" : "ltr"}>
     <div className="access-state-card">
       <div className="access-icon"><ShieldAlert size={24} /></div>
@@ -65,26 +79,28 @@ function AccessPending({ onSignOut }: { onSignOut: () => void }) {
   </main>;
 }
 
-function WorkspaceError({ onRetry }: { onRetry: () => void }) {
-  return <main className="access-state" dir="rtl"><div className="access-state-card">
+function WorkspaceError({ onRetry, lang }: { onRetry: () => void; lang: Lang }) {
+  return <main className="access-state" dir={lang === "ar" ? "rtl" : "ltr"}><div className="access-state-card">
     <div className="access-icon"><ShieldAlert size={24} /></div>
     <div className="eyebrow">GARAGE OS</div>
-    <h1>ماقدرناش نحمّل مساحة العمل</h1>
-    <p>بيانات الحساب ما اتحمّلتش. جرّب تاني؛ مافيش أي تغييرات اتحفظت من الطلب ده.</p>
-    <button className="btn btn-primary" onClick={onRetry}>جرّب تاني</button>
+    <h1>{lang === "ar" ? "ماقدرناش نحمّل مساحة العمل" : "We could not load your workspace"}</h1>
+    <p>{lang === "ar" ? "بيانات الحساب ما اتحمّلتش. جرّب تاني." : "Your account data could not be loaded. Please try again."}</p>
+    <button className="btn btn-primary" onClick={onRetry}>{lang === "ar" ? "جرّب تاني" : "Try again"}</button>
   </div></main>;
 }
 
 export function App() {
   const store = useGarageStore();
+  const lang = store.locale;
   const { signOut } = useClerk();
   const { user } = useUser();
   const [, setLocation] = useLocation();
   const [toast, setToast] = useState("");
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const leaveWorkspace = async () => {
-    await fetch("/api/demo/session", { method: "DELETE", credentials: "same-origin" }).catch(() => undefined);
     if (store.actor?.isDemo) {
+      const response = await fetch("/api/demo/session", { method: "DELETE", credentials: "same-origin" }).catch(() => null);
+      if (!response?.ok) return;
       setLocation("/");
       return;
     }
@@ -97,12 +113,12 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  if (store.status === "loading") return <LoadingWorkspace />;
+  if (store.status === "loading") return <LoadingWorkspace lang={lang} />;
   if (store.status === "error") {
-    if (store.errorCode === "ACCESS_PENDING") return <AccessPending onSignOut={() => void leaveWorkspace()} />;
-    return <WorkspaceError onRetry={() => void store.refresh()} />;
+    if (store.errorCode === "ACCESS_PENDING") return <AccessPending lang={lang} onSignOut={() => void leaveWorkspace()} />;
+    return <WorkspaceError lang={lang} onRetry={() => void store.refresh()} />;
   }
-  if (!store.actor || !store.state) return <WorkspaceError onRetry={() => void store.refresh()} />;
+  if (!store.actor || !store.state) return <WorkspaceError lang={lang} onRetry={() => void store.refresh()} />;
 
   return <ReadyWorkspace
     actor={store.actor}
@@ -145,7 +161,7 @@ function ReadyWorkspace({
     if (!selectedPage) navigate(`/workspace/${defaultPage}`);
   }, [selectedPage, defaultPage, navigate]);
 
-  const branchName = (branchId: BranchId) => {
+  const branchName = (branchId: string) => {
     const branch = state.branches.find((item) => item.id === branchId);
     return branch ? branchDisplay(branch.name, lang) : branchId;
   };
@@ -184,7 +200,7 @@ function ReadyWorkspace({
         <span className="account-avatar">{profileName.slice(0, 1).toUpperCase()}</span>
         <span className="account-copy"><strong>{profileName}</strong><small>{t(roleLabels[actor.role].en, roleLabels[actor.role].ar)}</small></span>
       </div>
-      <button className="signout-button" onClick={signOut}>{t("Sign out", "تسجيل الخروج")}</button>
+      <button className="signout-button" type="button" onClick={signOut}>{t("Sign out", "تسجيل الخروج")}</button>
     </aside>
 
     <div className="main-area">
@@ -206,17 +222,29 @@ function ReadyWorkspace({
             <button className={lang === "en" ? "selected" : ""} onClick={() => store.setLocale("en")}>EN</button>
           </div>
           <span className="header-user" title={userEmail}>{userEmail}</span>
+          <button className="mobile-signout-button" type="button" onClick={signOut}>{t("Sign out", "تسجيل الخروج")}</button>
         </div>
       </header>
+      {store.refreshWarning && <div role="alert" className="refresh-warning" style={{ padding: "12px 20px", background: "#fff3cd", color: "#513d00" }}>
+        {t("Your change may be saved, but the latest workspace data could not be loaded. The information shown may be outdated.", "قد يكون التغيير اتحفظ، لكن ماقدرناش نحمّل أحدث بيانات مساحة العمل. البيانات الظاهرة ممكن تكون قديمة.")}
+        {" "}<button className="btn" type="button" onClick={() => void store.refresh()}>{t("Refresh data", "تحديث البيانات")}</button>
+      </div>}
       <main className="page-wrap" key={page}>
-        {page === "overview" && <OverviewPage lang={lang} t={t} state={state} navigate={navigate} branchName={branchName} notify={notify} />}
-        {page === "settings" && actor.role === "owner" && <SettingsPage lang={lang} t={t} state={state} notify={notify} branchName={branchName} />}
-        {page === "bookings" && <BookingsPage lang={lang} t={t} state={state} branchName={branchName} customerName={customerName} serviceName={serviceName} vehicleFor={vehicleFor} notify={notify} confirmModal={setModal} />}
-        {page === "workshop" && <WorkshopPage lang={lang} t={t} state={state} branchName={branchName} customerName={customerName} serviceName={serviceName} vehicleFor={vehicleFor} notify={notify} role={actor.role} />}
-        {page === "customers" && actor.role !== "technician" && <CustomersPage lang={lang} t={t} state={state} notify={notify} branchId={state.currentBranch === "all" ? state.branches[0]?.id : state.currentBranch} />}
-        {page === "warranties" && actor.role !== "technician" && <WarrantiesPage lang={lang} t={t} state={state} notify={notify} />}
-        {page === "staff" && actor.role === "owner" && <StaffPage lang={lang} t={t} state={state} notify={notify} confirmModal={setModal} />}
-        {page === "whatsapp" && ["owner", "branch-manager", "receptionist"].includes(actor.role) && <WhatsAppSimulationPage lang={lang} t={t} state={state} notify={notify} branchName={branchName} role={actor.role} />}
+        {page === "overview" && <RouteChunk loader={overviewPage} lang={lang} pageProps={{ lang, t, state, navigate, branchName, notify }} />}
+        {page === "catalogue" && actor.role === "owner" && <RouteChunk loader={cataloguePage} lang={lang} pageProps={{ lang }} />}
+        {page === "quotes" && actor.role !== "technician" && <RouteChunk loader={quotesPage} lang={lang} pageProps={{ lang }} />}
+        {page === "promotions" && actor.role !== "technician" && <RouteChunk loader={promotionsPage} lang={lang} pageProps={{ lang, actorId:actor.userId, actorRole:actor.role }} />}
+        {page === "reservations" && actor.role !== "technician" && <RouteChunk loader={reservationsPage} lang={lang} pageProps={{ lang }} />}
+        {page === "benefits" && actor.role !== "technician" && <RouteChunk loader={benefitsPage} lang={lang} pageProps={{ lang }} />}
+        {page === "transport" && actor.role !== "technician" && <RouteChunk loader={transportPage} lang={lang} pageProps={{ lang }} />}
+        {page === "finance" && actor.role === "owner" && <RouteChunk loader={financePage} lang={lang} pageProps={{ lang, branches: state.branches }} />}
+        {page === "settings" && actor.role === "owner" && <RouteChunk loader={settingsPage} lang={lang} pageProps={{ lang, t, state, notify, branchName }} />}
+        {page === "bookings" && <RouteChunk loader={bookingsPage} lang={lang} pageProps={{ lang, t, state, branchName, customerName, serviceName, vehicleFor, notify, confirmModal: setModal }} />}
+        {page === "workshop" && <RouteChunk loader={workshopPage} lang={lang} pageProps={{ lang, t, state, branchName, customerName, serviceName, vehicleFor, notify, role: actor.role }} />}
+        {page === "customers" && actor.role !== "technician" && <RouteChunk loader={customersPage} lang={lang} pageProps={{ lang, t, state, notify, branchId: state.currentBranch === "all" ? state.branches[0]?.id : state.currentBranch }} />}
+        {page === "warranties" && actor.role !== "technician" && <RouteChunk loader={warrantiesPage} lang={lang} pageProps={{ lang, t, state, notify }} />}
+        {page === "staff" && actor.role === "owner" && <RouteChunk loader={staffPage} lang={lang} pageProps={{ lang, t, state, notify, confirmModal: setModal }} />}
+        {page === "whatsapp" && ["owner", "branch-manager", "receptionist"].includes(actor.role) && <RouteChunk loader={whatsappPage} lang={lang} pageProps={{ lang, t, state, notify, branchName, role: actor.role }} />}
       </main>
     </div>
 

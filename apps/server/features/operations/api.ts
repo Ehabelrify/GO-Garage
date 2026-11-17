@@ -3,12 +3,16 @@ import { Router, type Request, type Response } from "express";
 import { clerkClient } from "@clerk/express";
 import { z } from "zod";
 import { initialState } from "../seed/seed-data";
-import { canTransitionJob, checkBookingCapacity, configuredNumber, configuredServiceHours, warrantyExpiryDate } from "@garage/domain";
+import { canTransitionJob, checkBookingCapacity, configuredNumber, configuredServiceHours } from "@garage/domain";
 import type { Branch, BranchId, Booking, Service } from "@garage/domain";
 import { canAccessBranch, canManageBookings, canManageSettings, canManageStaff, type GarageRole } from "../auth/authz";
 import { requireMembership, actorFor } from "../auth/auth";
 import { loadGarageBootstrap } from "./bootstrap";
 import { pool, withTransaction } from "../../infrastructure/database/db";
+import { dateOnlyFromSql } from "../../infrastructure/database/date-only";
+import { reserveConfirmedBooking, rescheduleConfirmedBooking, cancelConfirmedBooking, type BookingReservationResult } from "./booking-service";
+import { configuredAvailability, demandFromBookedComponents, demandFromWork, listAvailableSlotsForDemand, type OccupancyDemand } from "./availability-service";
+import { acceptedQuoteInTransaction } from "../commercial/quote-booking";
 import {
   clearDemoSessionCookie,
   DemoAuthError,
@@ -20,8 +24,20 @@ import {
 } from "../auth/demo-auth";
 import { publicWarrantyVerificationRouter, warrantyRouter } from "../warranty/warranties";
 import { createWhatsAppRouter } from "../whatsapp/whatsapp";
-import { selectAutomaticWarrantyPolicy } from "../warranty/warranty-rules";
-import { ensureWarrantyInvoiceDraft } from "../warranty/warranty-invoices";
+import { issueCoverageInTransaction, WarrantyIssuanceError } from "../warranty/issuance-service";
+import { commercialPolicyRouter } from "../commercial/policy-routes";
+import { catalogueRouter } from "../commercial/catalogue-routes";
+import { quoteRouter } from "../commercial/quote-routes";
+import { qualificationRouter } from "../commercial/qualification-routes";
+import { reservationRouter } from "../commercial/reservation-routes";
+import { benefitRouter } from "../commercial/benefit-routes";
+import { transportRouter } from "../commercial/transport-routes";
+import { financeRouter } from "../finance/finance-routes";
+import { workQueueRouter } from "./work-queue-routes";
+import { BenefitError, materializeBenefitsInTransaction } from "../commercial/benefit-service";
+import { lockReservationForJobDelivery, redeemReservationOnJobDelivery } from "../commercial/reservation-service";
+import { commercialContext } from "../commercial/policy-service";
+import { providerWebhookRouter } from "../whatsapp/provider-webhook";
 
 const router = Router();
 const editableSettingIds = new Set([
@@ -118,9 +134,9 @@ async function capacityIssue(
 
   const bookingResult = await client.query<{
     id: string; customer_id: string; vehicle_id: string; service_id: string; branch_id: string;
-    dropoff_date: string | Date; dropoff_time: string; expected_pickup: string | Date; status: Booking["status"];
+    dropoff_date: string; dropoff_time: string; expected_pickup: string; status: Booking["status"];
   }>(
-    `SELECT id, customer_id, vehicle_id, service_id, branch_id, dropoff_date, dropoff_time, expected_pickup, status
+    `SELECT id, customer_id, vehicle_id, service_id, branch_id, dropoff_date::text AS dropoff_date, dropoff_time, expected_pickup::text AS expected_pickup, status
      FROM bookings WHERE branch_id = $1 AND dropoff_date = $2 AND status = 'confirmed'`,
     [branchId, date],
   );
@@ -130,9 +146,9 @@ async function capacityIssue(
     vehicleId: booking.vehicle_id,
     serviceId: booking.service_id,
     branchId: booking.branch_id as BranchId,
-    dropoffDate: String(booking.dropoff_date).slice(0, 10),
+    dropoffDate: dateOnlyFromSql(booking.dropoff_date),
     dropoffTime: booking.dropoff_time.slice(0, 5),
-    expectedPickup: String(booking.expected_pickup).slice(0, 10),
+    expectedPickup: dateOnlyFromSql(booking.expected_pickup),
     status: booking.status,
   }));
   const serviceRows = await client.query(
@@ -240,7 +256,17 @@ router.delete("/demo/session", (req, res) => {
   res.json({ ok: true });
 });
 router.use("/public/warranty-verification", publicWarrantyVerificationRouter);
+router.use("/provider/whatsapp",providerWebhookRouter);
 router.use(requireMembership);
+router.use("/commercial-policies", commercialPolicyRouter);
+router.use("/catalogue", catalogueRouter);
+router.use("/quotes", quoteRouter);
+router.use("/promotions", qualificationRouter);
+router.use("/reservations", reservationRouter);
+router.use("/benefits", benefitRouter);
+router.use("/transport", transportRouter);
+router.use("/finance", financeRouter);
+router.use("/work-queues", workQueueRouter);
 router.use("/warranties", warrantyRouter);
 router.use("/whatsapp", createWhatsAppRouter());
 
@@ -277,6 +303,10 @@ router.patch("/settings", async (req, res) => {
   }
 
   const updated = await withTransaction(async (client) => {
+    // Serialize Owner capacity changes with every confirmed reservation's capacity read.
+    if (settingId !== "booking-confirmation") {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('booking-capacity-settings'))");
+    }
     const existing = await client.query<{ value: string; version: number }>(
       "SELECT value, version FROM operating_settings WHERE setting_id = $1 AND scope_key = $2 FOR UPDATE",
       [settingId, scopeKey],
@@ -367,6 +397,82 @@ const bookingInputSchema = z.object({
     const [hours, minutes] = value.split(":").map(Number);
     return hours <= 23 && minutes <= 59;
   }),
+  quoteRef:z.object({quoteId:z.string().min(1),revision:z.number().int().positive()}).optional(),
+  configurationVersion:z.string().optional(),
+});
+
+const localDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => { try { dateOnlyFromSql(value); return true; } catch { return false; } });
+const availabilityConfigSchema = z.object({
+  expectedVersion:z.number().int().nonnegative(), timezone:z.string().min(1), opensAt:z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), closesAt:z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  workingWeekdays:z.array(z.number().int().min(0).max(6)).min(1), closures:z.array(z.object({date:localDate,reason:z.string().trim().min(1)}).strict()),
+  slotMinutes:z.number().int().min(1).max(1440),dailyIntakeLimit:z.number().int().positive(),bayCounts:z.record(z.string().min(1),z.number().int().nonnegative()),
+  effectiveFrom:localDate,reason:z.string().trim().min(1),
+}).strict();
+router.get("/availability/config/:branchId",async(req,res)=>{
+  const current=actor(req);if(current.role!=="owner")return forbidden(res);
+  const result=await pool.query(`SELECT v.*,a.version AS active_version FROM branch_availability_versions v LEFT JOIN branch_availability_active a ON a.branch_id=v.branch_id WHERE v.branch_id=$1 ORDER BY v.version DESC LIMIT 1`,[req.params.branchId]);
+  if(!result.rows[0])return res.json({status:"unconfigured",version:0});
+  const row=result.rows[0];
+  const closures=await pool.query<{closed_date:string;reason:string}>("SELECT closed_date::text AS closed_date,reason FROM branch_availability_closures WHERE branch_id=$1 AND version=$2 ORDER BY closed_date",[req.params.branchId,row.version]);
+  res.json({status:"configured",version:row.version,activeVersion:row.active_version,timezone:row.timezone,opensAt:row.opens_at,closesAt:row.closes_at,workingWeekdays:row.working_weekdays,slotMinutes:row.slot_minutes,dailyIntakeLimit:row.daily_intake_limit,bayCounts:row.bay_counts,effectiveFrom:row.effective_from,closures:closures.rows});
+});
+router.put("/availability/config/:branchId",async(req,res)=>{
+  const current=actor(req);if(current.role!=="owner")return forbidden(res);
+  const parsed=availabilityConfigSchema.safeParse(req.body);
+  if(!parsed.success)return routeError(res,400,"INVALID_AVAILABILITY_CONFIG","Complete the branch calendar and capacity configuration.");
+  const data=parsed.data;
+  try {new Intl.DateTimeFormat("en",{timeZone:data.timezone});}catch{return routeError(res,400,"INVALID_TIMEZONE","Choose a valid IANA timezone.");}
+  const open=Number(data.opensAt.slice(0,2))*60+Number(data.opensAt.slice(3,5)),close=Number(data.closesAt.slice(0,2))*60+Number(data.closesAt.slice(3,5));
+  if(close<=open||(close-open)%data.slotMinutes||new Set(data.workingWeekdays).size!==data.workingWeekdays.length||!Object.keys(data.bayCounts).length||data.closures.some(c=>c.date<data.effectiveFrom)||new Set(data.closures.map(c=>c.date)).size!==data.closures.length)return routeError(res,400,"INVALID_AVAILABILITY_CONFIG","Review opening hours, grid, bays and closures.");
+  const outcome=await withTransaction(async client=>{
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('booking-capacity-settings'))");
+    const branch=await client.query("SELECT 1 FROM branches WHERE id=$1",[req.params.branchId]);if(!branch.rowCount)return "missing" as const;
+    const latest=await client.query<{version:number}>("SELECT version FROM branch_availability_versions WHERE branch_id=$1 ORDER BY version DESC LIMIT 1",[req.params.branchId]);
+    if((latest.rows[0]?.version??0)!==data.expectedVersion)return "stale" as const;
+    const version=data.expectedVersion+1;
+    await client.query("INSERT INTO branch_availability_versions(branch_id,version,timezone,opens_at,closes_at,working_weekdays,slot_minutes,daily_intake_limit,bay_counts,effective_from,approved_by,reason) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",[req.params.branchId,version,data.timezone,data.opensAt,data.closesAt,data.workingWeekdays,data.slotMinutes,data.dailyIntakeLimit,JSON.stringify(data.bayCounts),data.effectiveFrom,current.userId,data.reason]);
+    for(const closure of data.closures)await client.query("INSERT INTO branch_availability_closures(branch_id,version,closed_date,reason) VALUES($1,$2,$3,$4)",[req.params.branchId,version,closure.date,closure.reason]);
+    await client.query("INSERT INTO branch_availability_active(branch_id,version,activated_by) VALUES($1,$2,$3) ON CONFLICT(branch_id) DO UPDATE SET version=excluded.version,activated_by=excluded.activated_by,activated_at=now()",[req.params.branchId,version,current.userId]);
+    await client.query("INSERT INTO branch_availability_audit(id,branch_id,version,action,actor_id,reason) VALUES($1,$2,$3,'approved-and-activated',$4,$5)",[makeId("availability-audit"),req.params.branchId,version,current.userId,data.reason]);
+    return version;
+  });
+  if(outcome==="missing")return routeError(res,404,"BRANCH_NOT_FOUND","Branch not found.");
+  if(outcome==="stale")return routeError(res,409,"STALE_AVAILABILITY_CONFIG","Refresh branch availability before saving.");
+  res.json({ok:true,version:outcome});
+});
+const slotQuerySchema=z.object({branchId:z.string().min(1),fromDate:localDate,toDate:localDate,serviceId:z.string().min(1).optional(),quoteId:z.string().min(1).optional(),quoteRevision:z.coerce.number().int().positive().optional(),bookingId:z.string().min(1).optional()}).refine(v=>Boolean(v.serviceId)!==Boolean(v.quoteId),"Choose a service or accepted quote.");
+router.get("/availability/slots",async(req,res)=>{
+  const current=actor(req);if(!canManageBookings(current))return forbidden(res);
+  const parsed=slotQuerySchema.safeParse(req.query);if(!parsed.success)return routeError(res,400,"INVALID_SLOT_QUERY","Choose a service or accepted quote and date range.");
+  const input=parsed.data;if(!canAccessBranch(current,input.branchId))return forbidden(res);
+  const result=await withTransaction(async client=>{
+    if(input.bookingId){
+      const booking=await client.query<{branch_id:string;service_id:string;accepted_quote_id:string|null;accepted_quote_revision:number|null;status:string}>("SELECT branch_id,service_id,accepted_quote_id,accepted_quote_revision,status FROM bookings WHERE id=$1",[input.bookingId]);
+      const row=booking.rows[0];
+      if(!row||row.branch_id!==input.branchId||row.status!=="confirmed"||(input.serviceId&&row.service_id!==input.serviceId)||(input.quoteId&&(row.accepted_quote_id!==input.quoteId||row.accepted_quote_revision!==input.quoteRevision)))return {status:"invalid" as const,code:"BOOKING_NOT_FOUND"};
+    }
+    let demand:OccupancyDemand[];
+    if(input.quoteId){
+      if(!input.quoteRevision)return {status:"invalid" as const,code:"INVALID_QUOTE_REF"};
+      if(input.bookingId){const booked=await demandFromBookedComponents(client,input.bookingId);if(!booked.demand)return {status:"unconfigured" as const,missing:booked.missing};demand=booked.demand;}
+      else {
+      const head=await client.query<{branch_id:string;customer_id:string;vehicle_id:string}>("SELECT branch_id,customer_id,vehicle_id FROM quote_heads WHERE id=$1 AND environment_id=$2",[input.quoteId,commercialContext.environmentId]);
+      if(!head.rows[0]||head.rows[0].branch_id!==input.branchId)return {status:"invalid" as const,code:"QUOTE_NOT_FOUND"};
+      try {const quote=await acceptedQuoteInTransaction(client,{quoteId:input.quoteId,revision:input.quoteRevision},input.branchId,head.rows[0].customer_id,head.rows[0].vehicle_id);const expanded=await demandFromWork(client,quote.work);if(!expanded.demand)return {status:"unconfigured" as const,missing:expanded.missing};demand=expanded.demand;}
+      catch{return {status:"invalid" as const,code:"ACCEPTED_QUOTE_MISMATCH"};}
+      }
+    }else{
+      const service=await client.query<{id:string;bay_type:string;bay_hours:string}>("SELECT id,bay_type,bay_hours FROM services WHERE id=$1 AND active=true",[input.serviceId]);
+      if(!service.rows[0])return {status:"invalid" as const,code:"SERVICE_NOT_FOUND"};
+      const decisionId=service.rows[0].id==="tint"?"tint-hours":service.rows[0].id==="ceramic"?"ceramic-hours":null;
+      const setting=decisionId?(await client.query<{value:string}>("SELECT value FROM operating_settings WHERE setting_id=$1 AND scope_key='business'",[decisionId])).rows[0]:undefined;
+      const configuredHours=Number(setting?.value),effectiveHours=Number.isFinite(configuredHours)&&configuredHours>0?configuredHours:Number(service.rows[0].bay_hours);
+      demand=[{componentId:`service:${service.rows[0].id}`,serviceId:service.rows[0].id,bayType:service.rows[0].bay_type,requiredMinutes:Math.ceil(effectiveHours*60),durationDays:1,aggregation:"sum"}];
+    }
+    return listAvailableSlotsForDemand(client,{kind:"staff",userId:current.userId},{branchId:input.branchId,demand,fromDate:input.fromDate,toDate:input.toDate,excludeBookingId:input.bookingId});
+  });
+  if(result.status==="forbidden")return forbidden(res);if(result.status==="invalid")return routeError(res,400,result.code,"Availability cannot be listed.");
+  res.json(result);
 });
 
 router.post("/bookings", async (req, res) => {
@@ -379,7 +485,19 @@ router.post("/bookings", async (req, res) => {
 
   const bookingId = makeId("booking");
   const result = await withTransaction(async (client) => {
-    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`${input.branchId}:${input.dropoffDate}`]);
+    if(input.configurationVersion){const configured=await configuredAvailability(client,input.branchId);if(String(configured.configuration?.version??"")!==input.configurationVersion)return {error:"STALE_SLOT" as const};}
+    const confirmation = await getSettingValue(client, "booking-confirmation", "business");
+    if (confirmation === "instant") {
+      return reserveConfirmedBooking(client, { kind: "staff", userId: currentActor.userId }, {
+        ...input, idempotencyKey: req.get("Idempotency-Key") || bookingId,
+      });
+    }
+    if(input.quoteRef){
+      try {await acceptedQuoteInTransaction(client,input.quoteRef,input.branchId,input.customerId,input.vehicleId);}
+      catch{return {error:"ACCEPTED_QUOTE_MISMATCH" as const};}
+    }
+    await client.query("SELECT pg_advisory_xact_lock_shared(hashtext('booking-capacity-settings'))");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`${input.branchId}:${dateOnlyFromSql(input.dropoffDate)}`]);
     const matching = await client.query(
       `SELECT 1 FROM customer_branches cb
        JOIN vehicles v ON v.customer_id = cb.customer_id
@@ -388,7 +506,7 @@ router.post("/bookings", async (req, res) => {
     );
     if (!matching.rowCount) return { error: "record" as const };
 
-    const issue = await capacityIssue(client, input.branchId, input.dropoffDate, input.serviceId);
+    const issue = input.quoteRef ? null : await capacityIssue(client, input.branchId, input.dropoffDate, input.serviceId);
     if (issue) return { error: issue };
     const branchResult = await client.query(
       `SELECT id, name_en, daily_dropoff_limit, working_hours, clean_bays, general_bays, weekly_day_off
@@ -403,7 +521,6 @@ router.post("/bookings", async (req, res) => {
     const branch = branchFromRow(branchResult.rows[0]);
     const service = serviceFromRow(serviceResult.rows[0]);
     const decisions = await loadCapacitySettings(client, input.branchId);
-    const confirmation = await getSettingValue(client, "booking-confirmation", "business");
     const status: Booking["status"] = confirmation === "instant" ? "confirmed" : "pending";
     const expectedPickup = expectedPickupDate(input.dropoffDate, branch, service, decisions);
     await client.query(
@@ -423,15 +540,24 @@ router.post("/bookings", async (req, res) => {
         currentActor.userId,
       ],
     );
+    if(input.quoteRef)await client.query("UPDATE bookings SET accepted_quote_id=$2,accepted_quote_revision=$3 WHERE id=$1",[bookingId,input.quoteRef.quoteId,input.quoteRef.revision]);
     if (status === "confirmed") {
       await addJob(client, { id: bookingId, customer_id: input.customerId, vehicle_id: input.vehicleId, service_id: input.serviceId, branch_id: input.branchId }, currentActor.userId);
     }
     return { bookingId, status };
   });
   if ("error" in result) {
+    if(result.error==="STALE_SLOT")return routeError(res,409,"STALE_SLOT","This availability changed. Refresh slots before saving.");
+    if(result.error==="ACCEPTED_QUOTE_MISMATCH")return routeError(res,409,"ACCEPTED_QUOTE_MISMATCH","The accepted quote has changed.");
     if (result.error === "record") return capacityError(res, undefined);
     return capacityError(res, result.error);
   }
+  if ("status" in result && result.status === "capacity-conflict") return capacityError(res, result.reason);
+  if ("status" in result && result.status === "requires-human") return routeError(res,409,"AVAILABILITY_UNCONFIGURED",result.reasons.join(" "));
+  if ("status" in result && (result.status === "forbidden" || result.status === "invalid"))
+    return routeError(res, result.status === "forbidden" ? 403 : result.code === "STALE_SLOT" ? 409 : 400, result.code, "The booking could not be confirmed.");
+  if ("status" in result && result.status === "replayed") return res.status(201).json({ ok: true, bookingId: result.bookingId, status: "confirmed" });
+  if ("status" in result && result.status === "confirmed") return res.status(201).json({ ok: true, bookingId: result.bookingId, status: "confirmed" });
   res.status(201).json({ ok: true, ...result });
 });
 
@@ -439,41 +565,27 @@ router.patch("/bookings/:bookingId/confirm", async (req, res) => {
   const currentActor = actor(req);
   if (!canManageBookings(currentActor)) return forbidden(res);
   const bookingId = req.params.bookingId;
-  const result = await withTransaction(async (client) => {
+  const result = await withTransaction<{error:"record"|"forbidden"|"manager-review"}|BookingReservationResult>(async (client) => {
     const bookingResult = await client.query<{
       id: string; customer_id: string; vehicle_id: string; service_id: string; branch_id: string;
-      dropoff_date: string | Date; dropoff_time: string; expected_pickup: string | Date; status: Booking["status"];
-    }>("SELECT * FROM bookings WHERE id = $1 FOR UPDATE", [bookingId]);
+      dropoff_date: string; dropoff_time: string; expected_pickup: string; status: Booking["status"];accepted_quote_id:string|null;accepted_quote_revision:number|null;
+    }>("SELECT id, customer_id, vehicle_id, service_id, branch_id, dropoff_date::text AS dropoff_date, dropoff_time, expected_pickup::text AS expected_pickup, status,accepted_quote_id,accepted_quote_revision FROM bookings WHERE id = $1 FOR UPDATE", [bookingId]);
     const booking = bookingResult.rows[0];
     if (!booking) return { error: "record" as const };
     if (!canAccessBranch(currentActor, booking.branch_id)) return { error: "forbidden" as const };
-    if (booking.status !== "pending") return { error: "record" as const };
+    if (booking.status !== "pending" && booking.status !== "confirmed") return { error: "record" as const };
     const policy = await getSettingValue(client, "booking-confirmation", "business");
-    if (policy === "manager-review" && currentActor.role === "receptionist") {
+    if (booking.status === "pending" && policy === "manager-review" && currentActor.role === "receptionist") {
       return { error: "manager-review" as const };
     }
 
-    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`${booking.branch_id}:${String(booking.dropoff_date).slice(0, 10)}`]);
-    const date = String(booking.dropoff_date).slice(0, 10);
-    const issue = await capacityIssue(client, booking.branch_id, date, booking.service_id, bookingId);
-    if (issue) return { error: issue };
-    const branchResult = await client.query(
-      `SELECT id, name_en, daily_dropoff_limit, working_hours, clean_bays, general_bays, weekly_day_off
-       FROM branches WHERE id = $1`,
-      [booking.branch_id],
-    );
-    const serviceResult = await client.query(
-      "SELECT id, name_en, bay_type, bay_hours, price_label FROM services WHERE id = $1",
-      [booking.service_id],
-    );
-    const decisions = await loadCapacitySettings(client, booking.branch_id);
-    const pickup = expectedPickupDate(date, branchFromRow(branchResult.rows[0]), serviceFromRow(serviceResult.rows[0]), decisions);
-    await client.query(
-      "UPDATE bookings SET status = 'confirmed', expected_pickup = $2, updated_at = now() WHERE id = $1",
-      [bookingId, pickup],
-    );
-    await addJob(client, booking, currentActor.userId);
-    return { ok: true as const };
+    return reserveConfirmedBooking(client, { kind: "staff", userId: currentActor.userId }, {
+      branchId: booking.branch_id, customerId: booking.customer_id, vehicleId: booking.vehicle_id,
+      serviceId: booking.service_id, dropoffDate: dateOnlyFromSql(booking.dropoff_date),
+      dropoffTime: booking.dropoff_time.slice(0, 5), pendingBookingId: bookingId,
+      quoteRef:booking.accepted_quote_id&&booking.accepted_quote_revision?{quoteId:booking.accepted_quote_id,revision:booking.accepted_quote_revision}:undefined,
+      idempotencyKey: req.get("Idempotency-Key") || `confirm:${bookingId}`,
+    });
   });
   if ("error" in result) {
     if (result.error === "forbidden") return forbidden(res);
@@ -481,12 +593,39 @@ router.patch("/bookings/:bookingId/confirm", async (req, res) => {
     if (result.error === "record") return routeError(res, 409, "BOOKING_NOT_PENDING", "This booking is no longer waiting for confirmation.");
     return capacityError(res, result.error);
   }
+  if ("bookingId" in result) return res.json({ ok: true });
+  if (result.status === "capacity-conflict") return capacityError(res, result.reason);
+  if (result.status === "requires-human") return routeError(res,409,"AVAILABILITY_UNCONFIGURED",result.reasons.join(" "));
+  if (result.status === "forbidden") return forbidden(res);
+  if (result.status === "invalid") return routeError(res, 409, result.code, "This booking is no longer waiting for confirmation.");
   res.json(result);
 });
 
+router.patch("/bookings/:bookingId/reschedule",async(req,res)=>{
+  const current=actor(req);if(!canManageBookings(current))return forbidden(res);
+  const parsed=z.object({dropoffDate:localDate,dropoffTime:z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)}).safeParse(req.body);
+  if(!parsed.success)return routeError(res,400,"INVALID_BOOKING","Choose a valid local date and time.");
+  const result=await withTransaction(client=>rescheduleConfirmedBooking(client,{kind:"staff",userId:current.userId},{bookingId:req.params.bookingId,dropoffDate:parsed.data.dropoffDate,dropoffTime:parsed.data.dropoffTime,idempotencyKey:req.get("Idempotency-Key")||`move:${req.params.bookingId}:${parsed.data.dropoffDate}:${parsed.data.dropoffTime}`}));
+  if(result.status==="forbidden")return forbidden(res);
+  if(result.status==="invalid")return routeError(res,409,result.code,"The booking cannot be moved.");
+  if(result.status==="requires-human")return routeError(res,409,"AVAILABILITY_UNCONFIGURED",result.reasons.join(" "));
+  if(result.status==="capacity-conflict")return capacityError(res,result.reason);
+  if ("bookingId" in result) return res.json({ok:true,bookingId:result.bookingId,status:result.status});
+});
 router.patch("/bookings/:bookingId/cancel", async (req, res) => {
   const currentActor = actor(req);
   if (!canManageBookings(currentActor)) return forbidden(res);
+  const commercialLink=await pool.query("SELECT 1 FROM promotion_reservations WHERE booking_id=$1 AND status IN ('scheduled','redeemed')",[req.params.bookingId]);
+  if(commercialLink.rowCount)return routeError(res,409,"RESERVATION_CANCELLATION_REQUIRED","Cancel the linked reservation through its authorized correction flow.");
+  const confirmed=await pool.query<{status:string}>("SELECT status FROM bookings WHERE id=$1",[req.params.bookingId]);
+  if(confirmed.rows[0]?.status==="confirmed"){
+    const parsed=z.object({reason:z.string().trim().min(1)}).safeParse(req.body);
+    if(!parsed.success)return routeError(res,400,"INVALID_CANCELLATION","A cancellation reason is required.");
+    const result=await withTransaction(client=>cancelConfirmedBooking(client,{kind:"staff",userId:currentActor.userId},{bookingId:req.params.bookingId,idempotencyKey:req.get("Idempotency-Key")||`cancel:${req.params.bookingId}`,reason:parsed.data.reason}));
+    if(result.status==="forbidden")return forbidden(res);
+    if(result.status==="invalid")return routeError(res,409,result.code,"The booking cannot be cancelled.");
+    return res.json({ok:true,status:result.status});
+  }
   const result = await withTransaction(async (client) => {
     const booking = await client.query<{ id: string; branch_id: string; status: Booking["status"] }>(
       "SELECT id, branch_id, status FROM bookings WHERE id = $1 FOR UPDATE",
@@ -523,7 +662,12 @@ router.patch("/jobs/:jobId/stage", async (req, res) => {
   if (!["owner", "branch-manager", "technician"].includes(currentActor.role)) return forbidden(res);
   const parsed = z.object({ nextStage: z.string().min(1) }).safeParse(req.body);
   if (!parsed.success) return routeError(res, 400, "INVALID_STAGE", "Choose a valid workshop stage.");
+  if(["cancelled","no-show"].includes(parsed.data.nextStage)){
+    const linked=await pool.query("SELECT 1 FROM promotion_reservations r JOIN jobs j ON j.booking_id=r.booking_id WHERE j.id=$1 AND r.status IN ('scheduled','redeemed')",[req.params.jobId]);
+    if(linked.rowCount)return routeError(res,409,"RESERVATION_CANCELLATION_REQUIRED","Use the linked reservation correction flow for this installation.");
+  }
   const result = await withTransaction(async (client) => {
+    const deliveryReservationId=parsed.data.nextStage==="delivered"?await lockReservationForJobDelivery(client,commercialContext,req.params.jobId):null;
     const jobResult = await client.query<{
       id: string;
       branch_id: string;
@@ -532,9 +676,11 @@ router.patch("/jobs/:jobId/stage", async (req, res) => {
       service_id: string;
       customer_id: string;
       vehicle_id: string;
+      accepted_quote_id: string | null;
+      accepted_quote_revision: number | null;
     }>(
       `SELECT j.id, j.branch_id, j.assigned_user_id, j.stage,
-              b.service_id, b.customer_id, b.vehicle_id
+              b.service_id, b.customer_id, b.vehicle_id, b.accepted_quote_id, b.accepted_quote_revision
        FROM jobs j
        JOIN bookings b ON b.id = j.booking_id
        WHERE j.id = $1
@@ -545,31 +691,37 @@ router.patch("/jobs/:jobId/stage", async (req, res) => {
     if (!job) return "record" as const;
     if (!canAccessBranch(currentActor, job.branch_id)) return "forbidden" as const;
     if (currentActor.role === "technician" && job.assigned_user_id !== currentActor.userId) return "forbidden" as const;
+    if (parsed.data.nextStage === "delivered" && job.stage === "delivered") return "ok" as const;
     if (!canTransitionJob(job.stage as Parameters<typeof canTransitionJob>[0], parsed.data.nextStage as Parameters<typeof canTransitionJob>[1])) {
       return "transition" as const;
     }
-    let autoPolicy: {
-      policy_id: string;
-      version: number;
-      duration_months: number;
-      eligible_service_ids: string[];
-      auto_issue: boolean;
-      status: string;
-      start_rule: string;
-    } | null = null;
+    const issueTargets: { componentId: string | null; policyRef: { id: string; version: number } }[] = [];
     if (parsed.data.nextStage === "delivered") {
-      const policies = await client.query<NonNullable<typeof autoPolicy>>(
-        `SELECT policy_id, version, duration_months, eligible_service_ids,
-                auto_issue, status, start_rule
-         FROM warranty_policies
-         WHERE status = 'published' AND auto_issue = true
-           AND $1 = ANY(eligible_service_ids)
-         FOR SHARE`,
-        [job.service_id],
-      );
-      const selection = selectAutomaticWarrantyPolicy(policies.rows, job.service_id);
-      if (selection.error) return "auto-policy-conflict" as const;
-      autoPolicy = selection.policy;
+      const components = await client.query<{ component_id: string; service_id: string }>(
+        "SELECT component_id,service_id FROM job_work_components WHERE job_id=$1 ORDER BY position FOR UPDATE", [job.id]);
+      const quote = await client.query<{ accepted_snapshot: { warrantyBindings: { componentId: string; policy: { id: string; version: number } }[] } }>(
+        "SELECT e.accepted_snapshot FROM jobs j JOIN bookings b ON b.id=j.booking_id JOIN quote_acceptance_events e ON e.quote_id=b.accepted_quote_id AND e.revision=b.accepted_quote_revision WHERE j.id=$1 AND e.environment_id=$2", [job.id,commercialContext.environmentId]);
+      if (components.rowCount) {
+        const bindings = quote.rows[0]?.accepted_snapshot?.warrantyBindings ?? [];
+        for (const component of components.rows) {
+          const bound = bindings.filter(b => b.componentId === component.component_id);
+          if (bound.length > 1) throw new WarrantyIssuanceError(409, "AUTO_WARRANTY_POLICY_CONFLICT", "A component has overlapping accepted warranty policies. Ask the Owner.");
+          if (bound.length === 1) {
+            const selected = await client.query<{ auto_issue: boolean }>("SELECT auto_issue FROM warranty_policies WHERE policy_id=$1 AND version=$2", [bound[0].policy.id, bound[0].policy.version]);
+            if (selected.rows[0]?.auto_issue) issueTargets.push({ componentId: component.component_id, policyRef: bound[0].policy });
+          }
+          else {
+            const available = await client.query<{ policy_id: string; version: number }>(
+              "SELECT policy_id,version FROM warranty_policies WHERE status='published' AND auto_issue=true AND $1=ANY(eligible_service_ids) FOR SHARE", [component.service_id]);
+            if (available.rowCount) throw new WarrantyIssuanceError(409, "ACCEPTED_WARRANTY_BINDING_REQUIRED", "Automatic component coverage needs an accepted warranty binding.");
+          }
+        }
+      } else {
+        const available = await client.query<{ policy_id: string; version: number }>(
+          "SELECT policy_id,version FROM warranty_policies WHERE status='published' AND auto_issue=true AND $1=ANY(eligible_service_ids) FOR SHARE", [job.service_id]);
+        if (available.rows.length > 1) throw new WarrantyIssuanceError(409, "AUTO_WARRANTY_POLICY_CONFLICT", "More than one automatic policy covers this service. Ask the Owner.");
+        if (available.rows[0]) issueTargets.push({ componentId: null, policyRef: { id: available.rows[0].policy_id, version: available.rows[0].version } });
+      }
     }
     await client.query("UPDATE jobs SET stage = $2, updated_at = now() WHERE id = $1", [job.id, parsed.data.nextStage]);
     if (parsed.data.nextStage === "cancelled" || parsed.data.nextStage === "no-show") {
@@ -581,73 +733,26 @@ router.patch("/jobs/:jobId/stage", async (req, res) => {
        VALUES ($1, $2, $3, $4, $5)`,
       [makeId("event"), job.id, job.stage, parsed.data.nextStage, currentActor.userId],
     );
-    if (autoPolicy) {
-      const deliveryDateResult = await client.query<{ delivery_date: string }>(
-        "SELECT to_char((now() AT TIME ZONE 'Africa/Cairo')::date, 'YYYY-MM-DD') AS delivery_date",
-      );
-      const startDate = deliveryDateResult.rows[0].delivery_date;
-      const expiresOn = warrantyExpiryDate(startDate, autoPolicy.duration_months);
-      const warrantyId = makeId("warranty");
-      const issued = await client.query<{ id: string }>(
-        `INSERT INTO warranties
-           (id, policy_id, policy_version, job_id, customer_id, vehicle_id, branch_id, service_id,
-            start_date, expires_on, issued_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         ON CONFLICT (job_id, policy_id) DO NOTHING
-         RETURNING id`,
-        [
-          warrantyId,
-          autoPolicy.policy_id,
-          autoPolicy.version,
-          job.id,
-          job.customer_id,
-          job.vehicle_id,
-          job.branch_id,
-          job.service_id,
-          startDate,
-          expiresOn,
-          currentActor.userId,
-        ],
-      );
-      if (issued.rowCount) {
-        await ensureWarrantyInvoiceDraft(client, {
-          warrantyId,
-          branchId: job.branch_id,
-          serviceId: job.service_id,
-          actorUserId: currentActor.userId,
-        });
-        await client.query(
-          `INSERT INTO warranty_audit_events
-             (id, policy_id, policy_version, warranty_id, action, details, actor_user_id)
-           VALUES ($1, $2, $3, $4, 'warranty-auto-issued', $5, $6)`,
-          [
-            makeId("warranty-event"),
-            autoPolicy.policy_id,
-            autoPolicy.version,
-            warrantyId,
-            `Automatically issued on delivery; coverage ${startDate} through ${expiresOn}.`,
-            currentActor.userId,
-          ],
-        );
-        await client.query(
-          `INSERT INTO warranty_audit_events
-             (id, warranty_id, action, details, actor_user_id)
-           VALUES ($1, $2, 'invoice-draft-created', $3, $4)`,
-          [
-            makeId("warranty-event"),
-            warrantyId,
-            "A draft invoice was prepared with the covered service; amounts and tax remain unconfirmed.",
-            currentActor.userId,
-          ],
-        );
-      }
+    for (const target of issueTargets) {
+      await issueCoverageInTransaction(client, commercialContext, currentActor, {
+        jobId: job.id, componentId: target.componentId, policyRef: target.policyRef,
+        source: "job-delivery", idempotencyKey: `delivery:${job.id}:${target.componentId ?? "legacy"}:${target.policyRef.id}:${target.policyRef.version}`,
+      });
+    }
+    if(parsed.data.nextStage==="delivered")await redeemReservationOnJobDelivery(client,commercialContext,currentActor,deliveryReservationId,job.id);
+    if(parsed.data.nextStage==="delivered"&&job.accepted_quote_id&&job.accepted_quote_revision){
+      await materializeBenefitsInTransaction(client,commercialContext,currentActor,{quoteRef:{quoteId:job.accepted_quote_id,revision:job.accepted_quote_revision},trigger:"delivered"});
     }
     return "ok" as const;
+  }).catch((error: unknown) => {
+    if (error instanceof WarrantyIssuanceError) return error;
+    if (error instanceof BenefitError) return error;
+    throw error;
   });
+  if (result instanceof WarrantyIssuanceError || result instanceof BenefitError) return routeError(res, result.status, result.code, result.message);
   if (result === "forbidden") return forbidden(res);
   if (result === "record") return routeError(res, 404, "JOB_NOT_FOUND", "Job not found.");
   if (result === "transition") return routeError(res, 409, "INVALID_TRANSITION", "That stage change is not allowed.");
-  if (result === "auto-policy-conflict") return routeError(res, 409, "AUTO_WARRANTY_POLICY_CONFLICT", "More than one automatic warranty policy covers this service. Ask the Owner to resolve the policy overlap.");
   res.json({ ok: true });
 });
 

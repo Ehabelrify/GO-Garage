@@ -11,12 +11,16 @@ export const warrantyVerificationFields: readonly WarrantyVerificationField[] = 
   "startDate",
   "expiresOn",
   "branch",
+  "coverage",
 ];
 
 export interface PublicWarrantyVerificationRow {
   recordStatus: "active" | "void";
   startDate: string;
-  expiresOn: string;
+  expiresOn: string | null;
+  coverageKind?: "fixed" | "lifetime";
+  publicWording?: { ar: string; en: string };
+  terminatedOn?: string | null;
   cairoToday: string;
   serviceNameEn: string;
   serviceNameAr: string;
@@ -46,18 +50,21 @@ export function canEnableWarrantyVerification(fields: readonly WarrantyVerificat
 
 function customerFacingStatus(
   recordStatus: PublicWarrantyVerificationRow["recordStatus"],
-  expiresOn: string,
+  expiresOn: string | null,
   cairoToday: string,
+  coverageKind: "fixed" | "lifetime" = "fixed",
+  terminatedOn: string | null = null,
 ): WarrantyStatus {
   if (recordStatus === "void") return "void";
-  return expiresOn < cairoToday ? "expired" : "active";
+  if (coverageKind === "lifetime") return terminatedOn && terminatedOn <= cairoToday ? "terminated" : "active";
+  return expiresOn && expiresOn < cairoToday ? "expired" : "active";
 }
 
 export function buildPublicWarrantyVerification(
   row: PublicWarrantyVerificationRow,
   approvedFields: readonly WarrantyVerificationField[],
 ): PublicWarrantyVerification {
-  const status = customerFacingStatus(row.recordStatus, row.expiresOn, row.cairoToday);
+  const status = customerFacingStatus(row.recordStatus, row.expiresOn, row.cairoToday, row.coverageKind, row.terminatedOn);
   return {
     verified: true,
     status,
@@ -68,6 +75,9 @@ export function buildPublicWarrantyVerification(
       ? { branchName: { en: row.branchNameEn, ar: row.branchNameAr } }
       : {}),
     ...(approvedFields.includes("startDate") ? { startDate: row.startDate } : {}),
-    ...(approvedFields.includes("expiresOn") ? { expiresOn: row.expiresOn } : {}),
+    ...(approvedFields.includes("expiresOn") && row.expiresOn ? { expiresOn: row.expiresOn } : {}),
+    ...(approvedFields.includes("coverage") ? { coverage: row.coverageKind === "lifetime"
+      ? { kind: "lifetime" as const, ...(row.publicWording ? { publicWording: row.publicWording } : {}) }
+      : { kind: "fixed" as const } } : {}),
   };
 }

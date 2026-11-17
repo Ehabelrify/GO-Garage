@@ -4,7 +4,7 @@ import type { BranchId, Decision, GarageState, JobStage, Locale, Vehicle } from 
 
 export type Lang = Locale;
 export type Translator = (english: string, arabic: string) => string;
-export type BranchName = (branchId: BranchId) => string;
+export type BranchName = (branchId: string) => string;
 export type CustomerName = (customerId: string) => string;
 export type ServiceName = (serviceId: string) => string;
 export type VehicleLookup = (customerId: string, vehicleId: string) => Vehicle | undefined;
@@ -32,11 +32,11 @@ export interface ModalConfig {
 
 export const stageNames: Record<JobStage, { en: string; ar: string }> = {
   booked: { en: "Booked", ar: "اتحجزت" },
-  received: { en: "Received", ar: "اتسلمت" },
+  received: { en: "Received at branch", ar: "وصلت الفرع" },
   "in-service": { en: "In service", ar: "شغالة" },
   qc: { en: "Quality check", ar: "فحص الجودة" },
   ready: { en: "Ready", ar: "جاهزة" },
-  delivered: { en: "Delivered", ar: "اتسلّمت" },
+  delivered: { en: "Delivered to customer", ar: "اتسلمت للعميل" },
   cancelled: { en: "Cancelled", ar: "اتلغت" },
   "no-show": { en: "No-show", ar: "ماجاش" },
 };
@@ -97,7 +97,7 @@ export const decisionCopy: Record<string, { question: string; impact: string; op
   "ceramic-hours": { question: "خدمة السيراميك في العينة محتاجة كام ساعة باي؟", impact: "ده بيغيّر سعة بايات التنظيف في يوم الحجز. لازم نراجع وقت المعالجة والانتظار بره الباي.", options: { "12": "خدمة أقصر للتجربة.", "20": "المدة المقترحة في العينة.", "30": "خدمة أطول للتجربة." } },
   "intake-photos": { question: "محتاجين صور إيه قبل ما نسجل استلام العربية؟", impact: "ده بيأثر على وقت الاستلام واكتمال الصور وخطوات تسجيل الدخول.", options: { "0": "الفريق يقدر يسجل الحالة من غير صور إلزامية.", "2": "صور أقل مطلوبة.", "4": "قدام وورا والجانبين؛ اقتراح للتجربة." } },
   "technician-assignment": { question: "هنوزّع الشغل إزاي على الفنيين المناسبين؟", impact: "ده بيأثر على متابعة ضغط الشغل والصلاحيات والمسؤولية وقت التسليم.", options: { manager: "المدير يختار الفني أو الفريق.", "self-claim": "الفنيين يختاروا الشغل المتاح بنفسهم.", hybrid: "النظام يقترح والمدير يأكد." } },
-  "job-lifecycle": { question: "إيه المراحل الأساسية اللي الفريق هيتابعها لكل عربية؟", impact: "ده بيأثر على شغل الفنيين وتقارير المدير والحالة اللي بتظهر للعميل.", options: { standard: "اتحجزت ← اتسلمت ← شغالة ← فحص الجودة ← جاهزة ← اتسلّمت.", expanded: "نضيف مرحلتي انتظار وإعادة شغل بعد موافقة المالك." } },
+  "job-lifecycle": { question: "إيه المراحل الأساسية اللي الفريق هيتابعها لكل عربية؟", impact: "ده بيأثر على شغل الفنيين وتقارير المدير والحالة اللي بتظهر للعميل.", options: { standard: "اتحجزت ← وصلت الفرع ← شغالة ← فحص الجودة ← جاهزة ← اتسلمت للعميل.", expanded: "نضيف مرحلتي انتظار وإعادة شغل بعد موافقة المالك." } },
   "customer-updates": { question: "أنهي مراحل الشغل تبعت تحديث للعميل؟", impact: "الرسائل ممكن تعمل توقعات عند العميل، فلازم نصها وموافقتها ومزود الإرسال يبقوا جاهزين.", options: { off: "الفريق بيتواصل مع العملاء بنفسه.", milestones: "نبعت إشعار في مراحل متفق عليها، زي الاستلام والجاهزية.", all: "نبعت رسالة مع كل تغيير مرحلة بنأكده." } },
 };
 
@@ -106,7 +106,14 @@ export function dateLabel(value: string, lang: Lang) {
   const date = new Date(`${value.slice(0, 10)}T12:00:00`);
   return Number.isNaN(date.valueOf())
     ? value
-    : new Intl.DateTimeFormat(lang === "ar" ? "ar-EG" : "en-GB", { day: "numeric", month: "short", year: "numeric" }).format(date);
+    : new Intl.DateTimeFormat(lang === "ar" ? "ar-EG-u-nu-latn" : "en-GB", { day: "numeric", month: "short", year: "numeric" }).format(date);
+}
+
+export function timeLabel(value: string, lang: Lang) {
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return value || "—";
+  const [hour, minute] = value.split(":").map(Number);
+  const numbers = new Intl.NumberFormat(lang === "ar" ? "ar-EG-u-nu-latn" : "en-GB", { minimumIntegerDigits: 2, useGrouping: false });
+  return `${numbers.format(hour)}:${numbers.format(minute)}`;
 }
 
 export function valueLabel(decision: Decision, value: string, lang: Lang): string {

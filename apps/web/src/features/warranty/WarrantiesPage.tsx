@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   AlertTriangle, BadgeCheck, CalendarClock, Check, ClipboardCheck, Download, FileClock,
   FilePlus2, History, LockKeyhole, Paperclip, Plus, Printer, QrCode, RotateCcw, Search, ShieldCheck, Upload, Wrench,
@@ -6,16 +6,24 @@ import {
 import { QRCodeSVG } from "qrcode.react";
 import type {
   GarageState, WarrantyClaim, WarrantyClaimStatus, WarrantyPolicy, WarrantyPolicyInput,
-  WarrantyRecord, WarrantyStartRule, WarrantyVerificationField,
+  WarrantyRecord, WarrantyStartRule, WarrantyVerificationField, LifetimeDefinition,
+  QuoteRevision,
 } from "@garage/domain";
 import { filterWarrantyRecords } from "@garage/domain";
-import { useGarageStore } from "../../shared/store";
+import { quoteApi, warrantyAuthorityApi, unknownWriteOutcomeCopy, useGarageStore } from "../../shared/store";
+import { getWarrantyTaskPrerequisites, useWarrantyDraftState, warrantyDraftKey } from "./warranty-form-state";
+import { reconcileWarrantyIssueDraft } from "../../shared/task-steps";
+import { PolicySummary } from "./PolicySummary";
+import { PolicyEditor } from "./PolicyEditor";
+import { CoverageDetail } from "./CoverageDetail";
+import { ClaimDetail } from "./ClaimDetail";
 import {
   branchDisplay, customerDisplay, EmptyState, PageHeading, SectionTitle, serviceDisplay,
   type PageProps,
 } from "../../shared/ui";
 import { WarrantyVerificationCard } from "./PublicWarrantyVerificationPage";
 import { WarrantyInvoicePanel } from "./WarrantyInvoicePanel";
+import { startWarrantyPrint } from "./warranty-print";
 import "./WarrantiesPage.css";
 
 type Tab = "policies" | "coverage" | "claims" | "history" | "verification";
@@ -26,6 +34,19 @@ type PolicyFormState = {
   autoIssue: boolean;
   startRule: "" | WarrantyStartRule;
   durationMonths: string;
+  coverageKind: "fixed" | "lifetime";
+  lifetimeSubject: LifetimeDefinition["subject"];
+  lifetimeSubjectDefinition: string;
+  lifetimeTerminationConditions: string;
+  lifetimeTransferRule: string;
+  lifetimeMaintenanceConditions: string;
+  lifetimeIssuer: string;
+  lifetimeRemedy: string;
+  lifetimePublicAr: string;
+  lifetimePublicEn: string;
+  lifetimeEvidenceRef: string;
+  lifetimeApprovalReason: string;
+  lifetimeApproved: boolean;
   exclusions: string;
   evidenceRequirements: string;
   reviewRole: "" | "owner" | "branch-manager";
@@ -35,8 +56,40 @@ type PolicyFormState = {
 const freshPolicyForm = (): PolicyFormState => ({
   policyId: "", name: "", eligibleServiceIds: [], autoIssue: false, startRule: "",
   durationMonths: "", exclusions: "", evidenceRequirements: "",
+  coverageKind: "fixed", lifetimeSubject: "other", lifetimeSubjectDefinition: "", lifetimeTerminationConditions: "",
+  lifetimeTransferRule: "", lifetimeMaintenanceConditions: "", lifetimeIssuer: "", lifetimeRemedy: "",
+  lifetimePublicAr: "", lifetimePublicEn: "", lifetimeEvidenceRef: "", lifetimeApprovalReason: "", lifetimeApproved: false,
   reviewRole: "", responseDays: "",
 });
+
+function lifetimeFormFromPolicy(policy: WarrantyPolicy): Pick<PolicyFormState,
+  "coverageKind" | "lifetimeSubject" | "lifetimeSubjectDefinition" | "lifetimeTerminationConditions" |
+  "lifetimeTransferRule" | "lifetimeMaintenanceConditions" | "lifetimeIssuer" | "lifetimeRemedy" |
+  "lifetimePublicAr" | "lifetimePublicEn" | "lifetimeEvidenceRef" | "lifetimeApprovalReason" | "lifetimeApproved"> {
+  const snapshot = policy.lifetimeDefinition;
+  const value = snapshot?.state === "approved" ? snapshot.value : snapshot?.draftValue;
+  return {
+    coverageKind: policy.coverageKind ?? "fixed", lifetimeSubject: value?.subject ?? "other",
+    lifetimeSubjectDefinition: value?.subjectDefinition ?? "", lifetimeTerminationConditions: value?.terminationConditions ?? "",
+    lifetimeTransferRule: value?.transferRule ?? "", lifetimeMaintenanceConditions: value?.maintenanceConditions ?? "",
+    lifetimeIssuer: value?.issuer ?? "", lifetimeRemedy: value?.remedy ?? "",
+    lifetimePublicAr: value?.publicWording?.ar ?? "", lifetimePublicEn: value?.publicWording?.en ?? "",
+    lifetimeEvidenceRef: snapshot?.state === "approved" ? snapshot.approval.evidenceRef : "",
+    lifetimeApprovalReason: snapshot?.state === "approved" ? snapshot.approval.reason : "",
+    lifetimeApproved: snapshot?.state === "approved",
+  };
+}
+
+function policyFormFrom(policy: WarrantyPolicy): PolicyFormState {
+  return {
+    policyId: policy.policyId, name: policy.name, eligibleServiceIds: [...policy.eligibleServiceIds],
+    autoIssue: policy.autoIssue, startRule: policy.startRule,
+    durationMonths: policy.durationMonths == null ? "" : String(policy.durationMonths),
+    exclusions: policy.exclusions, ...lifetimeFormFromPolicy(policy),
+    evidenceRequirements: policy.evidenceRequirements, reviewRole: policy.reviewRole,
+    responseDays: String(policy.responseDays),
+  };
+}
 
 const MAX_EVIDENCE_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_EVIDENCE_ATTACHMENTS = 10;
@@ -46,6 +99,7 @@ const verificationFields: { key: WarrantyVerificationField; en: string; ar: stri
   { key: "startDate", en: "Start date", ar: "تاريخ البداية" },
   { key: "expiresOn", en: "Expiry date", ar: "تاريخ الانتهاء" },
   { key: "branch", en: "Branch", ar: "الفرع" },
+  { key: "coverage", en: "Coverage wording", ar: "صياغة التغطية" },
 ];
 
 const statusText: Record<string, { en: string; ar: string }> = {
@@ -54,6 +108,7 @@ const statusText: Record<string, { en: string; ar: string }> = {
   retired: { en: "Retired", ar: "متوقفة" },
   active: { en: "Active", ar: "ساري" },
   expired: { en: "Expired", ar: "منتهي" },
+  terminated: { en: "Terminated", ar: "منتهي التغطية" },
   void: { en: "Voided", ar: "ملغي" },
   open: { en: "Open", ar: "مفتوحة" },
   "under-review": { en: "Under review", ar: "مستنية المراجعة" },
@@ -99,6 +154,8 @@ function vehicleFor(state: GarageState, customerId: string, vehicleId: string) {
 
 export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
   const store = useGarageStore();
+  const qrPrintCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => qrPrintCleanupRef.current?.(), []);
   const actor = store.actor;
   const isOwner = actor?.role === "owner";
   const isManager = actor?.role === "branch-manager";
@@ -110,37 +167,80 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
   const [tab, setTab] = useState<Tab>(isOwner ? "policies" : "coverage");
   const [showPolicyForm, setShowPolicyForm] = useState(false);
   const [templateMode, setTemplateMode] = useState(false);
-  const [policyForm, setPolicyForm] = useState<PolicyFormState>(freshPolicyForm);
   const [editingPolicy, setEditingPolicy] = useState<WarrantyPolicy | null>(null);
+  const draftScope = { userId: actor?.userId ?? "anonymous", dataset: actor?.isDemo ? "demo" as const : "live" as const };
+  const [policyForm, setPolicyForm, discardPolicyDraft] = useWarrantyDraftState<PolicyFormState>(
+    { ...draftScope, task: "policy", entityId: editingPolicy?.policyId ?? "new", version: editingPolicy?.version ?? 0 },
+    () => editingPolicy ? policyFormFrom(editingPolicy) : freshPolicyForm(),
+  );
   const [policyError, setPolicyError] = useState("");
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [publishTarget, setPublishTarget] = useState<string | null>(null);
   const [publishConfirmed, setPublishConfirmed] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [issuePolicy, setIssuePolicy] = useState("");
-  const [issueJob, setIssueJob] = useState("");
-  const [issueDate, setIssueDate] = useState("");
+  const [issueSelection, setIssueSelection, discardIssueSelection] = useWarrantyDraftState(
+    { ...draftScope, task: "issue", entityId: `selection:${state.currentBranch}`, version: 0 },
+    () => ({ policy: "" }),
+  );
+  const issuePolicy = issueSelection.policy;
+  const setIssuePolicy = (policy: string) => setIssueSelection({ policy });
+  const [issueFields, setIssueFields, discardIssueFields] = useWarrantyDraftState(
+    { ...draftScope, task: "issue", entityId: `policy:${issuePolicy}:${state.currentBranch}`, version: Number(issuePolicy.split(":").at(-1)) || 0 },
+    () => ({ job: "", component: "", date: "" }),
+  );
+  const issueJob = issueFields.job;
+  const issueComponent = issueFields.component;
+  const issueDate = issueFields.date;
+  const setIssueJob = (job: string) => setIssueFields((current) => reconcileWarrantyIssueDraft(current, { ...current, job }));
+  const setIssueComponent = (component: string) => setIssueFields((current) => ({ ...current, component }));
+  const setIssueDate = (date: string) => setIssueFields((current) => ({ ...current, date }));
+  const [acceptedQuotes, setAcceptedQuotes] = useState<QuoteRevision[]>([]);
+  const [quotesReady, setQuotesReady] = useState(false);
+  const [retiredAuthority, setRetiredAuthority] = useState<{ key: string; outcome: "approved" | "not-retired" | "missing-accepted-binding" | "owner-exception-required" } | null>(null);
   const [issueError, setIssueError] = useState("");
   const [issuing, setIssuing] = useState(false);
   const [voidingId, setVoidingId] = useState<string | null>(null);
   const [voidReason, setVoidReason] = useState("");
   const [voidError, setVoidError] = useState("");
   const [savingVoid, setSavingVoid] = useState(false);
-  const [claimWarrantyId, setClaimWarrantyId] = useState("");
-  const [claimSummary, setClaimSummary] = useState("");
-  const [claimEvidence, setClaimEvidence] = useState("");
+  const [claimSelection, setClaimSelection] = useWarrantyDraftState(
+    { ...draftScope, task: "claim", entityId: `selection:${state.currentBranch}`, version: 0 },
+    () => ({ warrantyId: "" }),
+  );
+  const claimWarrantyId = claimSelection.warrantyId;
+  const setClaimWarrantyId = (warrantyId: string) => setClaimSelection({ warrantyId });
+  const selectedClaimWarranty = state.warranties.find((record) => record.id === claimWarrantyId);
+  const [claimFields, setClaimFields, discardClaimDraft] = useWarrantyDraftState(
+    { ...draftScope, task: "claim", entityId: claimWarrantyId || "none", version: selectedClaimWarranty?.policyVersion ?? 0 },
+    () => ({ summary: "", evidence: "" }),
+  );
+  const claimSummary = claimFields.summary;
+  const claimEvidence = claimFields.evidence;
+  const setClaimSummary = (summary: string) => setClaimFields((current) => ({ ...current, summary }));
+  const setClaimEvidence = (evidence: string) => setClaimFields((current) => ({ ...current, evidence }));
   const [claimError, setClaimError] = useState("");
   const [savingClaim, setSavingClaim] = useState(false);
   const [evidenceStorageReady, setEvidenceStorageReady] = useState<boolean | null>(null);
   const [uploadingClaimId, setUploadingClaimId] = useState<string | null>(null);
   const [evidenceUploadErrors, setEvidenceUploadErrors] = useState<Record<string, string>>({});
-  const [reviewDrafts, setReviewDrafts] = useState<Record<string, string>>({});
+  const [reviewDrafts, setReviewDrafts] = useWarrantyDraftState<Record<string, string>>(
+    { ...draftScope, task: "review", entityId: `scope:${state.currentBranch}`, version: 0 }, () => ({}),
+  );
+  const reviewKey = (claim: WarrantyClaim) => warrantyDraftKey({ ...draftScope, task: "review", entityId: claim.id, version: Date.parse(claim.updatedAt) || 0 });
   const [reviewErrors, setReviewErrors] = useState<Record<string, string>>({});
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [coverageStatusFilter, setCoverageStatusFilter] = useState<WarrantyRecord["status"] | "all">("all");
-  const [verificationEnabled, setVerificationEnabled] = useState(state.warrantyVerificationSettings?.enabled ?? false);
-  const [approvedFields, setApprovedFields] = useState<WarrantyVerificationField[]>(state.warrantyVerificationSettings?.approvedFields ?? []);
+  const [verificationDraft, setVerificationDraft, discardVerificationDraft] = useWarrantyDraftState(
+    { ...draftScope, task: "verification", entityId: "public-settings", version: 0 },
+    () => ({ enabled: state.warrantyVerificationSettings?.enabled ?? false,
+      fields: state.warrantyVerificationSettings?.approvedFields ?? [] as WarrantyVerificationField[] }),
+  );
+  const verificationEnabled = verificationDraft.enabled;
+  const approvedFields = verificationDraft.fields;
+  const setVerificationEnabled = (enabled: boolean) => setVerificationDraft((current) => ({ ...current, enabled }));
+  const setApprovedFields = (next: WarrantyVerificationField[] | ((current: WarrantyVerificationField[]) => WarrantyVerificationField[])) =>
+    setVerificationDraft((current) => ({ ...current, fields: typeof next === "function" ? next(current.fields) : next }));
   const [savingVerificationSettings, setSavingVerificationSettings] = useState(false);
   const [verificationError, setVerificationError] = useState("");
   const [activeVerification, setActiveVerification] = useState<{ warrantyId: string; token: string } | null>(null);
@@ -156,9 +256,20 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
   );
 
   useEffect(() => {
-    setVerificationEnabled(state.warrantyVerificationSettings?.enabled ?? false);
-    setApprovedFields(state.warrantyVerificationSettings?.approvedFields ?? []);
-  }, [state.warrantyVerificationSettings?.enabled, state.warrantyVerificationSettings?.approvedFields]);
+    setShowPolicyForm(false);
+    setEditingPolicy(null);
+    setPolicyForm(freshPolicyForm());
+    setIssuePolicy(""); setIssueJob(""); setIssueComponent(""); setIssueDate("");
+    setClaimWarrantyId(""); setClaimSummary(""); setClaimEvidence("");
+    setReviewDrafts({}); setVoidReason(""); setVoidingId(null);
+    setActiveVerification(null);
+  }, [actor?.userId, actor?.isDemo]);
+
+  useEffect(() => {
+    setIssueJob(""); setIssueComponent(""); setIssueDate("");
+    setClaimWarrantyId(""); setClaimSummary(""); setClaimEvidence("");
+    setReviewDrafts({}); setVoidingId(null); setVoidReason("");
+  }, [state.currentBranch]);
 
   useEffect(() => {
     let active = true;
@@ -167,6 +278,16 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
     });
     return () => { active = false; };
   }, [store.getWarrantyEvidenceStorageStatus]);
+
+  useEffect(() => {
+    if (!canIssue) return;
+    let active = true;
+    setQuotesReady(false);
+    void quoteApi.list().then((revisions) => {
+      if (active) { setAcceptedQuotes(revisions.filter((revision) => revision.state === "accepted")); setQuotesReady(true); }
+    }).catch(() => { if (active) { setAcceptedQuotes([]); setQuotesReady(false); } });
+    return () => { active = false; };
+  }, [canIssue, actor?.userId, actor?.isDemo]);
 
   const accessibleWarranties = useMemo(
     () => state.warranties.filter((item) => branchAllowed(state, item.branchId, allowedBranches)),
@@ -177,16 +298,23 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
     [state.warrantyClaims, state.currentBranch, allowedBranches.join("|")],
   );
   const visiblePolicies = state.warrantyPolicies;
-  const publishedPolicies = visiblePolicies.filter((policy) => policy.status === "published");
+  const publishedPolicies = visiblePolicies.filter((policy) => policy.status === "published" &&
+    Boolean(policy.name.trim() && policy.eligibleServiceIds.length && (policy.coverageKind === "lifetime" ? policy.lifetimeDefinition?.state === "approved" : (policy.durationMonths ?? 0) > 0) &&
+      policy.exclusions.trim() && policy.evidenceRequirements.trim() && policy.responseDays > 0 &&
+      (policy.startRule === "job-delivery" || policy.startRule === "owner-selected-date") &&
+      (policy.reviewRole === "owner" || policy.reviewRole === "branch-manager")));
   const deliveredEligibleJobs = useMemo(() => {
-    if (!canIssue || !publishedPolicies.length) return [];
+    if (!canIssue) return [];
     return state.jobs.filter((job) =>
       job.stage === "delivered" &&
       branchAllowed(state, job.branchId, allowedBranches) &&
-      publishedPolicies.some((policy) => policy.eligibleServiceIds.includes(job.serviceId) &&
-        !accessibleWarranties.some((record) => record.jobId === job.id && record.policyId === policy.policyId)),
+      state.warrantyPolicies.some((policy) => (policy.status === "published" ||
+        (policy.status === "retired" && Boolean(state.bookings.find((booking) => booking.id === job.bookingId)?.acceptedQuoteRef))) &&
+        policy.eligibleServiceIds.includes(job.serviceId) &&
+        (Boolean(state.bookings.find((booking) => booking.id === job.bookingId)?.acceptedQuoteRef) ||
+          !accessibleWarranties.some((record) => record.jobId === job.id && record.policyId === policy.policyId))),
     );
-  }, [canIssue, state.jobs, state.currentBranch, publishedPolicies, accessibleWarranties, allowedBranches.join("|")]);
+  }, [canIssue, state.jobs, state.bookings, state.warrantyPolicies, state.currentBranch, accessibleWarranties, allowedBranches.join("|")]);
   const filteredWarranties = filterWarrantyRecords(accessibleWarranties, query, coverageStatusFilter, (record) => {
     const customer = customerFor(state, record.customerId);
     const vehicle = vehicleFor(state, record.customerId, record.vehicleId);
@@ -214,7 +342,8 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
     setPolicyError("");
     setPolicyForm(source ? {
       policyId: source.policyId, name: source.name, eligibleServiceIds: [...source.eligibleServiceIds],
-      autoIssue: source.autoIssue, startRule: source.startRule, durationMonths: String(source.durationMonths), exclusions: source.exclusions,
+      autoIssue: source.autoIssue, startRule: source.startRule, durationMonths: source.durationMonths == null ? "" : String(source.durationMonths), exclusions: source.exclusions,
+      ...lifetimeFormFromPolicy(source), lifetimeApproved: false,
       evidenceRequirements: source.evidenceRequirements, reviewRole: source.reviewRole, responseDays: String(source.responseDays),
     } : freshPolicyForm());
     setShowPolicyForm(true);
@@ -236,11 +365,6 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
     setEditingPolicy(policy);
     setTemplateMode(false);
     setPolicyError("");
-    setPolicyForm({
-      policyId: policy.policyId, name: policy.name, eligibleServiceIds: [...policy.eligibleServiceIds],
-      autoIssue: policy.autoIssue, startRule: policy.startRule, durationMonths: String(policy.durationMonths), exclusions: policy.exclusions,
-      evidenceRequirements: policy.evidenceRequirements, reviewRole: policy.reviewRole, responseDays: String(policy.responseDays),
-    });
     setShowPolicyForm(true);
   };
 
@@ -250,7 +374,26 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
     eligibleServiceIds: policyForm.eligibleServiceIds,
     autoIssue: policyForm.autoIssue,
     startRule: policyForm.startRule as WarrantyStartRule,
-    durationMonths: Number(policyForm.durationMonths),
+    coverageKind: policyForm.coverageKind,
+    durationMonths: policyForm.coverageKind === "fixed" ? Number(policyForm.durationMonths) : null,
+    lifetimeDefinition: policyForm.coverageKind === "lifetime" ? (() => {
+      const value: LifetimeDefinition = {
+        subject: policyForm.lifetimeSubject,
+        subjectDefinition: policyForm.lifetimeSubjectDefinition.trim(),
+        terminationConditions: policyForm.lifetimeTerminationConditions.trim(),
+        transferRule: policyForm.lifetimeTransferRule.trim(),
+        maintenanceConditions: policyForm.lifetimeMaintenanceConditions.trim(),
+        issuer: policyForm.lifetimeIssuer.trim(), remedy: policyForm.lifetimeRemedy.trim(),
+        publicWording: { ar: policyForm.lifetimePublicAr.trim(), en: policyForm.lifetimePublicEn.trim() },
+      };
+      const complete = [value.subjectDefinition, value.terminationConditions, value.transferRule,
+        value.maintenanceConditions, value.issuer, value.remedy, value.publicWording.ar, value.publicWording.en,
+        policyForm.lifetimeEvidenceRef.trim(), policyForm.lifetimeApprovalReason.trim()].every(Boolean);
+      return complete && policyForm.lifetimeApproved
+        ? { state: "approved" as const, value, policy: { id: policyForm.policyId || "new-draft", version: editingPolicy?.version ?? 1 },
+          approval: { approvedBy: "owner", approvedAt: new Date().toISOString(), evidenceRef: policyForm.lifetimeEvidenceRef.trim(), reason: policyForm.lifetimeApprovalReason.trim() } }
+        : { state: "unconfigured" as const, missing: ["approved lifetime definition"], draftValue: value };
+    })() : null,
     exclusions: policyForm.exclusions.trim(),
     evidenceRequirements: policyForm.evidenceRequirements.trim(),
     reviewRole: policyForm.reviewRole as "owner" | "branch-manager",
@@ -260,13 +403,19 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
   const savePolicy = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!isOwner || savingPolicy) return;
+    if (editingPolicy && !state.warrantyPolicies.some((policy) =>
+      policy.policyId === editingPolicy.policyId && policy.version === editingPolicy.version && policy.status === "draft")) {
+      setPolicyError(t("This draft changed or is no longer editable. Reopen its current version.", "المسودة اتغيرت أو لم تعد قابلة للتعديل. افتح إصدارها الحالي."));
+      return;
+    }
     setSavingPolicy(true);
     setPolicyError("");
     const input = policyInput();
     const result = editingPolicy
       ? await store.updateWarrantyPolicy(editingPolicy.policyId, editingPolicy.version, {
         name: input.name, eligibleServiceIds: input.eligibleServiceIds, autoIssue: input.autoIssue, startRule: input.startRule,
-        durationMonths: input.durationMonths, exclusions: input.exclusions, evidenceRequirements: input.evidenceRequirements,
+        durationMonths: input.durationMonths, coverageKind: input.coverageKind, lifetimeDefinition: input.lifetimeDefinition,
+        exclusions: input.exclusions, evidenceRequirements: input.evidenceRequirements,
         reviewRole: input.reviewRole, responseDays: input.responseDays,
       })
       : await store.createWarrantyPolicy(input);
@@ -277,7 +426,7 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
     }
     setShowPolicyForm(false);
     setEditingPolicy(null);
-    setPolicyForm(freshPolicyForm());
+    discardPolicyDraft();
     notify(t("Policy draft saved.", "مسودة سياسة الضمان اتحفظت."));
   };
 
@@ -296,13 +445,27 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
     notify(t("Approved policy terms published.", "شروط السياسة المعتمدة اتنشرت."));
   };
 
+  const duplicatePolicy = async (policy: WarrantyPolicy, target: "next-version" | "new-policy") => {
+    setPolicyError("");
+    const result = await store.duplicateWarrantyPolicy(policy.policyId, policy.version, target);
+    if (!result.ok) { setPolicyError(errorCopy(result.error)); return; }
+    notify(t("A new editable draft was created. Review all terms before publishing.", "اتعملت مسودة جديدة قابلة للتعديل. راجع كل الشروط قبل النشر."));
+  };
+
+  const retirePolicy = async (policy: WarrantyPolicy) => {
+    const reason = window.prompt(t("Why is this policy version being retired?", "سبب إيقاف إصدار السياسة ده إيه؟"));
+    if (!reason?.trim()) return;
+    setPolicyError("");
+    const result = await store.retireWarrantyPolicy(policy.policyId, policy.version, reason.trim());
+    if (!result.ok) { setPolicyError(errorCopy(result.error)); return; }
+    notify(t("Policy version retired. Existing coverage and claims remain available.", "تم إيقاف الإصدار. التغطيات والمطالبات الحالية محفوظة."));
+  };
+
   const submitIssue = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const policy = publishedPolicies.find((item) => `${item.policyId}:${item.version}` === issuePolicy);
+    const policy = state.warrantyPolicies.find((item) => `${item.policyId}:${item.version}` === issuePolicy);
     const job = state.jobs.find((item) => item.id === issueJob);
-    if (!canIssue || !policy || !job || job.stage !== "delivered" ||
-      !policy.eligibleServiceIds.includes(job.serviceId) ||
-      !branchAllowed(state, job.branchId, allowedBranches) ||
+    if (!issuePrerequisites.ready || !policy || !job ||
       (policy.startRule === "owner-selected-date" && !issueDate)) {
       setIssueError(t("Choose an eligible, delivered job and complete the required coverage date.", "اختار أمر شغل مؤهل واتسلم، وحدد تاريخ بداية التغطية المطلوب."));
       return;
@@ -311,6 +474,7 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
     setIssueError("");
     const result = await store.issueWarranty({
       policyId: policy.policyId, policyVersion: policy.version, jobId: job.id,
+      componentId: issueComponent || null,
       ...(policy.startRule === "owner-selected-date" ? { startDate: issueDate } : {}),
     });
     setIssuing(false);
@@ -320,6 +484,7 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
     }
     setIssuePolicy("");
     setIssueJob("");
+    setIssueComponent("");
     setIssueDate("");
     notify(t("Warranty coverage issued for the delivered job.", "اتعملت تغطية ضمان لأمر الشغل اللي اتسلم."));
   };
@@ -343,6 +508,11 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
   const submitClaim = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!claimWarrantyId || !claimSummary.trim() || savingClaim) return;
+    if (!selectedClaimWarranty || selectedClaimWarranty.status === "void" ||
+      !branchAllowed(state, selectedClaimWarranty.branchId, allowedBranches)) {
+      setClaimError(t("This coverage is no longer available in your branch scope. Choose a current record.", "التغطية دي لم تعد متاحة في فروعك. اختار سجلاً حالياً."));
+      return;
+    }
     setSavingClaim(true);
     setClaimError("");
     const result = await store.openWarrantyClaim({
@@ -354,8 +524,7 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
       return;
     }
     setClaimWarrantyId("");
-    setClaimSummary("");
-    setClaimEvidence("");
+    discardClaimDraft();
     setTab("claims");
     notify(t("Claim submitted for human review.", "المطالبة اتبعتت لمراجعة موظف."));
   };
@@ -364,7 +533,7 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
     const policy = state.warranties.find((record) => record.id === claim.warrantyId);
     const terms = policy ? getPolicyForWarranty(state, policy) : undefined;
     const allowed = isOwner || (isManager && terms?.reviewRole === "branch-manager");
-    const resolution = (reviewDrafts[claim.id] ?? claim.resolution ?? "").trim();
+    const resolution = (reviewDrafts[reviewKey(claim)] ?? claim.resolution ?? "").trim();
     const finalStatus = status === "approved" || status === "denied" || status === "closed";
     if (!allowed || !canReview || (finalStatus && !resolution)) {
       setReviewErrors((current) => ({ ...current, [claim.id]: finalStatus
@@ -380,6 +549,7 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
       setReviewErrors((current) => ({ ...current, [claim.id]: errorCopy(result.error) }));
       return;
     }
+    setReviewDrafts((current) => { const next = { ...current }; delete next[reviewKey(claim)]; return next; });
     notify(t("Claim review updated.", "مراجعة المطالبة اتحدّثت."));
   };
 
@@ -415,7 +585,7 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
       const copy = uploadErrors[result.error];
       setEvidenceUploadErrors((current) => ({
         ...current,
-        [claim.id]: copy ? t(copy.en, copy.ar) : t("The attachment could not be saved.", "ماقدرناش نحفظ المرفق."),
+        [claim.id]: unknownWriteOutcomeCopy(result.error, lang) ?? (copy ? t(copy.en, copy.ar) : t("The attachment could not be saved.", "ماقدرناش نحفظ المرفق.")),
       }));
       return;
     }
@@ -462,10 +632,53 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
     const label = labels[action];
     return label ? t(label.en, label.ar) : action;
   };
-  const currentIssuePolicy = publishedPolicies.find((policy) => `${policy.policyId}:${policy.version}` === issuePolicy);
+  const selectedIssueJob = state.jobs.find((job) => job.id === issueJob);
+  const selectedBooking = state.bookings.find((booking) => booking.id === selectedIssueJob?.bookingId);
+  const acceptedQuote = acceptedQuotes.find((quote) => quote.ref.quoteId === selectedBooking?.acceptedQuoteRef?.quoteId &&
+    quote.ref.revision === selectedBooking?.acceptedQuoteRef?.revision);
+  const currentIssuePolicy = state.warrantyPolicies.find((policy) => `${policy.policyId}:${policy.version}` === issuePolicy);
+  const boundComponents = acceptedQuote?.input.warrantyBindings.filter((binding) =>
+    binding.policy.id === currentIssuePolicy?.policyId && binding.policy.version === currentIssuePolicy?.version &&
+    acceptedQuote.input.work.some((component) => component.id === binding.componentId && component.serviceId === selectedIssueJob?.serviceId)) ?? [];
+  const authorityKey = `${actor?.userId}:${actor?.isDemo}:${issueJob}:${issueComponent}:${issuePolicy}`;
+  useEffect(() => {
+    if (currentIssuePolicy?.status !== "retired" || !issueJob || !issueComponent) return;
+    let active = true;
+    void warrantyAuthorityApi.retired({ jobId: issueJob, componentId: issueComponent,
+      policyId: currentIssuePolicy.policyId, policyVersion: currentIssuePolicy.version })
+      .then((result) => { if (active) setRetiredAuthority({ key: authorityKey, outcome: result.outcome }); })
+      .catch(() => { if (active) setRetiredAuthority({ key: authorityKey, outcome: "owner-exception-required" }); });
+    return () => { active = false; };
+  }, [authorityKey, currentIssuePolicy?.status]);
+  const currentRetiredOutcome = retiredAuthority?.key === authorityKey ? retiredAuthority.outcome : null;
+  const issuePrerequisites = getWarrantyTaskPrerequisites({
+    state, policy: currentIssuePolicy, jobId: issueJob, componentId: issueComponent || undefined,
+    canIssue, allowedBranches, pending: issuing,
+    componentIds: selectedBooking?.acceptedQuoteRef ? boundComponents.map((binding) => binding.componentId) : undefined,
+    retiredBinding: currentIssuePolicy?.status === "retired" && boundComponents.length > 0 && currentRetiredOutcome === "approved",
+  });
   const eligibleIssueJobs = currentIssuePolicy
-    ? deliveredEligibleJobs.filter((job) => currentIssuePolicy.eligibleServiceIds.includes(job.serviceId))
+    ? deliveredEligibleJobs.filter((job) => currentIssuePolicy.eligibleServiceIds.includes(job.serviceId) &&
+      (Boolean(state.bookings.find((booking) => booking.id === job.bookingId)?.acceptedQuoteRef) ||
+        !accessibleWarranties.some((record) => record.jobId === job.id && record.policyId === currentIssuePolicy.policyId)))
     : deliveredEligibleJobs;
+  const issueReason = issuing ? t("Issuance is in progress.", "إصدار الضمان جارٍ الآن.")
+    : !canIssue || !allowedBranches.length ? t("Your role or branch cannot issue coverage.", "صلاحيتك أو فرعك لا يسمح بإصدار التغطية.")
+    : !state.warrantyPolicies.some((policy) => policy.status === "published" || policy.status === "retired") ? t("An Owner must publish complete policy terms first.", "لازم المالك ينشر شروط سياسة مكتملة أولاً.")
+    : !deliveredEligibleJobs.length ? t("No eligible delivered job is available in your branches.", "مفيش أمر شغل مؤهل ومتسلم في فروعك.")
+    : !issuePolicy || !currentIssuePolicy ? t("Choose a published policy version.", "اختار إصدار سياسة منشور.")
+    : !issueJob ? t("Choose an eligible delivered job.", "اختار أمر شغل مؤهل ومتسلم.")
+    : !eligibleIssueJobs.some((job) => job.id === issueJob) ? t("This job is ineligible or coverage already exists for this policy.", "أمر الشغل غير مؤهل أو له تغطية بالفعل من هذه السياسة.")
+    : selectedBooking?.acceptedQuoteRef && !quotesReady ? t("Accepted component bindings are unavailable. Refresh before issuing.", "روابط المكونات المقبولة غير متاحة. حدّث البيانات قبل الإصدار.")
+    : selectedBooking?.acceptedQuoteRef && !boundComponents.length ? t("The accepted quote has no matching component and policy version. Owner review is required; retired sold terms need explicit authority.", "العرض المقبول لا يحتوي مكوناً وإصدار سياسة مطابقين. يلزم مراجعة المالك وصلاحية صريحة للشروط المتقاعدة.")
+    : selectedBooking?.acceptedQuoteRef && !issueComponent ? t("Choose the accepted component for this policy version.", "اختار المكون المقبول لإصدار السياسة ده.")
+    : selectedBooking?.acceptedQuoteRef && !boundComponents.some((binding) => binding.componentId === issueComponent) ? t("The selected component no longer matches the accepted binding. Choose it again.", "المكون المختار لم يعد مطابقاً للرابط المقبول. اختاره من جديد.")
+    : currentIssuePolicy.status === "retired" && currentRetiredOutcome === null ? t("Checking the accepted version's issuance authority…", "بنتحقق من صلاحية إصدار النسخة المقبولة…")
+    : currentIssuePolicy.status === "retired" && currentRetiredOutcome === "missing-accepted-binding" ? t("This retired version lacks the exact accepted component binding.", "الإصدار المتقاعد ده مفيش له رابط مكون مقبول مطابق.")
+    : currentIssuePolicy.status === "retired" && currentRetiredOutcome !== "approved" ? t("Owner exception required: the accepted issuance authority does not permit this retired version.", "مطلوب استثناء من المالك: صلاحية الإصدار المقبولة لا تسمح بالإصدار المتقاعد ده.")
+    : issuePrerequisites.reasons.includes("duplicate") ? t("Coverage already exists for this component and policy.", "فيه تغطية بالفعل للمكون والسياسة دول.")
+    : currentIssuePolicy.startRule === "owner-selected-date" && !issueDate ? t("Enter the Owner-selected coverage start date.", "حدد تاريخ بداية التغطية الذي اختاره المالك.")
+    : "";
 
   const saveVerificationSettings = async () => {
     if (!isOwner || savingVerificationSettings || (verificationEnabled &&
@@ -518,11 +731,7 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
       setVerificationError(errorCopy(result.error));
       return;
     }
-    document.body.classList.add("printing-warranty-qr");
-    const cleanup = () => document.body.classList.remove("printing-warranty-qr");
-    window.addEventListener("afterprint", cleanup, { once: true });
-    window.print();
-    window.setTimeout(cleanup, 60_000);
+    qrPrintCleanupRef.current = startWarrantyPrint("qr");
   };
 
   const verificationPreview = (record: WarrantyRecord) => ({
@@ -543,10 +752,15 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
       },
     } : {}),
     ...((state.warrantyVerificationSettings?.approvedFields ?? []).includes("startDate") ? { startDate: record.startDate } : {}),
-    ...((state.warrantyVerificationSettings?.approvedFields ?? []).includes("expiresOn") ? { expiresOn: record.expiresOn } : {}),
+    ...((state.warrantyVerificationSettings?.approvedFields ?? []).includes("expiresOn") && record.expiresOn ? { expiresOn: record.expiresOn } : {}),
+    ...((state.warrantyVerificationSettings?.approvedFields ?? []).includes("coverage") ? { coverage: record.coverageKind === "lifetime"
+      ? { kind: "lifetime" as const, ...(record.lifetimeDefinition ? { publicWording: record.lifetimeDefinition.publicWording } : {}) }
+      : { kind: "fixed" as const } } : {}),
   });
 
   function errorCopy(code: string) {
+    const unknown = unknownWriteOutcomeCopy(code, lang);
+    if (unknown) return unknown;
     const known: Record<string, { en: string; ar: string }> = {
       FORBIDDEN: { en: "Your role is not allowed to complete this action.", ar: "دورك مش بيسمحلك تعمل الإجراء ده." },
       ROLE_FORBIDDEN: { en: "Your role or branch access does not allow this action.", ar: "دورك أو صلاحية فرعك مش بيسمحوا بالإجراء ده." },
@@ -620,13 +834,32 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
     {tab === "policies" && isOwner && <>
       <SectionTitle title={t("Policy versions", "إصدارات السياسات")}
         description={t("Published versions are immutable. Save a new draft to change any term.", "الإصدارات المنشورة مش بتتعدل. اعمل مسودة جديدة لو عايز تغيّر أي شرط.")} />
-      {showPolicyForm && <form className="w-form" onSubmit={(event) => void savePolicy(event)}>
+      {showPolicyForm && <PolicyEditor onSubmit={(event) => void savePolicy(event)}>
         <h2 className="w-form-title">{editingPolicy ? t("Edit draft terms", "تعديل شروط المسودة") : policyForm.policyId ? t("Create a new policy version", "إنشاء إصدار جديد للسياسة") : templateMode ? t("Warranty policy template · draft only", "قالب سياسة ضمان · مسودة فقط") : t("Start an empty policy draft", "بدء مسودة سياسة فارغة")}</h2>
         <p className="w-form-desc">{t("No terms are prefilled for a new policy. Complete every field before saving.", "المسودة الجديدة مافيهاش شروط جاهزة. كمّل كل الخانات قبل الحفظ.")}</p>
         {templateMode && <div className="w-hold"><FilePlus2 size={16} /><span><strong>{t("Meeting outline only — not approved terms.", "مخطط للاجتماع بس — مش شروط معتمدة.")}</strong> {t("This template saves only an editable draft. Select eligible services and enter duration, exclusions, evidence rules, reviewer and response time yourself. It cannot be published or issue coverage until every term is completed and the Owner explicitly approves publication.", "القالب ده بيحفظ مسودة قابلة للتعديل بس. اختار الخدمات اللي هتدخل في التغطية واكتب المدة والاستثناءات والأدلة المطلوبة والمراجع ومدة الرد بنفسك. مش هينفع تنشره أو تعمل تغطية قبل ما تكمل كل الشروط والمالك يوافق صراحة على النشر.")}</span></div>}
         <div className="w-form-grid">
           <div><label className="field-label" htmlFor="wp-name">{t("Policy name", "اسم السياسة")} *</label><input id="wp-name" className="field-input" required maxLength={120} placeholder={templateMode ? t("Owner to name this policy", "المالك هيختار اسم السياسة") : ""} value={policyForm.name} onChange={(event) => setPolicyForm({ ...policyForm, name: event.target.value })} /></div>
-          <div><label className="field-label" htmlFor="wp-duration">{t("Coverage duration (months)", "مدة التغطية بالشهور")} *</label><input id="wp-duration" className="field-input" type="number" min="1" max="120" required placeholder={templateMode ? t("Not set — Owner must decide", "لسه ماتحددتش — المالك هو اللي يقرر") : ""} value={policyForm.durationMonths} onChange={(event) => setPolicyForm({ ...policyForm, durationMonths: event.target.value })} /></div>
+          <div><label className="field-label" htmlFor="wp-kind">{t("Coverage kind", "نوع التغطية")}</label><select id="wp-kind" className="field-select" value={policyForm.coverageKind} onChange={(event) => setPolicyForm({ ...policyForm, coverageKind: event.target.value as "fixed" | "lifetime", lifetimeApproved: false })}><option value="fixed">{t("Fixed term", "مدة محددة")}</option><option value="lifetime">{t("Lifetime with approved conditions", "مدى الحياة وفق شروط معتمدة")}</option></select></div>
+          {policyForm.coverageKind === "fixed" && <div><label className="field-label" htmlFor="wp-duration">{t("Coverage duration (months)", "مدة التغطية بالشهور")} *</label><input id="wp-duration" className="field-input" type="number" min="1" max="120" required placeholder={templateMode ? t("Not set — Owner must decide", "لسه ماتحددتش — المالك هو اللي يقرر") : ""} value={policyForm.durationMonths} onChange={(event) => setPolicyForm({ ...policyForm, durationMonths: event.target.value })} /></div>}
+          {policyForm.coverageKind === "lifetime" && <div className="w-field-full">
+            <p>{t("Define the subject and all conditions. An incomplete or unapproved lifetime draft cannot be published or issued.", "حدد موضوع التغطية وكل شروطها. لا يمكن نشر أو إصدار مسودة مدى الحياة الناقصة أو غير المعتمدة.")}</p>
+            <label className="field-label" htmlFor="wp-subject">{t("Lifetime subject", "موضوع التغطية مدى الحياة")}</label>
+            <select id="wp-subject" className="field-select" value={policyForm.lifetimeSubject} onChange={(event) => setPolicyForm({ ...policyForm, lifetimeSubject: event.target.value as LifetimeDefinition["subject"], lifetimeApproved: false })}><option value="purchaser">{t("Purchaser", "المشتري")}</option><option value="vehicle">{t("Vehicle", "المركبة")}</option><option value="ownership">{t("Ownership", "الملكية")}</option><option value="product">{t("Product", "المنتج")}</option><option value="other">{t("Other", "أخرى")}</option></select>
+            {([
+              ["lifetimeSubjectDefinition", "Subject definition", "تعريف الموضوع"],
+              ["lifetimeTerminationConditions", "Termination conditions", "شروط انتهاء التغطية"],
+              ["lifetimeTransferRule", "Transfer rule", "قاعدة نقل التغطية"],
+              ["lifetimeMaintenanceConditions", "Maintenance conditions", "شروط الصيانة"],
+              ["lifetimeIssuer", "Issuer", "جهة الإصدار"],
+              ["lifetimeRemedy", "Remedy", "المعالجة"],
+              ["lifetimePublicEn", "Approved public wording (English)", "الصياغة العامة المعتمدة بالإنجليزية"],
+              ["lifetimePublicAr", "Approved public wording (Arabic)", "الصياغة العامة المعتمدة بالعربية"],
+              ["lifetimeEvidenceRef", "Approval evidence reference", "مرجع إثبات الموافقة"],
+              ["lifetimeApprovalReason", "Approval reason", "سبب الموافقة"],
+            ] as const).map(([key, en, ar]) => <label key={key} className="field-label">{t(en, ar)}<textarea className="field-textarea" value={policyForm[key]} onChange={(event) => setPolicyForm({ ...policyForm, [key]: event.target.value, lifetimeApproved: false })} /></label>)}
+            <label className="w-check"><input type="checkbox" checked={policyForm.lifetimeApproved} onChange={(event) => setPolicyForm({ ...policyForm, lifetimeApproved: event.target.checked })} /><span>{t("I am the Owner and approve this complete bilingual lifetime definition.", "أنا المالك وأوافق على تعريف التغطية مدى الحياة الكامل باللغتين.")}</span></label>
+          </div>}
           <div><label className="field-label" htmlFor="wp-start">{t("Coverage start rule", "التغطية تبدأ إمتى")} *</label>
             <select id="wp-start" className="field-select" required value={policyForm.startRule} onChange={(event) => setPolicyForm({ ...policyForm, startRule: event.target.value as PolicyFormState["startRule"] })}>
               <option value="">{t("Not decided — choose a rule", "لسه ماتحددش — اختار قاعدة")}</option>
@@ -658,14 +891,14 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
             <option value="owner">{t("Owner only", "المالك بس")}</option><option value="branch-manager">{t("Owner or Branch Manager", "المالك أو مدير الفرع")}</option>
           </select></div>
         </div>
-        <p className="w-inline-note"><CalendarClock size={13} /> {t("Expiry calculation: the last covered day is one day before the anniversary of the start date. For a Cairo-local delivery start, the recorded delivery calendar date is used.", "حساب الانتهاء: آخر يوم في التغطية بيكون اليوم اللي قبل ذكرى تاريخ البداية. ولو البداية من تاريخ تسليم العربية بتوقيت القاهرة، بنستخدم تاريخ التسليم المسجل.")}</p>
+        {policyForm.coverageKind === "fixed" && <p className="w-inline-note"><CalendarClock size={13} /> {t("Expiry calculation: the last covered day is one day before the anniversary of the start date. For a Cairo-local delivery start, the recorded delivery calendar date is used.", "حساب الانتهاء: آخر يوم في التغطية بيكون اليوم اللي قبل ذكرى تاريخ البداية. ولو البداية من تاريخ تسليم العربية بتوقيت القاهرة، بنستخدم تاريخ التسليم المسجل.")}</p>}
         {policyError && <div className="w-error" role="alert">{policyError}</div>}
-        <div className="w-form-actions"><button className="btn" type="button" onClick={() => { setShowPolicyForm(false); setPolicyError(""); }}>{t("Cancel", "إلغاء")}</button><button className="btn btn-primary" type="submit" disabled={savingPolicy || !state.services.length || !policyForm.eligibleServiceIds.length}>{savingPolicy ? t("Saving…", "بنحفظ…") : t("Save draft", "احفظ المسودة")}</button></div>
-      </form>}
-      {visiblePolicies.length ? <div className="w-policy-grid">{visiblePolicies.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((policy) => <article className="w-policy" key={`${policy.policyId}:${policy.version}`}>
-          <div className="w-policy-head"><div><div className="eyebrow">{t("Version", "الإصدار")} {policy.version}</div><h3>{policy.name}</h3><div className="w-policy-meta">{policy.policyId} · {t("Created", "اتعملت")} {formatDateTime(policy.createdAt, lang)}</div></div><span className={`w-badge ${policy.status}`}>{labelStatus(policy.status)}</span></div>
+        <div className="w-form-actions"><button className="btn" type="button" onClick={() => { discardPolicyDraft(); setShowPolicyForm(false); setPolicyError(""); }}>{t("Discard and exit", "تجاهل واخرج")}</button><button className="btn btn-primary" type="submit" disabled={savingPolicy || !state.services.length || !policyForm.eligibleServiceIds.length}>{savingPolicy ? t("Saving…", "بنحفظ…") : t("Save draft", "احفظ المسودة")}</button></div>
+      </PolicyEditor>}
+      {visiblePolicies.length ? <div className="w-policy-grid">{visiblePolicies.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((policy) => <PolicySummary key={`${policy.policyId}:${policy.version}`} policy={policy} status={labelStatus(policy.status)} kind={policy.coverageKind === "lifetime" ? t("Lifetime", "مدى الحياة") : t("Fixed", "محدد المدة")} detailLabel={t("Terms and actions", "الشروط والإجراءات")} primaryAction={policy.status === "draft" ? <button type="button" className="btn btn-sm btn-primary" onClick={() => startPolicyEdit(policy)}>{t("Edit draft", "عدل المسودة")}</button> : policy.status === "published" ? <button type="button" className="btn btn-sm" onClick={() => void duplicatePolicy(policy, "next-version")}>{t("Duplicate as new version", "انسخ كإصدار جديد")}</button> : undefined}>
         <div className="w-policy-terms">
-          <div className="w-term"><strong>{t("Duration", "المدة")}</strong>{policy.durationMonths} {t("months", "أشهر")}</div>
+          <div className="w-term"><strong>{t("Duration", "المدة")}</strong>{policy.coverageKind === "lifetime" ? t("Lifetime under approved conditions", "مدى الحياة وفق شروط معتمدة") : `${policy.durationMonths} ${t("months", "أشهر")}`}</div>
+          {policy.coverageKind === "lifetime" && policy.lifetimeDefinition?.state === "approved" && <div className="w-term"><strong>{t("Approved public wording", "الصياغة العامة المعتمدة")}</strong>{policy.lifetimeDefinition.value.publicWording[lang]}</div>}
            <div className="w-term"><strong>{t("Issuance", "الإصدار")}</strong>{policy.autoIssue ? t("Automatic after delivery", "تلقائي بعد التسليم") : t("Manual by authorised staff", "يدوي بواسطة موظف مصرح له")}</div>
           <div className="w-term"><strong>{t("Starts", "البداية")}</strong>{policy.startRule === "job-delivery" ? t("Cairo-local delivery", "تاريخ التسليم بتوقيت القاهرة") : t("Owner-selected date", "تاريخ يحدده المالك")}</div>
           <div className="w-term"><strong>{t("Eligible services", "الخدمات المؤهلة")}</strong>{policy.eligibleServiceIds.map(serviceName).join("، ") || "—"}</div>
@@ -674,45 +907,50 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
           <div className="w-term"><strong>{t("Required evidence", "الأدلة المطلوبة")}</strong>{policy.evidenceRequirements || "—"}</div>
         </div>
         <div className="w-card-actions">
-          {policy.status === "draft" && <button type="button" className="btn btn-sm" onClick={() => startPolicyEdit(policy)}><Wrench size={13} />{t("Edit draft", "عدّل المسودة")}</button>}
-          {policy.status === "published" && <button type="button" className="btn btn-sm" onClick={() => startPolicyCreate(policy)}><FilePlus2 size={13} />{t("New version", "اعمل إصدار جديد")}</button>}
-          {policy.status === "draft" && <button type="button" className="btn btn-sm btn-primary" disabled={!policy.name.trim() || !policy.eligibleServiceIds.length || !policy.startRule || (policy.autoIssue && policy.startRule !== "job-delivery") || !policy.durationMonths || Number(policy.durationMonths) < 1 || !policy.exclusions.trim() || !policy.evidenceRequirements.trim() || !policy.reviewRole || !policy.responseDays || Number(policy.responseDays) < 1} onClick={() => { setPublishTarget(`${policy.policyId}:${policy.version}`); setPublishConfirmed(false); setPolicyError(""); }}><BadgeCheck size={13} />{t("Review & publish", "مراجعة ونشر")}</button>}
+          {policy.status !== "draft" && <button type="button" className="btn btn-sm" onClick={() => void duplicatePolicy(policy, "new-policy")}><FilePlus2 size={13} />{t("Duplicate as new policy", "انسخ كسياسة جديدة")}</button>}
+          {policy.status === "published" && <button type="button" className="btn btn-sm" onClick={() => void retirePolicy(policy)}>{t("Retire version", "أوقف الإصدار")}</button>}
+          {policy.status === "draft" && <button type="button" className="btn btn-sm btn-primary" disabled={!policy.name.trim() || !policy.eligibleServiceIds.length || !policy.startRule || (policy.autoIssue && policy.startRule !== "job-delivery") || (policy.coverageKind === "lifetime" ? policy.lifetimeDefinition?.state !== "approved" : !policy.durationMonths || Number(policy.durationMonths) < 1) || !policy.exclusions.trim() || !policy.evidenceRequirements.trim() || !policy.reviewRole || !policy.responseDays || Number(policy.responseDays) < 1} onClick={() => { setPublishTarget(`${policy.policyId}:${policy.version}`); setPublishConfirmed(false); setPolicyError(""); }}><BadgeCheck size={13} />{t("Review & publish", "مراجعة ونشر")}</button>}
         </div>
         {publishTarget === `${policy.policyId}:${policy.version}` && <div className="w-detail-box">
           <label className="w-check"><input type="checkbox" checked={publishConfirmed} onChange={(event) => setPublishConfirmed(event.target.checked)} />
             <span>{t("I am the Owner and explicitly approve these complete Go Stores coverage terms for publication.", "أنا المالك وبوافق صراحة على شروط تغطية Go Stores كاملة ونشرها.")}</span>
           </label>
-          <p>{t("Publishing locks this version. Expiry is the final covered day before the start-date anniversary.", "بعد النشر مش هينفع تعدّل الإصدار ده. آخر يوم في التغطية هو اليوم اللي قبل ذكرى تاريخ البداية.")}</p>
+          <p>{policy.coverageKind === "lifetime" ? t("Publishing locks the approved lifetime definition and bilingual public wording. Claims still require review against its conditions.", "النشر يثبت تعريف التغطية مدى الحياة والصياغة العامة باللغتين. المطالبات تظل خاضعة لمراجعة الشروط.") : t("Publishing locks this version. Expiry is the final covered day before the start-date anniversary.", "بعد النشر مش هينفع تعدّل الإصدار ده. آخر يوم في التغطية هو اليوم اللي قبل ذكرى تاريخ البداية.")}</p>
           {policyError && <div className="w-error" role="alert">{policyError}</div>}
           <div className="w-card-actions"><button className="btn btn-sm" type="button" onClick={() => { setPublishTarget(null); setPublishConfirmed(false); }}>{t("Cancel", "إلغاء")}</button><button className="btn btn-sm btn-primary" type="button" disabled={!publishConfirmed || publishing} onClick={() => void publishPolicy(policy)}>{publishing ? t("Publishing…", "بننشر…") : t("Publish approved version", "انشر الإصدار المعتمد")}</button></div>
         </div>}
-      </article>)}</div> : <EmptyState title={t("No warranty policy versions", "مفيش إصدارات لسياسة ضمان")} text={t("Start with an empty draft. Terms are never pre-approved or silently published.", "ابدأ بمسودة فاضية. مافيش شروط بتتوافق أو تتنشر من غير موافقة.")} />}
+      </PolicySummary>)}</div> : <EmptyState title={t("No warranty policy versions", "مفيش إصدارات لسياسة ضمان")} text={t("Start with an empty draft. Terms are never pre-approved or silently published.", "ابدأ بمسودة فاضية. مافيش شروط بتتوافق أو تتنشر من غير موافقة.")} />}
     </>}
 
     {tab === "coverage" && <>
-      {!publishedPolicies.length && <div className="w-hold"><AlertTriangle size={17} /><div><strong>{t("Coverage issuance is on hold", "إصدار التغطية موقوف مؤقتاً")}</strong><br />{t("No warranty policy is published, so no coverage is active and no warranty can be issued. An Owner must approve and publish complete terms first.", "مفيش سياسة ضمان منشورة، فمفيش تغطية شغالة ومش ممكن نعمل ضمان. لازم المالك يوافق على الشروط كاملة وينشرها الأول.")}</div></div>}
-      {canIssue && publishedPolicies.length > 0 && <form className="w-form w-section-gap" onSubmit={(event) => void submitIssue(event)}>
+      {!publishedPolicies.length && <div className="w-hold"><AlertTriangle size={17} /><div><strong>{t("General issuance is on hold", "الإصدار العام موقوف مؤقتاً")}</strong><br />{t("No current policy is published. An exact retired version from a previously accepted component may require an Owner-approved exception; the server checks that authority.", "لا توجد سياسة حالية منشورة. الإصدار المتقاعد المرتبط بمكون مقبول سابقاً قد يتطلب استثناءً معتمداً من المالك؛ الخادم يتحقق من الصلاحية.")}</div></div>}
+      <form className="w-form w-section-gap" onSubmit={(event) => void submitIssue(event)}>
         <h2 className="w-form-title">{t("Issue coverage for delivered work", "اعمل تغطية لشغل اتسلم")}</h2>
         <p className="w-form-desc">{t("Only delivered jobs, eligible services and your permitted branches are available here.", "هنا هتلاقي أوامر الشغل اللي اتسلمت، والخدمات المؤهلة، والفروع المسموح لك تدخلها بس.")}</p>
+        <p className="w-inline-note" role="status">{t("Guided step", "الخطوة الموجهة")} {!issuePolicy ? `1/3 · ${t("Policy", "السياسة")}` : !issueJob ? `2/3 · ${t("Delivered job", "أمر الشغل المسلّم")}` : `3/3 · ${t("Binding and confirmation", "الرابط والتأكيد")}`}</p>
         {deliveredEligibleJobs.length ? <div className="w-form-grid">
-          <div><label htmlFor="issue-policy" className="field-label">{t("Published policy", "السياسة المنشورة")} *</label><select id="issue-policy" className="field-select" required value={issuePolicy} onChange={(event) => { setIssuePolicy(event.target.value); setIssueJob(""); setIssueDate(""); setIssueError(""); }}>
-            <option value="">{t("Choose policy version", "اختار إصدار السياسة")}</option>{publishedPolicies.map((policy) => <option key={`${policy.policyId}:${policy.version}`} value={`${policy.policyId}:${policy.version}`}>{policy.name} · v{policy.version}</option>)}
+          <div><label htmlFor="issue-policy" className="field-label">{t("Policy version", "إصدار السياسة")} *</label><select id="issue-policy" className="field-select" required value={issuePolicy} onChange={(event) => { setIssuePolicy(event.target.value); setIssueJob(""); setIssueComponent(""); setIssueDate(""); setIssueError(t("Policy version changed; choose an eligible job and binding again.", "إصدار السياسة اتغير؛ اختار أمر شغل ورابط مؤهل من جديد.")); }}>
+            <option value="">{t("Choose policy version", "اختار إصدار السياسة")}</option>{state.warrantyPolicies.filter((policy) => policy.status === "published" || policy.status === "retired").map((policy) => <option key={`${policy.policyId}:${policy.version}`} value={`${policy.policyId}:${policy.version}`}>{policy.name} · v{policy.version} · {labelStatus(policy.status)}</option>)}
           </select></div>
-          <div><label htmlFor="issue-job" className="field-label">{t("Delivered job", "أمر العمل المسلّم")} *</label><select id="issue-job" className="field-select" required value={issueJob} onChange={(event) => { setIssueJob(event.target.value); setIssueError(""); }}>
+          {issuePolicy && <div><label htmlFor="issue-job" className="field-label">{t("Delivered job", "أمر العمل المسلّم")} *</label><select id="issue-job" className="field-select" required value={issueJob} onChange={(event) => { setIssueJob(event.target.value); setIssueError(t("Job changed; choose its component and start date again.", "أمر الشغل اتغير؛ اختار المكون وتاريخ البداية من جديد.")); }}>
             <option value="">{t("Choose eligible job", "اختار أمر شغل مؤهل")}</option>{eligibleIssueJobs.map((job) => <option key={job.id} value={job.id}>{customerName(job.customerId)} · {serviceName(job.serviceId)} · {branchName(job.branchId)} · {job.id}</option>)}
-          </select></div>
+          </select></div>}
+          {selectedBooking?.acceptedQuoteRef && <div><label htmlFor="issue-component" className="field-label">{t("Accepted bundle component", "المكون المقبول في الحزمة")} *</label><select id="issue-component" className="field-select" required value={issueComponent} onChange={(event) => { setIssueComponent(event.target.value); setIssueError(""); }}><option value="">{t("Choose bound component", "اختار المكون المرتبط")}</option>{boundComponents.map((binding) => <option key={binding.componentId} value={binding.componentId}>{binding.componentId}</option>)}</select></div>}
           {currentIssuePolicy?.startRule === "owner-selected-date" && <div><label htmlFor="issue-date" className="field-label">{t("Owner-selected coverage start", "تاريخ بداية التغطية اللي حدده المالك")} *</label><input id="issue-date" className="field-input" type="date" required value={issueDate} onChange={(event) => setIssueDate(event.target.value)} />
-            {issueDate && <p className="w-inline-note">{t("Last covered day", "آخر يوم في التغطية")}: <strong>{expiryPreview(issueDate, currentIssuePolicy.durationMonths) || "—"}</strong></p>}</div>}
+            {issueDate && <p className="w-inline-note">{currentIssuePolicy.coverageKind === "lifetime" ? t("Lifetime under approved conditions; no fixed expiry", "مدى الحياة وفق شروط معتمدة؛ بدون تاريخ انتهاء محدد") : <>{t("Last covered day", "آخر يوم في التغطية")}: <strong>{currentIssuePolicy.durationMonths ? expiryPreview(issueDate, currentIssuePolicy.durationMonths) || "—" : "—"}</strong></>}</p>}</div>}
         </div> : <div className="w-empty-symbol"><Wrench size={18} /><p className="w-inline-note">{t("No eligible delivered jobs are available for the published policies in your branch scope.", "مفيش أوامر شغل مؤهلة واتسلمت للسياسات المنشورة ضمن الفروع المتاحة لحسابك.")}</p></div>}
         {issueError && <div className="w-error" role="alert">{issueError}</div>}
-        <div className="w-form-actions"><button className="btn btn-primary" type="submit" disabled={issuing || !deliveredEligibleJobs.length || !issuePolicy || !issueJob}>{issuing ? t("Issuing…", "بنجهّز الضمان…") : t("Issue warranty", "اعمل الضمان")}</button></div>
-      </form>}
+        <div className="w-form-actions"><button className="btn" type="button" disabled={issuing} onClick={() => { discardIssueFields(); discardIssueSelection(); setIssueError(""); }}>{t("Discard selection", "تجاهل الاختيار")}</button><button className="btn btn-primary" type="submit" aria-describedby={issueReason ? "w-issue-reason" : undefined} disabled={Boolean(issueReason)}>{issuing ? t("Issuing…", "بنجهّز الضمان…") : t("Issue warranty", "اعمل الضمان")}</button></div>
+        {issueReason && <p id="w-issue-reason" className="w-inline-note" role="status">{issueReason}</p>}
+        {currentIssuePolicy?.status === "retired" && currentRetiredOutcome === "approved" && <p className="w-inline-note" role="status">{t("The exact accepted issuance authority permits this retired version. The server will verify it again on issue.", "صلاحية الإصدار المقبولة تسمح بالإصدار المتقاعد ده. الخادم هيتحقق منها تاني عند الإصدار.")}</p>}
+      </form>
       {isReception && <p className="w-inline-note"><LockKeyhole size={13} />{t("Reception can search records and open claims. Issuing coverage, changing policies and voiding records are restricted.", "الاستقبال يقدر يدور في السجلات ويفتح مطالبات. إصدار التغطية وتغيير السياسات وإلغاء السجلات صلاحيات محدودة.")}</p>}
       <div className="w-filterbar w-section-gap"><SectionTitle title={t("Warranty records", "سجلات الضمان")} description={t("Records shown only for branches available to your account and current branch selection.", "السجلات بتظهر للفروع المتاحة لحسابك والفرع المختار دلوقتي بس.")} />
         <label className="w-coverage-filter"><span>{t("Coverage status", "حالة التغطية")}</span><select className="field-select" value={coverageStatusFilter} onChange={(event) => setCoverageStatusFilter(event.target.value as WarrantyRecord["status"] | "all")}>
           <option value="all">{t("All statuses", "كل الحالات")}</option>
           <option value="active">{t("Active", "ساري")}</option>
           <option value="expired">{t("Expired", "منتهي")}</option>
+          <option value="terminated">{t("Terminated", "انتهت التغطية")}</option>
           <option value="void">{t("Void", "ملغي")}</option>
         </select></label>
         <label className="search-wrap"><Search size={16} /><span className="sr-only">{t("Search warranty records", "دوّر في سجلات الضمان")}</span><input className="search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search customer, plate, policy or job…", "دوّر بالعميل أو اللوحة أو السياسة أو أمر الشغل…")} /></label></div>
@@ -724,8 +962,8 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
           .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt));
         const qrEvents = state.warrantyQrPrintEvents.filter((event) => event.warrantyId === record.id)
           .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-        return <article className="w-record" key={record.id}>
-          <div className="w-record-main"><div className="w-record-title"><strong>{customer ? customerDisplay(customer.name, lang) : "—"}</strong><span className={`w-badge ${record.status}`}>{labelStatus(record.status)}</span><span className="w-policy-meta">{record.policyName} · v{record.policyVersion}</span></div>
+        return <CoverageDetail key={record.id} record={record} title={customer ? customerDisplay(customer.name, lang) : "—"} status={labelStatus(record.status)} detailLabel={t("Coverage, history and invoice", "التغطية والسجل والفاتورة")} primaryAction={record.status !== "void" ? <button className="btn btn-sm" type="button" onClick={() => { setClaimWarrantyId(record.id); setClaimError(""); setTab("claims"); }}><ClipboardCheck size={13} />{t("Open claim", "افتح مطالبة")}</button> : undefined}>
+          <div className="w-record-main">
             <div className="w-record-detail"><span>{vehicle?.makeModel ?? "—"}</span><span className="mono">{vehicle?.plate ?? "—"}</span><span>{serviceName(record.serviceId)}</span><span>{branchName(record.branchId)}</span><span>{t("Job", "أمر الشغل")} <bdi>{record.jobId}</bdi></span></div>
             <div className="w-job-history">
               <strong>{t("Work history", "سجل الشغل")}</strong>
@@ -741,8 +979,7 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
             </div>
             {record.status === "void" && record.voidReason && <div className="w-detail-box">{t("Void reason", "سبب الإلغاء")}: {record.voidReason}</div>}
           </div>
-          <div className="w-record-side"><span className="w-record-dates"><span>{t("Starts", "البداية")}<strong>{record.startDate}</strong></span><span>{t("Expires", "الانتهاء")}<strong>{record.expiresOn}</strong></span></span><div className="w-actions">
-             {record.status !== "void" && <button className="btn btn-sm" type="button" onClick={() => { setClaimWarrantyId(record.id); setClaimError(""); setTab("claims"); }}><ClipboardCheck size={13} />{t("Open claim", "افتح مطالبة")}</button>}
+          <div className="w-record-side"><span className="w-record-dates"><span>{t("Starts", "البداية")}<strong>{record.startDate}</strong></span><span>{record.coverageKind === "lifetime" ? t("Lifetime terms", "شروط مدى الحياة") : t("Expires", "الانتهاء")}<strong>{record.coverageKind === "lifetime" ? record.terminatedOn ? `${t("Terminated", "انتهت التغطية")}: ${record.terminatedOn}` : t("Subject to approved conditions", "وفق الشروط المعتمدة") : record.expiresOn}</strong></span></span><div className="w-actions">
              {isOwner && record.status !== "void" && <button className="btn btn-sm btn-danger" type="button" onClick={() => { setVoidingId(voidingId === record.id ? null : record.id); setVoidReason(""); setVoidError(""); }}><AlertTriangle size={13} />{t("Void", "إلغاء")}</button>}
           </div></div>
           {voidingId === record.id && <form className="w-detail-box" onSubmit={(event) => void submitVoid(event)}>
@@ -757,7 +994,7 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
             serviceLabel={serviceName(record.serviceId)}
             branchLabel={branchName(record.branchId)}
           />
-        </article>;
+        </CoverageDetail>;
       })}</div> : <EmptyState title={query ? t("No matching warranty records", "مفيش سجلات ضمان مطابقة") : coverageStatusFilter !== "all" ? t("No warranty records match this status", "مفيش سجلات ضمان بالحالة دي") : t("No warranty records yet", "لسه مافيش سجلات ضمان")}
         text={query || coverageStatusFilter !== "all" ? t("Change the search or status filter.", "غيّر البحث أو فلتر الحالة.") : t("Coverage records appear only after a permitted user issues a published policy against an eligible delivered job.", "سجلات التغطية بتظهر بس لما مستخدم عنده صلاحية يعمل تغطية بسياسة منشورة لأمر شغل مؤهل واتسلم.")} />}
     </>}
@@ -790,7 +1027,7 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
           )}</p>}
         <p className="w-inline-note">{t("Customer name, contact details, full plate and internal job information are never shown.", "اسم العميل وبيانات التواصل ورقم اللوحة الكامل ومعلومات أمر الشغل الداخلية مش هتظهر أبداً.")}</p>
         {verificationError && <div className="w-error" role="alert">{verificationError}</div>}
-        <div className="w-form-actions"><button className="btn btn-primary" type="button" disabled={savingVerificationSettings ||
+        <div className="w-form-actions"><button className="btn" type="button" disabled={savingVerificationSettings} onClick={discardVerificationDraft}>{t("Discard changes", "تجاهل التغييرات")}</button><button className="btn btn-primary" type="button" disabled={savingVerificationSettings ||
           (verificationEnabled && (!approvedFields.includes("service") || !approvedFields.includes("status")))} onClick={() => void saveVerificationSettings()}>
           {savingVerificationSettings ? t("Saving…", "بنحفظ…") : t("Save verification settings", "احفظ إعدادات التحقق")}
         </button></div>
@@ -867,7 +1104,7 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
             {(() => { const record = state.warranties.find((item) => item.id === claimWarrantyId); const policy = record && getPolicyForWarranty(state, record); return policy ? <p className="w-inline-note">{t("Policy evidence requirement", "الأدلة المطلوبة حسب السياسة")}: {policy.evidenceRequirements}</p> : null; })()}
           </div>
         </div>
-        {claimError && <div className="w-error" role="alert">{claimError}</div>}<div className="w-form-actions"><button className="btn" type="button" onClick={() => { setClaimWarrantyId(""); setClaimError(""); }}>{t("Cancel", "إلغاء")}</button><button className="btn btn-primary" type="submit" disabled={savingClaim || !claimSummary.trim()}>{savingClaim ? t("Submitting…", "بنبعت…") : t("Submit claim", "ابعت المطالبة")}</button></div>
+        {claimError && <div className="w-error" role="alert">{claimError}</div>}<div className="w-form-actions"><button className="btn" type="button" onClick={() => { discardClaimDraft(); setClaimWarrantyId(""); setClaimError(""); }}>{t("Cancel", "إلغاء")}</button><button className="btn btn-primary" type="submit" disabled={savingClaim || !claimSummary.trim()}>{savingClaim ? t("Submitting…", "بنبعت…") : t("Submit claim", "ابعت المطالبة")}</button></div>
       </form>}
       <div className="w-filterbar"><SectionTitle title={t("Claim intake & review", "استلام المطالبات ومراجعتها")} description={t("Claims are reviewed by a person assigned under the policy version; final decisions need a written resolution.", "الشخص المحدد في إصدار السياسة بيراجع المطالبات، والقرار النهائي لازم يكون له نتيجة مكتوبة.")} />
         <label className="search-wrap"><Search size={16} /><span className="sr-only">{t("Search claims", "دوّر على المطالبات")}</span><input className="search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search claim, customer or policy…", "دوّر بالمطالبة أو العميل أو السياسة…")} /></label></div>
@@ -878,9 +1115,7 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
         const reviewable = canReview && assigned && (claim.status === "open" || claim.status === "under-review");
         const canAttachEvidence = claim.status === "open" || claim.status === "under-review";
         const isSaving = reviewingId === claim.id;
-        const customer = record && customerFor(state, record.customerId);
-        return <article className="w-claim" key={claim.id}>
-          <div className="w-claim-top"><div><h3>{claim.summary}</h3><div className="w-claim-sub">{claim.id} · {customer ? customerDisplay(customer.name, lang) : "—"} · {record?.policyName ?? "—"} v{record?.policyVersion ?? "—"} · {branchName(claim.branchId)}</div></div><span className={`w-badge ${claim.status}`}>{labelStatus(claim.status)}</span></div>
+        return <ClaimDetail key={claim.id} claim={claim} version={record?.policyVersion} kind={record?.coverageKind === "lifetime" ? t("Lifetime", "مدى الحياة") : t("Fixed", "محدد المدة")} status={labelStatus(claim.status)} detailLabel={t("Evidence and review", "الأدلة والمراجعة")} primaryAction={reviewable && claim.status === "open" ? <button type="button" className="btn btn-sm btn-primary" disabled={isSaving} onClick={() => void updateClaim(claim, "under-review")}>{t("Start review", "ابدأ المراجعة")}</button> : undefined}>
           {claim.evidence && <p><strong>{t("Evidence", "الأدلة")}:</strong> {claim.evidence}</p>}
           <section className="w-evidence" aria-label={t("Claim evidence attachments", "مرفقات المطالبة")}>
             <div className="w-evidence-heading"><strong><Paperclip size={13} />{t("Evidence files", "ملفات الأدلة")}</strong>
@@ -918,17 +1153,17 @@ export function WarrantiesPage({ lang, t, state, notify }: PageProps) {
           <div className="w-claim-sub">{t("Opened by", "فتحها")} {claim.openedBy} · {formatDateTime(claim.createdAt, lang)}{claim.reviewedBy ? ` · ${t("Reviewed by", "راجعها")} ${claim.reviewedBy}` : ""}</div>
           {claim.resolution && <div className="w-detail-box"><strong>{t("Resolution", "نتيجة المراجعة")}:</strong> {claim.resolution}</div>}
           {reviewable ? <div className="w-claim-review">
-            <div><label className="field-label" htmlFor={`resolution-${claim.id}`}>{t("Written resolution for final decisions", "اكتب نتيجة القرار النهائي")}</label><textarea id={`resolution-${claim.id}`} className="field-textarea" maxLength={2000} value={reviewDrafts[claim.id] ?? claim.resolution ?? ""} onChange={(event) => setReviewDrafts((current) => ({ ...current, [claim.id]: event.target.value }))} placeholder={t("Required to approve, deny or close", "لازم تكتب نتيجة عشان توافق أو ترفض أو تقفل")} />
+            <div><label className="field-label" htmlFor={`resolution-${claim.id}`}>{t("Written resolution for final decisions", "اكتب نتيجة القرار النهائي")}</label><textarea id={`resolution-${claim.id}`} className="field-textarea" maxLength={2000} value={reviewDrafts[reviewKey(claim)] ?? claim.resolution ?? ""} onChange={(event) => setReviewDrafts((current) => ({ ...current, [reviewKey(claim)]: event.target.value }))} placeholder={t("Required to approve, deny or close", "لازم تكتب نتيجة عشان توافق أو ترفض أو تقفل")} />
               {!assigned && <p className="w-inline-note">{t("This policy assigns review to the Owner only.", "السياسة دي مخصصة مراجعة المطالبة للمالك بس.")}</p>}
               {reviewErrors[claim.id] && <div className="w-error" role="alert">{reviewErrors[claim.id]}</div>}
             </div><div className="w-actions">
-              {claim.status === "open" && <button type="button" className="btn btn-sm" disabled={isSaving} onClick={() => void updateClaim(claim, "under-review")}>{t("Start review", "ابدأ المراجعة")}</button>}
+              <button type="button" className="btn btn-sm" disabled={isSaving} onClick={() => setReviewDrafts((current) => { const next = { ...current }; delete next[reviewKey(claim)]; return next; })}>{t("Discard review text", "تجاهل نص المراجعة")}</button>
               <button type="button" className="btn btn-sm btn-primary" disabled={isSaving} onClick={() => void updateClaim(claim, "approved")}><Check size={13} />{t("Approve", "وافق")}</button>
               <button type="button" className="btn btn-sm btn-danger" disabled={isSaving} onClick={() => void updateClaim(claim, "denied")}>{t("Deny", "ارفض")}</button>
               <button type="button" className="btn btn-sm" disabled={isSaving} onClick={() => void updateClaim(claim, "closed")}>{t("Close", "اقفل")}</button>
             </div>
           </div> : (canReview && !assigned && (claim.status === "open" || claim.status === "under-review")) ? <div className="w-hold w-section-gap"><LockKeyhole size={15} />{t("On hold for your role: this policy assigns claim review to the Owner only.", "مش متاح لدورك: السياسة دي مخصصة مراجعة المطالبة للمالك بس.")}</div> : null}
-        </article>;
+        </ClaimDetail>;
       })}</div> : <EmptyState title={t("No claims in this branch scope", "مفيش مطالبات في الفروع المتاحة ليك")} text={t("Reception can open a claim from any non-void warranty record. Submitted claims will appear here for assigned human review.", "الاستقبال يقدر يفتح مطالبة من أي سجل ضمان ما اتلغاش. المطالبات هتظهر هنا عشان الشخص المسؤول يراجعها.")} />}
     </>}
 

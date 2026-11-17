@@ -1,14 +1,19 @@
 export type Locale = "ar" | "en";
 export type BranchId = "branch-a" | "branch-b";
-export type PageId = "overview" | "settings" | "bookings" | "workshop" | "customers" | "staff" | "warranties" | "whatsapp";
+export type DateOnly = string;
+export type PageId = "overview" | "settings" | "bookings" | "workshop" | "customers" | "staff" | "warranties" | "whatsapp" | "catalogue" | "quotes" | "promotions" | "reservations" | "benefits" | "transport" | "finance";
 export type GarageRole = "owner" | "branch-manager" | "receptionist" | "technician";
+export type QueueActor = { userId:string;role:GarageRole;branchIds:string[] };
+export type QueueFilter = { branchId:string|"all";kinds?:string[] };
+export type QueueItem = { kind:string;recordId:string;branchId:string;stage:string;nextAction:string|null;waitingReason?:string;committedAt?:string|null };
+export type QueueContributor = (actor:QueueActor,filter:QueueFilter)=>Promise<QueueItem[]>;
 export type DecisionStatus = "proposed" | "active" | "on-hold";
 export type WarrantyPolicyStatus = "draft" | "published" | "retired";
 export type WarrantyStartRule = "job-delivery" | "owner-selected-date";
 export type WarrantyReviewRole = "owner" | "branch-manager";
-export type WarrantyStatus = "active" | "expired" | "void";
+export type WarrantyStatus = "active" | "expired" | "terminated" | "void";
 export type WarrantyClaimStatus = "open" | "under-review" | "approved" | "denied" | "closed";
-export type WarrantyVerificationField = "service" | "status" | "startDate" | "expiresOn" | "branch";
+export type WarrantyVerificationField = "service" | "status" | "startDate" | "expiresOn" | "branch" | "coverage";
 
 export interface WarrantyVerificationSettings {
   enabled: boolean;
@@ -22,6 +27,7 @@ export interface PublicWarrantyVerification {
   branchName?: { en: string; ar: string };
   startDate?: string;
   expiresOn?: string;
+  coverage?: { kind: "fixed" | "lifetime"; publicWording?: { ar: string; en: string } };
 }
 export type JobStage =
   | "booked"
@@ -115,6 +121,8 @@ export interface Booking {
   customerId: string;
   vehicleId: string;
   serviceId: string;
+  workSummary?: { en: string; ar: string };
+  acceptedQuoteRef?: { quoteId: string; revision: number };
   branchId: BranchId;
   dropoffDate: string;
   dropoffTime: string;
@@ -144,13 +152,15 @@ export interface JobEvent {
 }
 
 export interface WarrantyPolicy {
+  coverageKind: "fixed" | "lifetime";
+  lifetimeDefinition: (import("./commercial-policy").Configured<import("./warranty-terms").LifetimeDefinition> & { draftValue?: Partial<import("./warranty-terms").LifetimeDefinition> }) | null;
   policyId: string;
   version: number;
   name: string;
   eligibleServiceIds: string[];
   autoIssue: boolean;
   startRule: WarrantyStartRule;
-  durationMonths: number;
+  durationMonths: number | null;
   exclusions: string;
   evidenceRequirements: string;
   reviewRole: WarrantyReviewRole;
@@ -161,6 +171,9 @@ export interface WarrantyPolicy {
 }
 
 export interface WarrantyRecord {
+  coverageKind: "fixed" | "lifetime";
+  lifetimeDefinition: import("./warranty-terms").LifetimeDefinition | null;
+  terminatedOn: string | null;
   id: string;
   policyId: string;
   policyVersion: number;
@@ -168,10 +181,11 @@ export interface WarrantyRecord {
   customerId: string;
   vehicleId: string;
   jobId: string;
+  componentId?: string | null;
   branchId: BranchId;
   serviceId: string;
   startDate: string;
-  expiresOn: string;
+  expiresOn: string | null;
   status: WarrantyStatus;
   voidReason?: string;
   issuedAt: string;
@@ -277,6 +291,7 @@ export interface GarageState {
   currentBranch: BranchId | "all";
   branches: Branch[];
   services: Service[];
+  effectiveServiceHoursByBranch?: Partial<Record<BranchId, Partial<Record<"tint" | "ceramic", number>>>>;
   decisions: Decision[];
   drafts: DecisionDraft[];
   auditEvents: AuditEvent[];
@@ -294,12 +309,14 @@ export interface GarageState {
 }
 
 export interface WarrantyPolicyInput {
+  coverageKind?: "fixed" | "lifetime";
+  lifetimeDefinition?: (import("./commercial-policy").Configured<import("./warranty-terms").LifetimeDefinition> & { draftValue?: Partial<import("./warranty-terms").LifetimeDefinition> }) | null;
   policyId?: string;
   name: string;
   eligibleServiceIds: string[];
   autoIssue: boolean;
   startRule: WarrantyStartRule;
-  durationMonths: number;
+  durationMonths: number | null;
   exclusions: string;
   evidenceRequirements: string;
   reviewRole: WarrantyReviewRole;
@@ -312,6 +329,7 @@ export interface IssueWarrantyInput {
   policyId: string;
   policyVersion: number;
   jobId: string;
+  componentId?: string | null;
   startDate?: string;
 }
 

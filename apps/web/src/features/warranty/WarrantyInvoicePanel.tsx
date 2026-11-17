@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Pencil, Plus, Printer, Save, Trash2, X } from "lucide-react";
 import { calculateWarrantyInvoiceTotals } from "@garage/domain";
 import type {
@@ -8,7 +8,9 @@ import type {
   WarrantyInvoicePaymentMethod,
   WarrantyRecord,
 } from "@garage/domain";
-import { useGarageStore } from "../../shared/store";
+import { unknownWriteOutcomeCopy, useGarageStore } from "../../shared/store";
+import { startWarrantyPrint } from "./warranty-print";
+import { useWarrantyDraftState } from "./warranty-form-state";
 
 interface WarrantyInvoicePanelProps {
   warranty: WarrantyRecord;
@@ -77,24 +79,30 @@ export function WarrantyInvoicePanel({
   const store = useGarageStore();
   const invoice = store.state?.warrantyInvoiceDrafts.find((item) => item.warrantyId === warranty.id);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<WarrantyInvoiceDraftInput>(emptyDraft);
+  const [draft, setDraft, discardInvoiceDraft] = useWarrantyDraftState<WarrantyInvoiceDraftInput>(
+    { userId: store.actor?.userId ?? "anonymous", dataset: store.actor?.isDemo ? "demo" : "live",
+      task: "invoice", entityId: `${warranty.id}:${invoice?.id ?? "new"}`,
+      version: invoice ? Date.parse(invoice.updatedAt) || 0 : 0 },
+    () => invoice ? inputFromInvoice(invoice) : emptyDraft(),
+  );
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [printPending, setPrintPending] = useState(false);
+  const printAreaRef = useRef<HTMLDivElement>(null);
+  const printCleanupRef = useRef<(() => void) | null>(null);
   const totals = useMemo(
     () => calculateWarrantyInvoiceTotals(draft.items, draft.taxRatePercent, draft.paidAmount),
     [draft.items, draft.taxRatePercent, draft.paidAmount],
   );
 
-  const startBrowserPrint = () => {
-    document.body.classList.add("printing-warranty-invoice");
-    const cleanup = () => document.body.classList.remove("printing-warranty-invoice");
-    window.addEventListener("afterprint", cleanup, { once: true });
-    window.print();
-    window.setTimeout(cleanup, 60_000);
-  };
+  useEffect(() => () => printCleanupRef.current?.(), []);
+
+  useEffect(() => {
+    setEditing(false); setExpanded(false); setError(""); setNotice("");
+    printCleanupRef.current?.();
+  }, [store.actor?.userId, store.actor?.isDemo, warranty.id]);
 
   useEffect(() => {
     if (!editing) setDraft(invoice ? inputFromInvoice(invoice) : emptyDraft());
@@ -104,10 +112,12 @@ export function WarrantyInvoicePanel({
     if (!printPending || !expanded) return;
     const frame = window.requestAnimationFrame(() => {
       setPrintPending(false);
-      startBrowserPrint();
+      if (printAreaRef.current?.id === `w-invoice-${invoice?.id}`) {
+        printCleanupRef.current = startWarrantyPrint("invoice", printAreaRef.current);
+      }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [printPending, expanded]);
+  }, [printPending, expanded, invoice?.id]);
 
   const createDraft = async () => {
     setBusy(true);
@@ -115,7 +125,7 @@ export function WarrantyInvoicePanel({
     const result = await store.createWarrantyInvoiceDraft(warranty.id);
     setBusy(false);
     if (!result.ok) {
-      setError(invoiceErrorText(result.error, locale));
+      setError(unknownWriteOutcomeCopy(result.error, locale) ?? invoiceErrorText(result.error, locale));
       return;
     }
     setDraft({
@@ -137,7 +147,7 @@ export function WarrantyInvoicePanel({
     const result = await store.updateWarrantyInvoiceDraft(warranty.id, draft);
     setBusy(false);
     if (!result.ok) {
-      setError(invoiceErrorText(result.error, locale));
+      setError(unknownWriteOutcomeCopy(result.error, locale) ?? invoiceErrorText(result.error, locale));
       return;
     }
     setEditing(false);
@@ -189,7 +199,9 @@ export function WarrantyInvoicePanel({
         {!editing && <button className="btn btn-sm btn-primary" type="button" onClick={printDraft}>
           <Printer size={13} />{text(locale, "Print draft", "اطبع المسودة")}
         </button>}
+        {store.actor?.role === "owner" && <a className="btn btn-sm" href="/workspace/finance">{text(locale, "Open audited money ledger", "فتح سجل الأموال الخاضع للمراجعة")}</a>}
       </div>
+      {store.actor?.role === "owner" && <p className="w-invoice-payment-meta">{text(locale, "Draft payment fields are legacy notes only. Record verified money events separately in Operational finance.", "حقول الدفع في المسودة ملاحظات قديمة فقط. سجّل أحداث الأموال المؤكدة بشكل منفصل في المالية التشغيلية.")}</p>}
       {expanded && <>
       {invoice.paymentRecordedAt && <p className="w-invoice-payment-meta">
         {text(locale, "Payment entry recorded", "اتسجلت بيانات الدفع")}
@@ -223,12 +235,12 @@ export function WarrantyInvoicePanel({
         </div>
         <label className="w-invoice-notes"><span>{text(locale, "Internal draft note", "ملاحظة داخلية للمسودة")}</span><textarea className="field-textarea" maxLength={1000} value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} /></label>
         <div className="w-invoice-actions">
-          <button className="btn btn-sm" type="button" disabled={busy} onClick={() => { setEditing(false); setError(""); }}><X size={13} />{text(locale, "Cancel", "إلغاء")}</button>
+          <button className="btn btn-sm" type="button" disabled={busy} onClick={() => { discardInvoiceDraft(); setEditing(false); setError(""); }}><X size={13} />{text(locale, "Cancel", "إلغاء")}</button>
           <button className="btn btn-sm btn-primary" type="button" disabled={busy || !draft.items.length || draft.items.some((item) => !item.description.trim() || item.quantity <= 0)} onClick={() => void saveDraft()}><Save size={13} />{busy ? text(locale, "Saving…", "بنحفظ…") : text(locale, "Save draft", "احفظ المسودة")}</button>
         </div>
       </div>}
 
-      <div className="w-invoice-print-area" id={`w-invoice-${invoice.id}`}>
+      <div className="w-invoice-print-area" id={`w-invoice-${invoice.id}`} ref={printAreaRef} dir={locale === "ar" ? "rtl" : "ltr"}>
         <div className="w-invoice-print-title">
           <div><span>{text(locale, "WORKSHOP INVOICE", "فاتورة ورشة")}</span><h3>{text(locale, "DRAFT · NOT A FINAL INVOICE", "مسودة · مش فاتورة نهائية")}</h3></div>
           <bdi>{invoice.id}</bdi>

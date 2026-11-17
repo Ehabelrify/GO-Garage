@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { CircleHelp, History, RotateCcw, Save, ShieldCheck } from "lucide-react";
 import type { BranchId } from "@garage/domain";
-import { useGarageStore } from "../../shared/store";
+import { unknownWriteOutcomeCopy, useGarageStore } from "../../shared/store";
 import { categoryNames, decisionCopy, decisionNames, EmptyState, PageHeading, SectionTitle, valueLabel, type BranchPageProps } from "../../shared/ui";
+import { CommercialPolicyEditor } from "./CommercialPolicyEditor";
+import { AvailabilityEditor } from "./AvailabilityEditor";
 
 const settingDescriptions: Record<string, { question: string; impact: string }> = {
   "booking-confirmation": {
@@ -98,9 +100,9 @@ export function SettingsPage({ lang, t, state, notify, branchName }: BranchPageP
       const scopeKey = key.slice(divider + 1) as BranchId | "business";
       const result = await store.updateSetting(settingId, scopeKey, value);
       if (!result.ok) {
-        setSaveError(result.error === "SETTING_ON_HOLD"
+        setSaveError(unknownWriteOutcomeCopy(result.error, lang) ?? (result.error === "SETTING_ON_HOLD"
           ? t("This setting is not active yet.", "الإعداد ده لسه مش شغّال.")
-          : t("A setting could not be saved. Review access and try again.", "ماقدرناش نحفظ أحد الإعدادات. راجع صلاحيتك وجرّب تاني."));
+          : t("A setting could not be saved. Review access and try again.", "ماقدرناش نحفظ أحد الإعدادات. راجع صلاحيتك وجرّب تاني.")));
         break;
       }
       completed += 1;
@@ -185,6 +187,11 @@ export function SettingsPage({ lang, t, state, notify, branchName }: BranchPageP
       })}
       {!allSettings.length && <EmptyState title={t("No operating settings are configured", "لسه مافيش إعدادات تشغيل")} text={t("The workspace owner can initialize the branch setup before using booking rules.", "المالك يقدر يجهز الفروع قبل استخدام قواعد الحجز.")} />}
     </div>
+
+    {store.actor?.role === "owner" && <CommercialPolicyEditor lang={lang} />}
+    {store.actor?.role === "owner" && state.branches.map(branch => <CommercialPolicyEditor key={`pickup-${branch.id}`} lang={lang} policyId={`pickup-commitment:${branch.id}`} />)}
+    {store.actor?.role === "owner" && ["quoted-value","draft-value","collections","outstanding","direct-cost","recognized-revenue","gross-profit","net-profit"].map(metric => <CommercialPolicyEditor key={`finance-${metric}`} lang={lang} policyId={`finance-definition:${metric}`} />)}
+    {store.actor?.role === "owner" && <AvailabilityEditor lang={lang} branches={state.branches.map(branch=>({id:branch.id,name:branchName(branch.id)}))} />}
 
     <section className="panel section-gap">
       <SectionTitle

@@ -3,15 +3,16 @@ import type { WarrantyClaimStatus } from "@garage/domain";
 export interface AutomaticWarrantyPolicyCandidate {
   policy_id: string;
   version: number;
-  duration_months: number;
+  duration_months: number | null;
+  coverage_kind?: "fixed" | "lifetime";
   eligible_service_ids: string[];
   auto_issue: boolean;
   status: string;
   start_rule: string;
 }
 
-export function selectAutomaticWarrantyPolicy(
-  policies: readonly AutomaticWarrantyPolicyCandidate[],
+export function selectAutomaticWarrantyPolicy<T extends AutomaticWarrantyPolicyCandidate>(
+  policies: readonly T[],
   serviceId: string,
 ) {
   const matches = policies.filter((policy) =>
