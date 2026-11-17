@@ -161,7 +161,7 @@ export async function reserveConfirmedBooking(client: PoolClient, actor: Booking
   else await client.query(
     `INSERT INTO bookings (id, customer_id, vehicle_id, service_id, branch_id, dropoff_date, dropoff_time, expected_pickup, status, created_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'confirmed',$9)`,
-    [bookingId, input.customerId, input.vehicleId, input.serviceId, input.branchId, date, input.dropoffTime,
+    [bookingId, input.customerId, input.vehicleId, input.serviceId, input.branchId, date, input.dropoffTime, expectedPickup,
       actor.kind === "staff" ? actor.userId : "whatsapp-simulation"]);
   const jobId = `job-${randomUUID()}`;
   await client.query("INSERT INTO jobs (id, booking_id, branch_id, stage) VALUES ($1,$2,$3,'booked')", [jobId, bookingId, input.branchId]);

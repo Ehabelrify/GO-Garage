@@ -57,6 +57,18 @@ integration("WhatsApp branch inbox and simulated journey", () => {
       [actorId, actor.email, branchId, otherActorId, `${otherActorId}@example.test`],
     );
     await testPool.query(
+      `INSERT INTO branch_availability_versions
+         (branch_id, version, timezone, opens_at, closes_at, working_weekdays, slot_minutes,
+          daily_intake_limit, bay_counts, effective_from, approved_by, reason)
+       VALUES ($1, 1, 'Africa/Cairo', '08:00', '17:00', ARRAY[0,1,2,3,4,5,6]::integer[], 60,
+               8, '{"clean":1,"general":2}'::jsonb, CURRENT_DATE, $2, 'Fictional integration-test schedule')`,
+      [branchId, actorId],
+    );
+    await testPool.query(
+      "INSERT INTO branch_availability_active (branch_id, version, activated_by) VALUES ($1, 1, $2)",
+      [branchId, actorId],
+    );
+    await testPool.query(
       `INSERT INTO customers (id, name, phone, phone_normalized, preferred_language)
        VALUES ($1, 'Fictional Test Customer', $2, $3, 'en')`,
       [customerId, `+20 100 77${suffix.replaceAll("-", "").slice(0, 6)}`, `2010077${suffix.replaceAll("-", "").slice(0, 6)}`],
@@ -90,6 +102,14 @@ integration("WhatsApp branch inbox and simulated journey", () => {
       if (!testPool) return;
       await testPool.query("DELETE FROM whatsapp_conversations WHERE branch_id = $1", [branchId]);
       await testPool.query(
+        `DELETE FROM booking_idempotency
+         WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)
+            OR job_id IN (SELECT j.id FROM jobs j JOIN bookings b ON b.id = j.booking_id WHERE b.customer_id = $1)`,
+        [customerId],
+      );
+      await testPool.query("DELETE FROM booking_change_idempotency WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)", [customerId]);
+      await testPool.query("DELETE FROM booking_occupancy WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)", [customerId]);
+      await testPool.query(
         `DELETE FROM job_events WHERE job_id IN (
            SELECT j.id FROM jobs j JOIN bookings b ON b.id = j.booking_id WHERE b.customer_id = $1
          )`,
@@ -100,6 +120,10 @@ integration("WhatsApp branch inbox and simulated journey", () => {
       await testPool.query("DELETE FROM customer_branches WHERE customer_id = $1", [customerId]);
       await testPool.query("DELETE FROM vehicles WHERE customer_id = $1", [customerId]);
       await testPool.query("DELETE FROM customers WHERE id = $1", [customerId]);
+      await testPool.query("DELETE FROM branch_availability_audit WHERE branch_id = $1", [branchId]);
+      await testPool.query("DELETE FROM branch_availability_closures WHERE branch_id = $1", [branchId]);
+      await testPool.query("DELETE FROM branch_availability_active WHERE branch_id = $1", [branchId]);
+      await testPool.query("DELETE FROM branch_availability_versions WHERE branch_id = $1", [branchId]);
       await testPool.query("DELETE FROM staff_memberships WHERE clerk_user_id = ANY($1::text[])", [[actorId, otherActorId]]);
       await testPool.query("DELETE FROM operating_settings WHERE setting_id = 'branch-working-hours' AND scope_key = $1", [branchId]);
       await testPool.query("DELETE FROM services WHERE id = $1", [serviceId]);
@@ -117,7 +141,12 @@ integration("WhatsApp branch inbox and simulated journey", () => {
         headers: body ? { "Content-Type": "application/json" } : undefined,
         body: body ? JSON.stringify(body) : undefined,
       });
-      return { response, body: await response.json() as Record<string, any> };
+      const text = await response.text();
+      try {
+        return { response, body: JSON.parse(text) as Record<string, any> };
+      } catch {
+        throw new Error(`${path} returned non-JSON ${response.status}: ${text.slice(0, 220)}`);
+      }
     };
 
     const forbiddenBranch = await request("/conversations?branchId=branch-b");
@@ -127,6 +156,13 @@ integration("WhatsApp branch inbox and simulated journey", () => {
     expect(created.response.status).toBe(201);
     const conversationId = created.body.conversation.id as string;
     expect(created.body.conversation.simulation).toBe(true);
+    const action = async (body: Record<string, unknown>) => {
+      const current = await request(`/conversations/${conversationId}`);
+      return request(`/conversations/${conversationId}/action`, {
+        ...body,
+        expectedVersion: current.body.conversation.version,
+      });
+    };
 
     const unclaimedReply = await request(`/conversations/${conversationId}/messages`, {
       kind: "reply",
@@ -135,15 +171,15 @@ integration("WhatsApp branch inbox and simulated journey", () => {
     expect(unclaimedReply.response.status).toBe(409);
     expect(unclaimedReply.body.code).toBe("CONVERSATION_UNCLAIMED");
 
-    const claimed = await request(`/conversations/${conversationId}/action`, { action: "claim" });
+    const claimed = await action({ action: "claim" });
     expect(claimed.response.status).toBe(200);
     const assignmentList = await request(`/staff?branchId=${branchId}`);
     expect(assignmentList.body.staff.some((member: { userId: string }) => member.userId === otherActorId)).toBe(true);
-    const assigned = await request(`/conversations/${conversationId}/action`, { action: "assign", userId: otherActorId });
+    const assigned = await action({ action: "assign", userId: otherActorId });
     expect(assigned.response.status).toBe(200);
     const assignedDetail = await request(`/conversations/${conversationId}`);
     expect(assignedDetail.body.conversation.assignedUserId).toBe(otherActorId);
-    const reassigned = await request(`/conversations/${conversationId}/action`, { action: "assign", userId: actorId });
+    const reassigned = await action({ action: "assign", userId: actorId });
     expect(reassigned.response.status).toBe(200);
 
     const staffReply = await request(`/conversations/${conversationId}/messages`, {
@@ -153,9 +189,9 @@ integration("WhatsApp branch inbox and simulated journey", () => {
     expect(staffReply.response.status).toBe(201);
     expect(staffReply.body.message.deliveryState).toBe("not-sent");
 
-    expect((await request(`/conversations/${conversationId}/action`, { action: "pending" })).response.status).toBe(200);
-    expect((await request(`/conversations/${conversationId}/action`, { action: "resolve" })).response.status).toBe(200);
-    expect((await request(`/conversations/${conversationId}/action`, { action: "reopen" })).response.status).toBe(200);
+    expect((await action({ action: "pending" })).response.status).toBe(200);
+    expect((await action({ action: "resolve" })).response.status).toBe(200);
+    expect((await action({ action: "reopen" })).response.status).toBe(200);
 
     const receptionistApp = express();
     receptionistApp.use(express.json());
@@ -176,10 +212,11 @@ integration("WhatsApp branch inbox and simulated journey", () => {
       receptionistServer.once("error", reject);
     });
     const receptionistPort = (receptionistServer.address() as AddressInfo).port;
+    const conversationBeforeReceptionistClaim = await request(`/conversations/${conversationId}`);
     const receptionistClaim = await fetch(`http://127.0.0.1:${receptionistPort}/api/whatsapp/conversations/${conversationId}/action`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "claim" }),
+      body: JSON.stringify({ action: "claim", expectedVersion: conversationBeforeReceptionistClaim.body.conversation.version }),
     });
     const receptionistStaffList = await fetch(`http://127.0.0.1:${receptionistPort}/api/whatsapp/staff?branchId=${branchId}`);
     const receptionistStaff = await receptionistStaffList.json() as { staff: Array<{ userId: string }> };
@@ -199,7 +236,7 @@ integration("WhatsApp branch inbox and simulated journey", () => {
     expect(serviceAnswer.body.bot.text).toContain("فحص تجريبي");
     const unread = await request(`/conversations?branchId=${branchId}`);
     expect(unread.body.conversations.find((item: { id: string }) => item.id === conversationId).unreadCount).toBe(1);
-    const markedRead = await request(`/conversations/${conversationId}/action`, { action: "mark-read" });
+    const markedRead = await action({ action: "mark-read" });
     expect(markedRead.response.status).toBe(200);
     const readList = await request(`/conversations?branchId=${branchId}`);
     expect(readList.body.conversations.find((item: { id: string }) => item.id === conversationId).unreadCount).toBe(0);
@@ -210,7 +247,7 @@ integration("WhatsApp branch inbox and simulated journey", () => {
     expect(availability.body.slots).toHaveLength(8);
     expect(availability.body.slots[0].time).toBe("08:00");
     expect(availability.body.slots.at(-1).time).toBe("15:00");
-    expect(availability.body.scheduleNote).toContain("Owner must confirm");
+    expect(availability.body.scheduleNote).toContain("confirmation rechecks capacity");
     expect(availability.body.alternatives.length).toBeGreaterThan(0);
 
     const invalidTimeDraft = await request(`/conversations/${conversationId}/booking-draft`, {
@@ -220,7 +257,7 @@ integration("WhatsApp branch inbox and simulated journey", () => {
       lang: "en",
     });
     expect(invalidTimeDraft.response.status).toBe(400);
-    expect(invalidTimeDraft.body.code).toBe("INVALID_BOOKING_DRAFT");
+    expect(invalidTimeDraft.body.code).toBe("INVALID_DROP_OFF_TIME");
 
     const draft = await request(`/conversations/${conversationId}/booking-draft`, {
       serviceId,
@@ -243,7 +280,7 @@ integration("WhatsApp branch inbox and simulated journey", () => {
       lang: "en",
     });
     expect(confirmed.response.status).toBe(201);
-    expect(confirmed.body.status).toBe("pending");
+    expect(confirmed.body.status).toBe("confirmed");
     expect(confirmed.body.deliveryState).toBe("not-sent");
 
     const changePreview = await request(`/conversations/${conversationId}/booking-change`, {
@@ -305,13 +342,13 @@ integration("WhatsApp branch inbox and simulated journey", () => {
     });
     expect(declined.body.declined).toBe(true);
     const unchanged = await testPool!.query<{ status: string }>("SELECT status FROM bookings WHERE id = $1", [confirmed.body.bookingId]);
-    expect(unchanged.rows[0].status).toBe("pending");
+    expect(unchanged.rows[0].status).toBe("confirmed");
 
     const transcript = await request(`/conversations/${conversationId}`);
     expect(transcript.body.messages.some((message: { kind: string }) => message.kind === "internal-note")).toBe(true);
     expect(transcript.body.events.some((event: { eventType: string }) => event.eventType === "simulation-booking-rescheduled")).toBe(true);
     expect(transcript.body.conversation.simulation).toBe(true);
-    const handoff = await request(`/conversations/${conversationId}/action`, { action: "handoff" });
+    const handoff = await action({ action: "handoff" });
     expect(handoff.response.status).toBe(200);
     const handoffDetail = await request(`/conversations/${conversationId}`);
     expect(handoffDetail.body.conversation.assignedUserId).toBeNull();

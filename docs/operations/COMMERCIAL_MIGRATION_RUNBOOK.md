@@ -2,7 +2,7 @@
 
 ## Scope and current evidence
 
-This runbook covers additive Phase 1 commercial migrations `0011` through `0023`. It is an operating procedure, not evidence that a rehearsal or production migration occurred. As of 2026-11-17, no migration, backup restore, checksum comparison, application rollback, or database write was run for this implementation session.
+This runbook covers Phase 1 migrations `0010` through `0024`, including the booking-idempotency foundation and messaging foundation. It is an operating procedure, not evidence that a rehearsal or production migration occurred. A dated rehearsal record must identify exactly which migrations were tested.
 
 Never run these migrations automatically against ambient `DATABASE_URL`. Use the repository's explicit disposable-target approval guard, and identify the exact host, port, and database without printing credentials.
 
@@ -18,6 +18,7 @@ Never run these migrations automatically against ambient `DATABASE_URL`. Use the
 
 Apply exactly one file at a time in numeric order:
 
+- `0010` booking idempotency
 - `0011` policy versions and activation
 - `0012` catalogue versions
 - `0013` quote versions and acceptance
@@ -25,12 +26,14 @@ Apply exactly one file at a time in numeric order:
 - `0015` branch availability and occupancy
 - `0016` qualification and allocation
 - `0017` reservations
+- `0017a` warranty expiry constraint-name compatibility repair
 - `0018` warranty coverage kinds
 - `0019` warranty component bindings
 - `0020` benefit entitlements
 - `0021` transport coordination
 - `0022` operational money events and reservation-deposit linkage
 - `0023` finance completeness attestations
+- `0024` messaging foundation
 
 After each file, record migration identity, success/failure, schema-only checks, constraint/FK validity, and the same PII-free counts/checksums. New commercial foreign keys for legacy rows must remain null unless the migration has an explicit verified source. Never infer catalogue category, currency, quote acceptance, payment, evidence, lifetime wording, benefit, provider, or finance definition.
 

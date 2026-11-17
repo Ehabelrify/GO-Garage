@@ -53,9 +53,9 @@ export async function attachConfirmedQuoteSnapshot(client:PoolClient,input:{book
   const job = await client.query<{id:string}>("SELECT id FROM jobs WHERE booking_id=$1",[input.bookingId]);
   if (!job.rows[0]) throw new QuoteError(409,"JOB_MISSING","Booking job is required.");
   for (const [position, component] of quote.work.entries()) {
-    const values = [input.bookingId,job.rows[0].id,position,component.id,component.serviceId,component.scopeItemIds,component.occupancyRule.id,component.occupancyRule.version];
-    await client.query("INSERT INTO booking_work_components(booking_id,position,component_id,service_id,scope_item_ids,occupancy_rule_id,occupancy_rule_version) VALUES($1,$3,$4,$5,$6,$7,$8)",values);
-    await client.query("INSERT INTO job_work_components(job_id,position,component_id,service_id,scope_item_ids,occupancy_rule_id,occupancy_rule_version) VALUES($2,$3,$4,$5,$6,$7,$8)",values);
+    const values = [position,component.id,component.serviceId,component.scopeItemIds,component.occupancyRule.id,component.occupancyRule.version];
+    await client.query("INSERT INTO booking_work_components(booking_id,position,component_id,service_id,scope_item_ids,occupancy_rule_id,occupancy_rule_version) VALUES($1,$2,$3,$4,$5,$6,$7)",[input.bookingId,...values]);
+    await client.query("INSERT INTO job_work_components(job_id,position,component_id,service_id,scope_item_ids,occupancy_rule_id,occupancy_rule_version) VALUES($1,$2,$3,$4,$5,$6,$7)",[job.rows[0].id,...values]);
   }
 }
 

@@ -165,22 +165,33 @@ integration("warranty ledger invoices and QR history", () => {
         );
       }
       await testPool.query("DELETE FROM warranty_verification_settings_audit WHERE actor_user_id = $1", [ownerId]);
-      const warrantyIds = [warrantyId, otherWarrantyId, ...(generatedWarrantyId ? [generatedWarrantyId] : [])];
-      await testPool.query("DELETE FROM warranty_qr_print_events WHERE warranty_id = ANY($1::text[])", [warrantyIds]);
-      await testPool.query("DELETE FROM warranty_invoice_drafts WHERE warranty_id = ANY($1::text[])", [warrantyIds]);
-      await testPool.query("DELETE FROM warranty_audit_events WHERE warranty_id = ANY($1::text[])", [warrantyIds]);
-      await testPool.query("DELETE FROM warranty_claims WHERE warranty_id = ANY($1::text[])", [warrantyIds]);
-      await testPool.query("DELETE FROM warranties WHERE id = ANY($1::text[])", [warrantyIds]);
-      await testPool.query("DELETE FROM warranty_policies WHERE policy_id = $1", [policyId]);
-      await testPool.query("DELETE FROM job_events WHERE job_id = ANY($1::text[])", [[jobId, otherJobId, issueJobId]]);
-      await testPool.query("DELETE FROM jobs WHERE id = ANY($1::text[])", [[jobId, otherJobId, issueJobId]]);
-      await testPool.query("DELETE FROM bookings WHERE id = ANY($1::text[])", [[bookingId, otherBookingId, issueBookingId]]);
-      await testPool.query("DELETE FROM customer_branches WHERE customer_id = ANY($1::text[])", [[customerId, otherCustomerId]]);
-      await testPool.query("DELETE FROM vehicles WHERE id = ANY($1::text[])", [[vehicleId, otherVehicleId]]);
-      await testPool.query("DELETE FROM customers WHERE id = ANY($1::text[])", [[customerId, otherCustomerId]]);
-      await testPool.query("DELETE FROM staff_memberships WHERE clerk_user_id = ANY($1::text[])", [[managerId, ownerId]]);
-      await testPool.query("DELETE FROM services WHERE id = $1", [serviceId]);
-      await testPool.query("DELETE FROM branches WHERE id = ANY($1::text[])", [[branchId, otherBranchId]]);
+      const removableWarrantyIds = [warrantyId, otherWarrantyId];
+      await testPool.query("DELETE FROM warranty_qr_print_events WHERE warranty_id = ANY($1::text[])", [removableWarrantyIds]);
+      await testPool.query("DELETE FROM warranty_invoice_drafts WHERE warranty_id = ANY($1::text[])", [removableWarrantyIds]);
+      await testPool.query("DELETE FROM warranty_audit_events WHERE warranty_id = ANY($1::text[])", [removableWarrantyIds]);
+      await testPool.query("DELETE FROM warranty_claims WHERE warranty_id = ANY($1::text[])", [removableWarrantyIds]);
+      await testPool.query("DELETE FROM warranties WHERE id = ANY($1::text[])", [removableWarrantyIds]);
+      if (generatedWarrantyId) {
+        // Issuance history is intentionally immutable; keep its dependent synthetic fixture rows.
+        await testPool.query("DELETE FROM job_events WHERE job_id = ANY($1::text[])", [[jobId, otherJobId]]);
+        await testPool.query("DELETE FROM jobs WHERE id = ANY($1::text[])", [[jobId, otherJobId]]);
+        await testPool.query("DELETE FROM bookings WHERE id = ANY($1::text[])", [[bookingId, otherBookingId]]);
+        await testPool.query("DELETE FROM customer_branches WHERE customer_id = $1", [otherCustomerId]);
+        await testPool.query("DELETE FROM vehicles WHERE id = $1", [otherVehicleId]);
+        await testPool.query("DELETE FROM customers WHERE id = $1", [otherCustomerId]);
+        await testPool.query("DELETE FROM branches WHERE id = $1", [otherBranchId]);
+      } else {
+        await testPool.query("DELETE FROM warranty_policies WHERE policy_id = $1", [policyId]);
+        await testPool.query("DELETE FROM job_events WHERE job_id = ANY($1::text[])", [[jobId, otherJobId, issueJobId]]);
+        await testPool.query("DELETE FROM jobs WHERE id = ANY($1::text[])", [[jobId, otherJobId, issueJobId]]);
+        await testPool.query("DELETE FROM bookings WHERE id = ANY($1::text[])", [[bookingId, otherBookingId, issueBookingId]]);
+        await testPool.query("DELETE FROM customer_branches WHERE customer_id = ANY($1::text[])", [[customerId, otherCustomerId]]);
+        await testPool.query("DELETE FROM vehicles WHERE id = ANY($1::text[])", [[vehicleId, otherVehicleId]]);
+        await testPool.query("DELETE FROM customers WHERE id = ANY($1::text[])", [[customerId, otherCustomerId]]);
+        await testPool.query("DELETE FROM staff_memberships WHERE clerk_user_id = ANY($1::text[])", [[managerId, ownerId]]);
+        await testPool.query("DELETE FROM services WHERE id = $1", [serviceId]);
+        await testPool.query("DELETE FROM branches WHERE id = ANY($1::text[])", [[branchId, otherBranchId]]);
+      }
     } finally {
       if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
       else process.env.DATABASE_URL = originalDatabaseUrl;
