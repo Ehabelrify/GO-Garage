@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useSavedLocale } from "../../../shared/locale";
 import "./PublicWhatsAppDemoPage.css";
 
@@ -37,6 +37,8 @@ function PublicWhatsAppDemoPage() {
   const [handoffStep, setHandoffStep] = useState(0);
   const [customerDraft, setCustomerDraft] = useState("");
   const [typedMessages, setTypedMessages] = useState<Message[]>([]);
+  const customerThreadRef = useRef<HTMLDivElement>(null);
+  const agentThreadRef = useRef<HTMLDivElement>(null);
   const tr = (en: string, ar: string) => isArabic ? ar : en;
   const days = useMemo<DayOption[]>(() => [1, 2, 3].map((offset) => {
     const date = new Date();
@@ -108,6 +110,12 @@ function PublicWhatsAppDemoPage() {
     return [...list, ...typedMessages];
   }, [scenario, selectedBranch, service, selectedDay, selectedTime, confirmed, handoffStep, isArabic, typedMessages]);
 
+  useEffect(() => {
+    [customerThreadRef, agentThreadRef].forEach((threadRef) => {
+      if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
+    });
+  }, [messages.length]);
+
   const resetScenario = (nextScenario: Scenario = scenario) => {
     setScenario(nextScenario);
     setBranchId("");
@@ -129,8 +137,8 @@ function PublicWhatsAppDemoPage() {
     const bookingRequest = /\b(book|booking|appointment|service|price|cost)\b|حجز|موعد|خدمة|سعر|تكلفة/i.test(text);
     const reply = bookingRequest
       ? selectedBranch
-        ? tr("I can guide a sample booking. Choose a service, day and time below, then confirm the fictional booking.", "أقدر أساعدك في حجز تجريبي. اختاري الخدمة واليوم والميعاد من الاختيارات، وبعدها أكدي الحجز الخيالي.")
-        : tr("I can guide a sample booking. Choose a branch, service, day and time below, then confirm the fictional booking.", "أقدر أساعدك في حجز تجريبي. اختاري الفرع والخدمة واليوم والميعاد من الاختيارات، وبعدها أكدي الحجز الخيالي.")
+        ? tr("I can guide a sample booking. Use the choices in this chat to continue, then confirm the fictional booking.", "أقدر أساعدك في حجز تجريبي. استخدمي الاختيارات في المحادثة للمتابعة وبعدها أكدي الحجز الخيالي.")
+        : tr("I can guide a sample booking. Use the choices in this chat to select a branch and continue.", "أقدر أساعدك في حجز تجريبي. استخدمي الاختيارات في المحادثة لاختيار الفرع والمتابعة.")
       : tr("This question needs a person. I’ve moved this sample conversation to the staff handoff queue.", "السؤال ده محتاج موظف. حولت المحادثة التجريبية لفريق الجراج.");
     setTypedMessages((messages) => [
       ...messages,
@@ -164,7 +172,7 @@ function PublicWhatsAppDemoPage() {
     ];
 
   const renderMessages = (agent = false) => (
-    <div className={`demo-thread${agent ? " demo-agent-thread" : ""}`} aria-live="polite" aria-label={tr("Conversation messages", "رسائل المحادثة")}>
+    <div ref={agent ? agentThreadRef : customerThreadRef} className={`demo-thread${agent ? " demo-agent-thread" : ""}`} aria-live="polite" aria-label={tr("Conversation messages", "رسائل المحادثة")}>
       <div className="demo-date-separator">{tr("Today · sample conversation", "اليوم · محادثة تجريبية")}</div>
       {messages.map((message) => {
         const author = message.kind === "customer" ? tr("Mariam · customer", "مريم · العميلة")
@@ -178,11 +186,49 @@ function PublicWhatsAppDemoPage() {
     </div>
   );
 
-  const stepLabel = scenario === "booking"
-    ? confirmed ? tr("Walkthrough complete", "اكتملت الجولة")
-      : tr(`Booking walkthrough · step ${bookingStep + 1} of 5`, `جولة الحجز · الخطوة ${bookingStep + 1} من ٥`)
-    : handoffStep >= 3 ? tr("Handoff walkthrough complete", "اكتملت جولة التحويل")
-      : tr(`Human handoff · step ${Math.min(handoffStep + 1, 4)} of 4`, `التحويل لموظف · الخطوة ${Math.min(handoffStep + 1, 4)} من ٤`);
+  const renderCustomerActions = () => {
+    if (scenario === "booking" && !confirmed) {
+      return <div className="demo-chat-actions" role="group" aria-label={tr("Customer choices", "اختيارات العميل")}>
+        <div className="demo-choice-group">
+          {!selectedBranch && <>
+            <span className="demo-choice-label">{tr("Choose a branch", "اختاري الفرع")}</span>
+            {branches.map((option) => <button type="button" className="demo-choice" aria-pressed={branchId === option.id} key={option.id} onClick={() => { setBranchId(option.id); setServiceId(""); setDayId(""); setTimeId(""); setConfirmed(false); }}>
+              {isArabic ? option.ar : option.en}
+            </button>)}
+          </>}
+          {selectedBranch && !service && <>
+            <span className="demo-choice-label">{tr("Choose a service", "اختاري الخدمة")}</span>
+            {services.map((option) => <button type="button" className="demo-choice" aria-pressed={serviceId === option.id} key={option.id} onClick={() => { setServiceId(option.id); setDayId(""); setTimeId(""); setConfirmed(false); }}>
+              {isArabic ? option.ar : option.en}
+            </button>)}
+          </>}
+          {service && !selectedDay && <>
+            <span className="demo-choice-label">{tr("Choose a day", "اختاري اليوم")}</span>
+            {days.map((option) => <button type="button" className="demo-choice" aria-pressed={dayId === option.id} key={option.id} onClick={() => { setDayId(option.id); setTimeId(""); setConfirmed(false); }}>
+              {isArabic ? option.ar : option.en}
+            </button>)}
+          </>}
+          {selectedDay && !selectedTime && <>
+            <span className="demo-choice-label">{tr("Choose a time", "اختاري الموعد")}</span>
+            {times.map((option) => <button type="button" className="demo-choice" aria-pressed={timeId === option.id} key={option.id} onClick={() => { setTimeId(option.id); setConfirmed(false); }}>
+              {isArabic ? option.ar : option.en}
+            </button>)}
+          </>}
+          {selectedTime && <button type="button" className="demo-choice" onClick={() => setConfirmed(true)}>
+            {tr("Confirm this sample booking", "أكدي الحجز التجريبي")}
+          </button>}
+        </div>
+      </div>;
+    }
+    if (scenario === "handoff" && handoffStep === 0) {
+      return <div className="demo-chat-actions" role="group" aria-label={tr("Customer choices", "اختيارات العميل")}>
+        <button className="demo-choice" type="button" onClick={() => setHandoffStep(1)}>
+          {tr("Connect me with a person", "وصلني بموظف")}
+        </button>
+      </div>;
+    }
+    return null;
+  };
 
   return <div className="public-wa-demo" dir={isArabic ? "rtl" : "ltr"} lang={locale}>
     <header className="demo-header">
@@ -241,6 +287,7 @@ function PublicWhatsAppDemoPage() {
             <span className="demo-online">{tr("Preview", "معاينة")}</span>
           </div>
           {renderMessages()}
+          {renderCustomerActions()}
           <form className="demo-customer-composer" onSubmit={sendCustomerMessage}>
             <input aria-label={tr("Type a customer message", "اكتبي رسالة للعميل")} value={customerDraft} onChange={(event) => setCustomerDraft(event.target.value)} placeholder={tr("Type a message…", "اكتبي رسالة…")} />
             <button type="submit" disabled={!customerDraft.trim()}>{tr("Send", "إرسال")}</button>
@@ -296,43 +343,6 @@ function PublicWhatsAppDemoPage() {
         </article>
       </section>
 
-      <section className="demo-walkthrough" aria-label={tr("Interactive walkthrough", "جولة تفاعلية")}>
-        <header className="demo-walkthrough-head">
-          <div><h2>{scenario === "booking" ? tr("Try the booking flow", "جرّبي خطوات الحجز") : tr("Try a human handoff", "جرّبي التحويل لموظف")}</h2><p>{scenario === "booking" ? tr("Your choices appear in both views above.", "اختياراتك هتظهر في العرضين بالأعلى.") : tr("See where automation steps back and a person steps in.", "شوفي إمتى النظام يسيب المجال لموظف يتدخل.")}</p></div>
-          <span className="demo-mode-pill">{tr("LOCAL INTERACTION", "تفاعل محلي")}</span>
-        </header>
-        <div className="demo-walkthrough-content">
-          {scenario === "booking" ? <div className="demo-choice-group">
-            <span className="demo-choice-label">{tr("1 · Branch", "١ · الفرع")}</span>
-            {branches.map((option) => <button type="button" className="demo-choice" aria-pressed={branchId === option.id} key={option.id} onClick={() => { setBranchId(option.id); setServiceId(""); setDayId(""); setTimeId(""); setConfirmed(false); }}>
-              {isArabic ? option.ar : option.en}
-            </button>)}
-            {selectedBranch && <>
-              <span className="demo-choice-label">{tr("2 · Service", "٢ · الخدمة")}</span>
-              {services.map((option) => <button type="button" className="demo-choice" aria-pressed={serviceId === option.id} key={option.id} onClick={() => { setServiceId(option.id); setDayId(""); setTimeId(""); setConfirmed(false); }}>
-                {isArabic ? option.ar : option.en}
-              </button>)}
-            </>}
-            {service && <>
-              <span className="demo-choice-label">{tr("3 · Day", "٣ · اليوم")}</span>
-              {days.map((option) => <button type="button" className="demo-choice" aria-pressed={dayId === option.id} key={option.id} onClick={() => { setDayId(option.id); setTimeId(""); setConfirmed(false); }}>{isArabic ? option.ar : option.en}</button>)}
-            </>}
-            {selectedDay && <>
-              <span className="demo-choice-label">{tr("4 · Time", "٤ · الساعة")}</span>
-              {times.map((option) => <button type="button" className="demo-choice" aria-pressed={timeId === option.id} key={option.id} onClick={() => { setTimeId(option.id); setConfirmed(false); }}>{isArabic ? option.ar : option.en}</button>)}
-            </>}
-            {selectedTime && <button type="button" className="demo-choice" aria-pressed={confirmed} onClick={() => setConfirmed(true)}>{confirmed ? tr("Confirmed · sample", "تم التأكيد · تجريبي") : tr("5 · Confirm sample booking", "٥ · تأكيد الحجز التجريبي")}</button>}
-          </div> : <div className="demo-choice-group">
-            <span className="demo-choice-label">{tr("Customer", "العميل")}</span>
-            {handoffStep === 0 && <button className="demo-choice" type="button" onClick={() => setHandoffStep(1)}>{tr("Request a person", "طلب التحدث لموظف")}</button>}
-            {handoffStep >= 1 && <span className="demo-choice" aria-live="polite">{handoffStep >= 2 ? tr("Salma has taken over", "سلمى استلمت المحادثة") : tr("Handoff requested", "تم طلب التحويل")}</span>}
-            {handoffStep === 3 && <button className="demo-choice" type="button" onClick={() => setHandoffStep(1)}>{tr("Return to waiting", "العودة للانتظار")}</button>}
-          </div>}
-          <div className="demo-progress-caption"><strong>{stepLabel}</strong>{scenario === "booking"
-            ? tr("This walkthrough uses sample service details and fictional availability.", "الجولة تستخدم تفاصيل خدمة ومواعيد خيالية.")
-            : tr("A safety concern is acknowledged, not diagnosed. A person continues the conversation.", "يتم التعامل مع سؤال السلامة دون تشخيص، ثم يتابع موظف المحادثة.")}</div>
-        </div>
-      </section>
       <div className="demo-footnote"><span aria-hidden="true">i</span><span><strong>{tr("Fictional demonstration data.", "بيانات عرض خيالية.")}</strong> {tr("This preview is not connected to WhatsApp, a live inbox, branch availability or booking records. Nothing is sent, saved or changed outside this page.", "المعاينة غير متصلة بواتساب أو بصندوق وارد حقيقي أو بمواعيد الفرع أو بسجلات الحجز. لا يتم إرسال أو حفظ أو تغيير أي شيء خارج الصفحة.")}</span></div>
     </main>
   </div>;
