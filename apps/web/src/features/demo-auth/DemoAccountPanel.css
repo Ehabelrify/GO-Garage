@@ -165,6 +165,9 @@
 }
 .demo-demo-link:hover { background: #eaf2eb; border-color: #9bbba7; transform: translateY(-1px); }
 .demo-demo-link:focus-visible { outline: 3px solid rgba(23,109,92,.3); outline-offset: 3px; }
+.demo-signout-link { color: #80534d; background: #fff9f7; border-color: #e4d1cc; }
+.demo-signout-link:hover:not(:disabled) { color: #713f39; background: #fbefec; border-color: #d8b9b2; }
+.demo-demo-link:disabled { cursor: wait; opacity: .7; transform: none; }
 .demo-spinner { animation: demo-spin .9s linear infinite; }
 .demo-server-note {
   display: block;

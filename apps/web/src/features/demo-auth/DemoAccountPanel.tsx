@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowUpLeft, ArrowUpRight, Check, CircleAlert, LoaderCircle, MessageCircle, ShieldCheck, Wrench } from "lucide-react";
+import { ArrowUpLeft, ArrowUpRight, Check, CircleAlert, LoaderCircle, LogOut, MessageCircle, ShieldCheck, Wrench } from "lucide-react";
 import "./DemoAccountPanel.css";
 
 type DemoRole = "owner" | "branch-manager" | "receptionist" | "technician";
@@ -21,6 +21,9 @@ const copy = {
     currentIntro: "الجلسة دي شغالة بهوية مؤقتة للعرض.",
     continue: "كمّل لمساحة الشغل",
     whatsappDemo: "جرّب عرض واتساب",
+    signOut: "تسجيل الخروج وتغيير الحساب",
+    signingOut: "جاري تسجيل الخروج…",
+    signOutError: "ماقدرناش نسجل الخروج من حساب العرض.",
     choose: "اختار حساب للعرض",
     note: "الحسابات دي مؤقتة للتطوير، ومش حسابات موظفين حقيقية.",
     loading: "بنتأكد إن حسابات العرض متاحة",
@@ -46,6 +49,9 @@ const copy = {
     currentIntro: "You’re using a temporary demo identity.",
     continue: "Continue to workspace",
     whatsappDemo: "Try the WhatsApp demo",
+    signOut: "Sign out and switch account",
+    signingOut: "Signing out…",
+    signOutError: "Could not sign out of this demo account.",
     choose: "Choose a demo identity",
     note: "Temporary development-only accounts — these are not real staff identities.",
     loading: "Checking demo account availability",
@@ -145,6 +151,26 @@ export function DemoAccountPanel({ lang, onSignedIn, onOpenDemo }: DemoAccountPa
     }
   }
 
+  async function signOutDemo() {
+    if (pending) return;
+    setPending(true);
+    setError("");
+    try {
+      const response = await fetch("/api/demo/session", {
+        method: "DELETE",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) throw new Error(t.signOutError);
+      setSelectedId(accounts.find((account) => account.role !== actor?.role)?.id ?? selectedId);
+      setActor(undefined);
+    } catch {
+      setError(t.signOutError);
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <section className={`demo-panel ${lang === "en" ? "demo-panel-en" : ""}`} dir={lang === "ar" ? "rtl" : "ltr"} aria-labelledby="demo-panel-title">
       <div className="demo-panel-topline">
@@ -186,11 +212,16 @@ export function DemoAccountPanel({ lang, onSignedIn, onOpenDemo }: DemoAccountPa
             <ShieldCheck className="demo-identity-shield" size={18} aria-hidden="true" />
           </div>
           <p className="demo-disclaimer">{t.note}</p>
-          <button className="demo-submit" type="button" onClick={onSignedIn}>
+          <button className="demo-submit" type="button" onClick={onSignedIn} disabled={pending}>
             {t.continue}<Arrow size={16} aria-hidden="true" />
           </button>
-          <button className="demo-demo-link" type="button" onClick={onOpenDemo}>
+          <button className="demo-demo-link" type="button" onClick={onOpenDemo} disabled={pending}>
             <MessageCircle size={15} aria-hidden="true" />{t.whatsappDemo}
+          </button>
+          {error && <p className="demo-inline-error" role="alert"><CircleAlert size={15} />{error}</p>}
+          <button className="demo-demo-link demo-signout-link" type="button" onClick={() => void signOutDemo()} disabled={pending}>
+            {pending ? <LoaderCircle size={15} className="demo-spinner" aria-hidden="true" /> : <LogOut size={15} aria-hidden="true" />}
+            {pending ? t.signingOut : t.signOut}
           </button>
         </div>
       ) : (
