@@ -232,7 +232,10 @@ function ReadyWorkspace({
         </div>
       </header>
       {workspaceTabs.length > 1 && <nav className="workspace-tabs" aria-label={t(`${activeGroup?.en ?? "Workspace"} pages`, `صفحات ${activeGroup?.ar ?? "مساحة العمل"}`)}>
-        <span className="workspace-tabs-label">{t(activeGroup?.en ?? "", activeGroup?.ar ?? "")}</span>
+        <div className="workspace-tabs-copy">
+          <span className="workspace-tabs-label">{t(activeGroup?.en ?? "", activeGroup?.ar ?? "")}</span>
+          {activeGroup && <span className="workspace-tabs-description">{t(activeGroup.descriptionEn, activeGroup.descriptionAr)}</span>}
+        </div>
         <div className="workspace-tabs-list">
           {workspaceTabs.map(({ id, path, en, ar }) => <Link
             key={id}
@@ -287,6 +290,7 @@ function ReadyWorkspace({
         </div>
         {groupedNavItems.map((group) => <section className="mobile-nav-group" key={group.id}>
           <h2>{t(group.en, group.ar)}</h2>
+          <p>{t(group.descriptionEn, group.descriptionAr)}</p>
           <div>{group.items.map(({ id, path, icon: Icon, en, ar }) => <Link
             key={id}
             className={`mobile-route ${page === id ? "active" : ""}`}

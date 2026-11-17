@@ -1,4 +1,4 @@
-﻿import { randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { initialState } from "../seed/seed-data";
@@ -152,7 +152,7 @@ async function estimatePickup(
     weeklyDayOff: branch.weeklyDayOff,
   });
   const reason = lang === "ar"
-    ? `ØªÙ‚Ø¯ÙŠØ± Ù…Ø¨Ù†ÙŠ Ø¹Ù„Ù‰ ${newlyRequestedHours} Ø³Ø§Ø¹Ø© Ø®Ø¯Ù…Ø© Ø¬Ø¯ÙŠØ¯Ø©ØŒ Ùˆ${queueHours.toFixed(1)} Ø³Ø§Ø¹Ø© Ø´ØºÙ„ Ù…ØªØ¨Ù‚ÙŠØ© ÙÙŠ Ù‚Ø§Ø¦Ù…Ø© Ø§Ù„Ø§Ù†ØªØ¸Ø§Ø±ØŒ Ùˆ${bayCount} Ø¨Ø§ÙŠ ${service.bayType === "clean" ? "Ù†Ø¸ÙŠÙ" : "Ø¹Ø§Ø¯ÙŠ"}ØŒ Ùˆ${workingHours} Ø³Ø§Ø¹Ø© ØªØ´ØºÙŠÙ„ ÙŠÙˆÙ…ÙŠØ§Ù‹.`
+    ? `تقدير مبني على ${newlyRequestedHours} ساعة خدمة جديدة، و${queueHours.toFixed(1)} ساعة شغل متبقية في قائمة الانتظار، و${bayCount} باي ${service.bayType === "clean" ? "نظيف" : "عادي"}، و${workingHours} ساعة تشغيل يومياً.`
     : `Estimate uses ${newlyRequestedHours} new service bay-hours, ${queueHours.toFixed(1)} remaining queued bay-hours, ${bayCount} ${service.bayType} bay(s), and ${workingHours} configured work-hours/day.`;
   return { expectedPickup: estimate, reason, calculatedAt: new Date().toISOString() };
 }
@@ -292,14 +292,14 @@ router.post("/conversations/:conversationId/service-question", async (req, res) 
   const lang = parsed.data.lang ?? "en";
   const serviceName = lang === "ar" ? service.name_ar : service.name_en;
   const answer = lang === "ar"
-    ? `${serviceName} Ù…Ø¯Ø±Ø¬Ø© ÙƒØªÙ‚Ø¯ÙŠØ± ØªØ¬Ø±ÙŠØ¨ÙŠ ÙÙ‚Ø· (${service.price_label}). Ø§Ù„Ø³Ø¹Ø± Ø§Ù„Ù†Ù‡Ø§Ø¦ÙŠ Ù…Ø­ØªØ§Ø¬ ÙØ­Øµ Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©. Ù…Ø¯Ø© Ø§Ù„Ø´ØºÙ„ Ø§Ù„Ù…Ù‚Ø¯Ø±Ø© ${Number(service.bay_hours)} Ø³Ø§Ø¹Ø© Ø¨Ø§ÙŠ. Ù…Ø§ÙÙŠØ´ Ø­Ø¬Ø² Ø£Ùˆ Ø±Ø³Ø§Ù„Ø© Ø§ØªØ¨Ø¹ØªØª.`
+    ? `${serviceName} مدرجة كتقدير تجريبي فقط (${service.price_label}). السعر النهائي محتاج فحص العربية. مدة الشغل المقدرة ${Number(service.bay_hours)} ساعة باي. مافيش حجز أو رسالة اتبعتت.`
     : `${serviceName} is shown as a sample quote only (${service.price_label}). A final price requires vehicle inspection. Estimated work is ${Number(service.bay_hours)} bay-hours. No booking or message was sent.`;
   const messages = await withTransaction(async (client) => {
     const customerMessage = await client.query(
       `INSERT INTO whatsapp_messages (id, conversation_id, kind, body)
        VALUES ($1, $2, 'customer', $3)
        RETURNING id, kind, body AS text, created_at AS "createdAt"`,
-      [id("wa-message"), conversation.id, lang === "ar" ? `Ø³Ø¤Ø§Ù„ Ø¹Ù† Ø®Ø¯Ù…Ø© ${serviceName}` : `Question about ${serviceName}`],
+      [id("wa-message"), conversation.id, lang === "ar" ? `سؤال عن خدمة ${serviceName}` : `Question about ${serviceName}`],
     );
     const botMessage = await client.query(
       `INSERT INTO whatsapp_messages (id, conversation_id, kind, body)
@@ -593,10 +593,10 @@ router.post("/conversations/:conversationId/booking-draft", async (req, res) => 
       ? (await client.query<{ name_ar: string }>("SELECT name_ar FROM services WHERE id = $1", [service.id])).rows[0]?.name_ar ?? service.name
       : service.name;
     const customerMessage = parsed.data.lang === "ar"
-      ? `Ø¹Ø§ÙŠØ² Ø£Ø³ÙŠØ¨ Ø§Ù„Ø¹Ø±Ø¨ÙŠØ© Ù„Ø®Ø¯Ù…Ø© ${serviceName} ÙŠÙˆÙ… ${parsed.data.date} Ø§Ù„Ø³Ø§Ø¹Ø© ${parsed.data.time}.`
+      ? `عايز أسيب العربية لخدمة ${serviceName} يوم ${parsed.data.date} الساعة ${parsed.data.time}.`
       : `I'd like to drop off my car for ${serviceName} on ${parsed.data.date} at ${parsed.data.time}.`;
     const botMessage = parsed.data.lang === "ar"
-      ? `Ø§Ù„Ù…ÙˆØ¹Ø¯ Ø§Ù„Ù…Ù‚ØªØ±Ø­ Ù…ØªØ§Ø­ Ø­Ø³Ø¨ Ø³Ø¹Ø© Ø§Ù„ÙØ±Ø¹ Ø§Ù„Ø­Ø§Ù„ÙŠØ©. Ù…ÙˆØ¹Ø¯ Ø§Ù„Ø§Ø³ØªÙ„Ø§Ù… Ø§Ù„ØªÙ‚Ø¯ÙŠØ±ÙŠ ${eta.expectedPickup}. Ø¯ÙŠ Ù…Ø³ÙˆØ¯Ø© ÙÙ‚Ø·ØŒ ÙˆØ§Ù„Ø­Ø¬Ø² Ù…Ø´ Ù‡ÙŠØªØ£ÙƒØ¯ Ø¥Ù„Ø§ Ø¨Ø¹Ø¯ Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø©.`
+      ? `الموعد المقترح متاح حسب سعة الفرع الحالية. موعد الاستلام التقديري ${eta.expectedPickup}. دي مسودة فقط، والحجز مش هيتأكد إلا بعد الموافقة.`
       : `That suggested time fits the branch's current capacity. Estimated pickup: ${eta.expectedPickup}. This is a draft; no booking is confirmed until approval.`;
     await client.query(
       `INSERT INTO whatsapp_messages (id, conversation_id, kind, body)
@@ -740,7 +740,7 @@ router.post("/conversations/:conversationId/booking-change", async (req, res) =>
       await recordEvent(client, conversation.id, "booking-change-declined", "Customer declined the fictional booking change; no booking data changed.", actor.userId);
       return {
         declined: true as const,
-        message: lang === "ar" ? "Ø±ÙØ¶ Ø§Ù„Ø¹Ù…ÙŠÙ„ Ø§Ù„ØªØ¹Ø¯ÙŠÙ„ Ø§Ù„Ø§ÙØªØ±Ø§Ø¶ÙŠØ› Ø§Ù„Ø­Ø¬Ø² Ù„Ù… ÙŠØªØºÙŠØ±." : "The customer declined the fictional change; the booking is unchanged.",
+        message: lang === "ar" ? "رفض العميل التعديل الافتراضي؛ الحجز لم يتغير." : "The customer declined the fictional change; the booking is unchanged.",
       };
     }
     let bookingId = parsed.data.bookingId;
@@ -791,7 +791,7 @@ router.post("/conversations/:conversationId/booking-change", async (req, res) =>
     if (!parsed.data.confirmed) {
       let pickup = dateValue(booking.expected_pickup);
       let reason = lang === "ar"
-        ? "Ø¥Ù„ØºØ§Ø¡ Ø§ÙØªØ±Ø§Ø¶ÙŠ Ø¨Ø§Ù†ØªØ¸Ø§Ø± Ù…ÙˆØ§ÙÙ‚Ø© Ø§Ù„Ø¹Ù…ÙŠÙ„."
+        ? "إلغاء افتراضي بانتظار موافقة العميل."
         : "Fictional cancellation awaiting customer confirmation.";
       if (changeAction === "reschedule") {
         const date = targetDate!;
@@ -823,7 +823,7 @@ router.post("/conversations/:conversationId/booking-change", async (req, res) =>
         etaReason: reason,
         etaAt: new Date().toISOString(),
         message: lang === "ar"
-          ? "ØªÙ… ØªØ¬Ù‡ÙŠØ² ØªØ¹Ø¯ÙŠÙ„ Ø§ÙØªØ±Ø§Ø¶ÙŠ. Ø§Ù„Ø­Ø¬Ø² Ù„Ù… ÙŠØªØºÙŠØ±Ø› Ø£ÙƒÙ‘Ø¯ Ù…ÙˆØ§ÙÙ‚Ø© Ø§Ù„Ø¹Ù…ÙŠÙ„ Ù„Ù…Ø­Ø§ÙƒØ§Ø© Ø§Ù„ØªÙ†ÙÙŠØ°."
+          ? "تم تجهيز تعديل افتراضي. الحجز لم يتغير؛ أكّد موافقة العميل لمحاكاة التنفيذ."
           : "A fictional change is ready. The booking is unchanged; confirm the customer's approval to simulate applying it.",
       };
     }
@@ -836,7 +836,7 @@ router.post("/conversations/:conversationId/booking-change", async (req, res) =>
       await client.query("UPDATE whatsapp_booking_drafts SET status = 'confirmed', updated_at = now() WHERE id = $1", [draftId]);
       return {
         cancelled: true as const,
-        message: lang === "ar" ? "ØªÙ… Ø¥Ù„ØºØ§Ø¡ Ø§Ù„Ø­Ø¬Ø² Ø§Ù„Ø§ÙØªØ±Ø§Ø¶ÙŠ Ø¨Ø¹Ø¯ Ù…ÙˆØ§ÙÙ‚Ø© Ø§Ù„Ø¹Ù…ÙŠÙ„. Ù„Ù… ØªÙØ±Ø³Ù„ Ø£ÙŠ Ø±Ø³Ø§Ù„Ø©." : "Fictional booking cancelled after customer confirmation. No message was sent.",
+        message: lang === "ar" ? "تم إلغاء الحجز الافتراضي بعد موافقة العميل. لم تُرسل أي رسالة." : "Fictional booking cancelled after customer confirmation. No message was sent.",
       };
     }
     const date = targetDate!;
@@ -853,7 +853,7 @@ router.post("/conversations/:conversationId/booking-change", async (req, res) =>
       expectedPickup: eta.expectedPickup,
       etaReason: eta.reason,
       etaAt: eta.calculatedAt,
-      message: lang === "ar" ? "ØªÙ… ØªØºÙŠÙŠØ± Ù…ÙˆØ¹Ø¯ Ø§Ù„Ø­Ø¬Ø² Ø§Ù„Ø§ÙØªØ±Ø§Ø¶ÙŠ Ø¨Ø¹Ø¯ Ù…ÙˆØ§ÙÙ‚Ø© Ø§Ù„Ø¹Ù…ÙŠÙ„. Ù„Ù… ØªÙØ±Ø³Ù„ Ø£ÙŠ Ø±Ø³Ø§Ù„Ø©." : "Fictional booking rescheduled after customer confirmation. No message was sent.",
+      message: lang === "ar" ? "تم تغيير موعد الحجز الافتراضي بعد موافقة العميل. لم تُرسل أي رسالة." : "Fictional booking rescheduled after customer confirmation. No message was sent.",
     };
   });
   if ("error" in changed) {
@@ -917,16 +917,16 @@ router.post("/conversations/:conversationId/status-lookup", async (req, res) => 
       [job.rows[0].id],
     )
     : { rows: [] as { to_stage: JobStage; created_at: Date }[] };
-  const workSummary=await pool.query<{en:string|null;ar:string|null}>(`SELECT string_agg(s.name_en, ', ' ORDER BY w.position) AS en,string_agg(s.name_ar, 'ØŒ ' ORDER BY w.position) AS ar FROM booking_work_components w JOIN services s ON s.id=w.service_id WHERE w.booking_id=$1`,[booking.id]);
+  const workSummary=await pool.query<{en:string|null;ar:string|null}>(`SELECT string_agg(s.name_en, ', ' ORDER BY w.position) AS en,string_agg(s.name_ar, '، ' ORDER BY w.position) AS ar FROM booking_work_components w JOIN services s ON s.id=w.service_id WHERE w.booking_id=$1`,[booking.id]);
   const milestoneLabels: Record<JobStage, { en: string; ar: string }> = {
-    booked: { en: "Booked", ar: "ØªÙ… Ø§Ù„Ø­Ø¬Ø²" },
-    received: { en: "Received", ar: "ØªÙ… Ø§Ù„Ø§Ø³ØªÙ„Ø§Ù…" },
-    "in-service": { en: "In service", ar: "Ù‚ÙŠØ¯ Ø§Ù„Ø®Ø¯Ù…Ø©" },
-    qc: { en: "Quality check", ar: "ÙØ­Øµ Ø§Ù„Ø¬ÙˆØ¯Ø©" },
-    ready: { en: "Ready", ar: "Ø¬Ø§Ù‡Ø²Ø© Ù„Ù„Ø§Ø³ØªÙ„Ø§Ù…" },
-    delivered: { en: "Delivered", ar: "ØªÙ… Ø§Ù„ØªØ³Ù„ÙŠÙ…" },
-    cancelled: { en: "Cancelled", ar: "Ù…Ù„ØºÙŠ" },
-    "no-show": { en: "No-show", ar: "Ù„Ù… ÙŠØ­Ø¶Ø±" },
+    booked: { en: "Booked", ar: "تم الحجز" },
+    received: { en: "Received", ar: "تم الاستلام" },
+    "in-service": { en: "In service", ar: "قيد الخدمة" },
+    qc: { en: "Quality check", ar: "فحص الجودة" },
+    ready: { en: "Ready", ar: "جاهزة للاستلام" },
+    delivered: { en: "Delivered", ar: "تم التسليم" },
+    cancelled: { en: "Cancelled", ar: "ملغي" },
+    "no-show": { en: "No-show", ar: "لم يحضر" },
   };
   res.json({
     status: booking.status,
@@ -942,7 +942,7 @@ router.post("/conversations/:conversationId/status-lookup", async (req, res) => 
       occurredAt: event.created_at,
     })),
     message: parsed.data.lang === "ar"
-      ? "ØªÙ… Ø§Ù„ØªØ­Ù‚Ù‚ Ù…Ù† Ø§Ù„Ø­Ø§Ù„Ø© Ø§Ù„Ø§ÙØªØ±Ø§Ø¶ÙŠØ©. Ø§Ù„Ù…Ø¹Ø±ÙˆØ¶ Ù‡Ùˆ Ø­Ø§Ù„Ø© Ø§Ù„Ø­Ø¬Ø² ÙˆÙ…ÙˆØ¹Ø¯ Ø§Ø³ØªÙ„Ø§Ù… ØªÙ‚Ø¯ÙŠØ±ÙŠ ÙÙ‚Ø·."
+      ? "تم التحقق من الحالة الافتراضية. المعروض هو حالة الحجز وموعد استلام تقديري فقط."
       : "Fictional status verified. Only booking state and an estimated pickup date are shown.",
     simulation: true,
   });

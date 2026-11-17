@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Plus, Search } from "lucide-react";
 import { bookingAvailabilityApi, unknownWriteOutcomeCopy, useGarageStore, type SlotAvailability } from "../../shared/store";
 import type { BranchId } from "@garage/domain";
@@ -19,13 +19,13 @@ interface BookingForm {
 }
 
 const bookingErrorCopy: Record<string, { en: string; ar: string }> = {
-  INVALID_BOOKING: { en: "Check the customer, vehicle, service, date, and branch.", ar: "Ø±Ø§Ø¬Ø¹ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¹Ù…ÙŠÙ„ ÙˆØ§Ù„Ø¹Ø±Ø¨ÙŠØ© ÙˆØ§Ù„Ø®Ø¯Ù…Ø© ÙˆØ§Ù„ØªØ§Ø±ÙŠØ® ÙˆØ§Ù„ÙØ±Ø¹." },
-  BRANCH_CLOSED: { en: "The branch is closed on this weekday.", ar: "Ø§Ù„ÙØ±Ø¹ Ù…Ù‚ÙÙˆÙ„ ÙÙŠ Ø§Ù„ÙŠÙˆÙ… Ø¯Ù‡." },
-  DAILY_CAP_REACHED: { en: "The branch has reached its daily vehicle intake limit.", ar: "Ø§Ù„ÙØ±Ø¹ ÙˆØµÙ„ Ù„Ù„Ø­Ø¯ Ø§Ù„ÙŠÙˆÙ…ÙŠ Ù„Ø§Ø³ØªÙ‚Ø¨Ø§Ù„ Ø§Ù„Ø¹Ø±Ø¨ÙŠØ§Øª." },
-  BAY_CAPACITY_REACHED: { en: "Bay-hour capacity is full for this date and service.", ar: "Ø³Ø§Ø¹Ø§Øª Ø§Ù„Ø¨Ø§ÙŠØ§Øª Ø®Ù„ØµØª Ù„Ù„ØªØ§Ø±ÙŠØ® ÙˆØ§Ù„Ø®Ø¯Ù…Ø© Ø¯ÙˆÙ„." },
-  BOOKING_NOT_PENDING: { en: "This booking is no longer waiting for confirmation.", ar: "Ø§Ù„Ø­Ø¬Ø² Ø¯Ù‡ Ù…Ø´ Ù…Ø³ØªÙ†ÙŠ ØªØ£ÙƒÙŠØ¯ Ø¯Ù„ÙˆÙ‚ØªÙŠ." },
-  MANAGER_REVIEW_REQUIRED: { en: "This booking needs a manager to confirm it.", ar: "Ù…Ø¯ÙŠØ± Ø§Ù„ÙØ±Ø¹ Ù„Ø§Ø²Ù… ÙŠØ£ÙƒØ¯ Ø§Ù„Ø­Ø¬Ø² Ø¯Ù‡." },
-  JOB_ALREADY_STARTED: { en: "The job has started; use the workshop workflow instead.", ar: "Ø§Ù„Ø´ØºÙ„ Ø¹Ù„Ù‰ Ø§Ù„Ø¹Ø±Ø¨ÙŠØ© Ø¨Ø¯Ø£Ø› ÙƒÙ…Ù‘Ù„ Ù…Ù† ØµÙØ­Ø© Ø§Ù„ÙˆØ±Ø´Ø©." },
+  INVALID_BOOKING: { en: "Check the customer, vehicle, service, date, and branch.", ar: "راجع بيانات العميل والعربية والخدمة والتاريخ والفرع." },
+  BRANCH_CLOSED: { en: "The branch is closed on this weekday.", ar: "الفرع مقفول في اليوم ده." },
+  DAILY_CAP_REACHED: { en: "The branch has reached its daily vehicle intake limit.", ar: "الفرع وصل للحد اليومي لاستقبال العربيات." },
+  BAY_CAPACITY_REACHED: { en: "Bay-hour capacity is full for this date and service.", ar: "ساعات البايات خلصت للتاريخ والخدمة دول." },
+  BOOKING_NOT_PENDING: { en: "This booking is no longer waiting for confirmation.", ar: "الحجز ده مش مستني تأكيد دلوقتي." },
+  MANAGER_REVIEW_REQUIRED: { en: "This booking needs a manager to confirm it.", ar: "مدير الفرع لازم يأكد الحجز ده." },
+  JOB_ALREADY_STARTED: { en: "The job has started; use the workshop workflow instead.", ar: "الشغل على العربية بدأ؛ كمّل من صفحة الورشة." },
 };
 
 export function BookingsPage({ lang, t, state, branchName, customerName, serviceName, vehicleFor, notify, confirmModal }: BookingsPageProps) {
@@ -103,7 +103,7 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
     setError("");
     setSaving(true);
     if(availability?.status!=="available"||!availability.slots.some(slot=>slot.dropoffTime===form.dropoffTime)){
-      setSaving(false);setError(t("Choose an available slot first.","Ø§Ø®ØªØ± Ù…ÙˆØ¹Ø¯Ø§Ù‹ Ù…ØªØ§Ø­Ø§Ù‹ Ø£ÙˆÙ„Ø§Ù‹."));return;
+      setSaving(false);setError(t("Choose an available slot first.","اختر موعداً متاحاً أولاً."));return;
     }
     const result = await store.createBookingRequest({...form,configurationVersion:availability.configurationVersion} as typeof form);
     setSaving(false);
@@ -111,98 +111,98 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
       setShowForm(false);
       setForm({ customerId: "", vehicleId: "", serviceId: "", branchId: defaultBranch, dropoffDate: "", dropoffTime: "09:00" });
       notify(result.status === "confirmed"
-        ? t("Booking confirmed and added to the workshop.", "Ø§Ù„Ø­Ø¬Ø² Ø§ØªØ£ÙƒØ¯ ÙˆØ§ØªØ¶Ø§Ù Ù„Ù„ÙˆØ±Ø´Ø©.")
-        : t("Booking request saved for staff review.", "Ø·Ù„Ø¨ Ø§Ù„Ø­Ø¬Ø² Ø§ØªØ­ÙØ¸ Ø¹Ø´Ø§Ù† Ø§Ù„ÙØ±ÙŠÙ‚ ÙŠØ±Ø§Ø¬Ø¹Ù‡."));
+        ? t("Booking confirmed and added to the workshop.", "الحجز اتأكد واتضاف للورشة.")
+        : t("Booking request saved for staff review.", "طلب الحجز اتحفظ عشان الفريق يراجعه."));
       return;
     }
     const copy = bookingErrorCopy[result.error];
-    setError(unknownWriteOutcomeCopy(result.error, lang) ?? (copy ? t(copy.en, copy.ar) : t("The booking could not be saved. Check your access and try again.", "Ù…Ø§Ù‚Ø¯Ø±Ù†Ø§Ø´ Ù†Ø­ÙØ¸ Ø§Ù„Ø­Ø¬Ø². Ø±Ø§Ø¬Ø¹ ØµÙ„Ø§Ø­ÙŠØªÙƒ ÙˆØ¬Ø±Ù‘Ø¨ ØªØ§Ù†ÙŠ.")));
+    setError(unknownWriteOutcomeCopy(result.error, lang) ?? (copy ? t(copy.en, copy.ar) : t("The booking could not be saved. Check your access and try again.", "ماقدرناش نحفظ الحجز. راجع صلاحيتك وجرّب تاني.")));
   };
 
   const confirm = async (bookingId: string) => {
     const result = await store.confirmBooking(bookingId);
     if (result.ok) {
-      notify(t("Booking confirmed and added to the workshop.", "Ø§Ù„Ø­Ø¬Ø² Ø§ØªØ£ÙƒØ¯ ÙˆØ§ØªØ¶Ø§Ù Ù„Ù„ÙˆØ±Ø´Ø©."));
+      notify(t("Booking confirmed and added to the workshop.", "الحجز اتأكد واتضاف للورشة."));
       return;
     }
     const copy = bookingErrorCopy[result.error];
-    notify(unknownWriteOutcomeCopy(result.error, lang) ?? (copy ? t(copy.en, copy.ar) : t("The booking could not be confirmed.", "Ù…Ø§Ù‚Ø¯Ø±Ù†Ø§Ø´ Ù†Ø£ÙƒØ¯ Ø§Ù„Ø­Ø¬Ø².")));
+    notify(unknownWriteOutcomeCopy(result.error, lang) ?? (copy ? t(copy.en, copy.ar) : t("The booking could not be confirmed.", "ماقدرناش نأكد الحجز.")));
   };
 
   const cancel = (bookingId: string) => confirmModal({
-    title: t("Cancel this booking?", "Ø¥Ù„ØºØ§Ø¡ Ù‡Ø°Ø§ Ø§Ù„Ø­Ø¬Ø²ØŸ"),
-    body: t("This updates the booking and its workshop status. No customer message is sent.", "Ø­Ø§Ù„Ø© Ø§Ù„Ø­Ø¬Ø² ÙˆØ§Ù„ÙˆØ±Ø´Ø© Ù‡ØªØªØ­Ø¯Ù‘Ø«. Ù…Ø´ Ù‡Ù†Ø¨Ø¹Øª Ø£ÙŠ Ø±Ø³Ø§Ù„Ø© Ù„Ù„Ø¹Ù…ÙŠÙ„."),
+    title: t("Cancel this booking?", "إلغاء هذا الحجز؟"),
+    body: t("This updates the booking and its workshop status. No customer message is sent.", "حالة الحجز والورشة هتتحدّث. مش هنبعت أي رسالة للعميل."),
     danger: true,
     confirm: async () => {
       const result = await store.cancelBooking(bookingId);
       confirmModal(null);
       if (result.ok) {
-        notify(t("Booking cancelled.", "Ø§Ù„Ø­Ø¬Ø² Ø§ØªÙ„ØºÙ‰."));
+        notify(t("Booking cancelled.", "الحجز اتلغى."));
         return;
       }
       const copy = bookingErrorCopy[result.error];
-      notify(unknownWriteOutcomeCopy(result.error, lang) ?? (copy ? t(copy.en, copy.ar) : t("The booking could not be cancelled.", "Ù…Ø§Ù‚Ø¯Ø±Ù†Ø§Ø´ Ù†Ù„ØºÙŠ Ø§Ù„Ø­Ø¬Ø².")));
+      notify(unknownWriteOutcomeCopy(result.error, lang) ?? (copy ? t(copy.en, copy.ar) : t("The booking could not be cancelled.", "ماقدرناش نلغي الحجز.")));
     },
   });
 
   const reschedule=async()=>{
     if(!moving)return;
     if(moveAvailability?.status!=="available"||!moveAvailability.slots.some(slot=>slot.dropoffTime===moving.time)){notify(t("Choose an available new slot.","اختر موعداً جديداً متاحاً."));return;}
-    try {await bookingAvailabilityApi.reschedule(moving.bookingId,moving.date,moving.time);await store.refresh();setMoving(null);notify(t("Booking rescheduled.","ØªÙ… ØªØºÙŠÙŠØ± Ù…ÙˆØ¹Ø¯ Ø§Ù„Ø­Ø¬Ø²."));}
-    catch {notify(t("The new slot is unavailable. The original booking is unchanged.","Ø§Ù„Ù…ÙˆØ¹Ø¯ Ø§Ù„Ø¬Ø¯ÙŠØ¯ ØºÙŠØ± Ù…ØªØ§Ø­. Ø¨Ù‚ÙŠ Ø§Ù„Ø­Ø¬Ø² Ø§Ù„Ø£ØµÙ„ÙŠ ÙƒÙ…Ø§ Ù‡Ùˆ."));}
+    try {await bookingAvailabilityApi.reschedule(moving.bookingId,moving.date,moving.time);await store.refresh();setMoving(null);notify(t("Booking rescheduled.","تم تغيير موعد الحجز."));}
+    catch {notify(t("The new slot is unavailable. The original booking is unchanged.","الموعد الجديد غير متاح. بقي الحجز الأصلي كما هو."));}
   };
 
   return <>
     <PageHeading
-      eyebrow={t("Reception Â· Scheduling", "Ø§Ù„Ø§Ø³ØªÙ‚Ø¨Ø§Ù„ Â· Ø§Ù„Ù…ÙˆØ§Ø¹ÙŠØ¯")}
-      title={t("Bookings", "Ø§Ù„Ø­Ø¬ÙˆØ²Ø§Øª")}
-      subtitle={t("Create and review appointments against the active branch capacity rules.", "Ø§Ø¹Ù…Ù„ Ù…ÙˆØ§Ø¹ÙŠØ¯ ÙˆØ±Ø§Ø¬Ø¹Ù‡Ø§ Ø­Ø³Ø¨ Ù‚ÙˆØ§Ø¹Ø¯ Ø³Ø¹Ø© Ø§Ù„ÙØ±Ø¹ Ø§Ù„Ù„ÙŠ Ø´ØºØ§Ù„Ø© Ø¯Ù„ÙˆÙ‚ØªÙŠ.")}
-      action={<button className="btn btn-primary" type="button" onClick={() => { setShowForm((value) => !value); setError(""); }}><Plus size={16} />{t("New booking", "Ø­Ø¬Ø² Ø¬Ø¯ÙŠØ¯")}</button>}
+      eyebrow={t("Reception · Scheduling", "الاستقبال · المواعيد")}
+      title={t("Bookings", "الحجوزات")}
+      subtitle={t("Create and review appointments against the active branch capacity rules.", "اعمل مواعيد وراجعها حسب قواعد سعة الفرع اللي شغالة دلوقتي.")}
+      action={<button className="btn btn-primary" type="button" onClick={() => { setShowForm((value) => !value); setError(""); }}><Plus size={16} />{t("New booking", "حجز جديد")}</button>}
     />
 
     {showForm && <form className="form-panel" onSubmit={(event) => void create(event)}>
-      <SectionTitle title={t("New booking", "Ø­Ø¬Ø² Ø¬Ø¯ÙŠØ¯")} description={t("Capacity and branch access are checked by the server before a booking is stored.", "Ø§Ù„Ù†Ø¸Ø§Ù… Ø¨ÙŠØªØ£ÙƒØ¯ Ù…Ù† Ø§Ù„Ø³Ø¹Ø© ÙˆØµÙ„Ø§Ø­ÙŠØ© Ø§Ù„ÙØ±Ø¹ Ù‚Ø¨Ù„ Ù…Ø§ ÙŠØ­ÙØ¸ Ø§Ù„Ø­Ø¬Ø².")} />
+      <SectionTitle title={t("New booking", "حجز جديد")} description={t("Capacity and branch access are checked by the server before a booking is stored.", "النظام بيتأكد من السعة وصلاحية الفرع قبل ما يحفظ الحجز.")} />
       <p className="top-meta" role="status">{t("Step", "الخطوة")} {step} {t("of 3", "من 3")} · {step === 1 ? t("Customer and vehicle", "العميل والعربية") : step === 2 ? t("Service and branch", "الخدمة والفرع") : t("Available appointment", "الموعد المتاح")}</p>
       {invalidated.length > 0 && <p className="form-hint" role="status">{t("A prerequisite changed, so dependent choices were cleared:", "اتغير اختيار أساسي، فتم مسح الاختيارات التابعة:")} {invalidated.join(", ")}</p>}
       <div className="form-grid">
         {step === 1 && <>
-        <div className="form-field"><label className="field-label" htmlFor="booking-customer"><span>{t("Customer", "Ø§Ù„Ø¹Ù…ÙŠÙ„")}</span><span aria-hidden="true">*</span></label><select id="booking-customer" className="field-select" required value={form.customerId} onChange={(event) => updateDraft({ customerId: event.target.value })}><option value="">{t("Choose a customer", "Ø§Ø®ØªØ§Ø± Ø¹Ù…ÙŠÙ„")}</option>{availableCustomers.map((customer) => <option key={customer.id} value={customer.id}>{customerDisplay(customer.name, lang)} Â· {customer.phone}</option>)}</select></div>
-        <div className="form-field"><label className="field-label" htmlFor="booking-vehicle"><span>{t("Vehicle", "Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©")}</span><span aria-hidden="true">*</span></label><select id="booking-vehicle" className="field-select vehicle-select" required value={form.vehicleId} onChange={(event) => setForm({ ...form, vehicleId: event.target.value })}><option value="">{t("Choose a vehicle", "Ø§Ø®ØªØ§Ø± Ø¹Ø±Ø¨ÙŠØ©")}</option>{state.customers.find((customer) => customer.id === form.customerId)?.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.plate} Â· {vehicle.makeModel}</option>)}</select>{form.vehicleId && <span className="vehicle-selection">{state.customers.find((customer) => customer.id === form.customerId)?.vehicles.find((vehicle) => vehicle.id === form.vehicleId)?.plate} Â· {state.customers.find((customer) => customer.id === form.customerId)?.vehicles.find((vehicle) => vehicle.id === form.vehicleId)?.makeModel}</span>}</div>
+        <div className="form-field"><label className="field-label" htmlFor="booking-customer"><span>{t("Customer", "العميل")}</span><span aria-hidden="true">*</span></label><select id="booking-customer" className="field-select" required value={form.customerId} onChange={(event) => updateDraft({ customerId: event.target.value })}><option value="">{t("Choose a customer", "اختار عميل")}</option>{availableCustomers.map((customer) => <option key={customer.id} value={customer.id}>{customerDisplay(customer.name, lang)} · {customer.phone}</option>)}</select></div>
+        <div className="form-field"><label className="field-label" htmlFor="booking-vehicle"><span>{t("Vehicle", "العربية")}</span><span aria-hidden="true">*</span></label><select id="booking-vehicle" className="field-select vehicle-select" required value={form.vehicleId} onChange={(event) => setForm({ ...form, vehicleId: event.target.value })}><option value="">{t("Choose a vehicle", "اختار عربية")}</option>{state.customers.find((customer) => customer.id === form.customerId)?.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.plate} · {vehicle.makeModel}</option>)}</select>{form.vehicleId && <span className="vehicle-selection">{state.customers.find((customer) => customer.id === form.customerId)?.vehicles.find((vehicle) => vehicle.id === form.vehicleId)?.plate} · {state.customers.find((customer) => customer.id === form.customerId)?.vehicles.find((vehicle) => vehicle.id === form.vehicleId)?.makeModel}</span>}</div>
         </>}
         {step === 2 && <>
-        <div className="form-field"><label className="field-label" htmlFor="booking-service"><span>{t("Service", "Ø§Ù„Ø®Ø¯Ù…Ø©")}</span><span aria-hidden="true">*</span></label><select id="booking-service" className="field-select" required value={form.serviceId} onChange={(event) => updateDraft({ serviceId: event.target.value })}><option value="">{t("Choose a service", "Ø§Ø®ØªØ§Ø± Ø®Ø¯Ù…Ø©")}</option>{state.services.map((service) => <option key={service.id} value={service.id}>{serviceDisplay(service.name, lang)} Â· {service.id === "tint" || service.id === "ceramic" ? state.effectiveServiceHoursByBranch?.[form.branchId]?.[service.id] ?? service.bayHours : service.bayHours} {t("bay-hours", "Ø³Ø§Ø¹Ø© Ø¨Ø§ÙŠ")}</option>)}</select></div>
-        <div className="form-field"><label className="field-label" htmlFor="booking-branch"><span>{t("Branch", "Ø§Ù„ÙØ±Ø¹")}</span><span aria-hidden="true">*</span></label><select id="booking-branch" className="field-select" required value={form.branchId} onChange={(event) => updateDraft({ branchId: event.target.value as BranchId })}>{state.branches.map((branch) => <option key={branch.id} value={branch.id}>{branchName(branch.id)}</option>)}</select></div>
+        <div className="form-field"><label className="field-label" htmlFor="booking-service"><span>{t("Service", "الخدمة")}</span><span aria-hidden="true">*</span></label><select id="booking-service" className="field-select" required value={form.serviceId} onChange={(event) => updateDraft({ serviceId: event.target.value })}><option value="">{t("Choose a service", "اختار خدمة")}</option>{state.services.map((service) => <option key={service.id} value={service.id}>{serviceDisplay(service.name, lang)} · {service.id === "tint" || service.id === "ceramic" ? state.effectiveServiceHoursByBranch?.[form.branchId]?.[service.id] ?? service.bayHours : service.bayHours} {t("bay-hours", "ساعة باي")}</option>)}</select></div>
+        <div className="form-field"><label className="field-label" htmlFor="booking-branch"><span>{t("Branch", "الفرع")}</span><span aria-hidden="true">*</span></label><select id="booking-branch" className="field-select" required value={form.branchId} onChange={(event) => updateDraft({ branchId: event.target.value as BranchId })}>{state.branches.map((branch) => <option key={branch.id} value={branch.id}>{branchName(branch.id)}</option>)}</select></div>
         </>}
         {step === 3 && <>
-        <div className="form-field"><label className="field-label" htmlFor="booking-date"><span>{t("Drop-off date", "ØªØ§Ø±ÙŠØ® Ø§Ù„Ø§Ø³ØªÙ„Ø§Ù…")}</span><span aria-hidden="true">*</span></label><input id="booking-date" className="field-input" type="date" required value={form.dropoffDate} onChange={(event) => setForm({ ...form, dropoffDate: event.target.value })} /></div>
-        <div className="form-field"><label className="field-label" htmlFor="booking-time"><span>{t("Drop-off time", "ÙˆÙ‚Øª ØªØ³Ù„ÙŠÙ… Ø§Ù„Ø¹Ø±Ø¨ÙŠØ© Ù„Ù„ÙØ±Ø¹")}</span><span aria-hidden="true">*</span></label><input id="booking-time" className="field-input" type="time" lang="en-GB" dir="ltr" step={60} required aria-describedby="booking-time-hint" value={form.dropoffTime} onChange={(event) => setForm({ ...form, dropoffTime: event.target.value })} /><span id="booking-time-hint" className="form-hint">{t("24-hour time (00:00 midnight, 12:00 noon)", "Ø§Ù„ÙˆÙ‚Øª Ø¨Ù†Ø¸Ø§Ù… 24 Ø³Ø§Ø¹Ø© (00:00 Ù…Ù†ØªØµÙ Ø§Ù„Ù„ÙŠÙ„ØŒ 12:00 Ø§Ù„Ø¸Ù‡Ø±)")}</span></div>
+        <div className="form-field"><label className="field-label" htmlFor="booking-date"><span>{t("Drop-off date", "تاريخ الاستلام")}</span><span aria-hidden="true">*</span></label><input id="booking-date" className="field-input" type="date" required value={form.dropoffDate} onChange={(event) => setForm({ ...form, dropoffDate: event.target.value })} /></div>
+        <div className="form-field"><label className="field-label" htmlFor="booking-time"><span>{t("Drop-off time", "وقت تسليم العربية للفرع")}</span><span aria-hidden="true">*</span></label><input id="booking-time" className="field-input" type="time" lang="en-GB" dir="ltr" step={60} required aria-describedby="booking-time-hint" value={form.dropoffTime} onChange={(event) => setForm({ ...form, dropoffTime: event.target.value })} /><span id="booking-time-hint" className="form-hint">{t("24-hour time (00:00 midnight, 12:00 noon)", "الوقت بنظام 24 ساعة (00:00 منتصف الليل، 12:00 الظهر)")}</span></div>
         </>}
       </div>
-      {step === 3 && <><div role="status" aria-live="polite">{availability?.status==="unconfigured"&&t("Availability is not configured for this branch and service.","Ø§Ù„Ù…ÙˆØ§Ø¹ÙŠØ¯ Ø§Ù„Ù…ØªØ§Ø­Ø© ØºÙŠØ± Ù…Ù‡ÙŠØ£Ø© Ù„Ù‡Ø°Ø§ Ø§Ù„ÙØ±Ø¹ ÙˆØ§Ù„Ø®Ø¯Ù…Ø©.")}{availability?.status==="available"&&availability.slots.length===0&&t("No available slots on this date.","Ù„Ø§ ØªÙˆØ¬Ø¯ Ù…ÙˆØ§Ø¹ÙŠØ¯ Ù…ØªØ§Ø­Ø© ÙÙŠ Ù‡Ø°Ø§ Ø§Ù„ØªØ§Ø±ÙŠØ®.")}</div>
-      {availability?.status==="available"&&<div className="action-row" aria-label={t("Available slots","Ø§Ù„Ù…ÙˆØ§Ø¹ÙŠØ¯ Ø§Ù„Ù…ØªØ§Ø­Ø©")}>{availability.slots.map(slot=><button key={slot.dropoffTime} type="button" className={form.dropoffTime===slot.dropoffTime?"btn btn-sm btn-primary":"btn btn-sm"} onClick={()=>setForm({...form,dropoffTime:slot.dropoffTime})}>{slot.dropoffTime}</button>)}</div>}</>}
+      {step === 3 && <><div role="status" aria-live="polite">{availability?.status==="unconfigured"&&t("Availability is not configured for this branch and service.","المواعيد المتاحة غير مهيأة لهذا الفرع والخدمة.")}{availability?.status==="available"&&availability.slots.length===0&&t("No available slots on this date.","لا توجد مواعيد متاحة في هذا التاريخ.")}</div>
+      {availability?.status==="available"&&<div className="action-row" aria-label={t("Available slots","المواعيد المتاحة")}>{availability.slots.map(slot=><button key={slot.dropoffTime} type="button" className={form.dropoffTime===slot.dropoffTime?"btn btn-sm btn-primary":"btn btn-sm"} onClick={()=>setForm({...form,dropoffTime:slot.dropoffTime})}>{slot.dropoffTime}</button>)}</div>}</>}
       {error && <div className="form-error" role="alert">{error}</div>}
-      <div className="form-actions"><button type="button" className="btn btn-danger" onClick={discardDraft}>{t("Discard", "تجاهل")}</button>{step > 1 && <button type="button" className="btn" onClick={() => setStep((step - 1) as 1 | 2)}>{t("Back", "رجوع")}</button>}{step < 3 ? <button type="button" className="btn btn-primary" disabled={step === 1 ? !form.customerId || !form.vehicleId : !form.serviceId || !form.branchId} onClick={() => setStep((step + 1) as 2 | 3)}>{t("Continue", "متابعة")}</button> : <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? t("Savingâ€¦", "Ø¨Ù†Ø­ÙØ¸â€¦") : t("Save booking", "Ø§Ø­ÙØ¸ Ø§Ù„Ø­Ø¬Ø²")}</button>}</div>
+      <div className="form-actions"><button type="button" className="btn btn-danger" onClick={discardDraft}>{t("Discard", "تجاهل")}</button>{step > 1 && <button type="button" className="btn" onClick={() => setStep((step - 1) as 1 | 2)}>{t("Back", "رجوع")}</button>}{step < 3 ? <button type="button" className="btn btn-primary" disabled={step === 1 ? !form.customerId || !form.vehicleId : !form.serviceId || !form.branchId} onClick={() => setStep((step + 1) as 2 | 3)}>{t("Continue", "متابعة")}</button> : <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? t("Saving…", "بنحفظ…") : t("Save booking", "احفظ الحجز")}</button>}</div>
     </form>}
 
-    <div className="toolbar"><div className="toolbar-start"><label className="search-wrap"><Search size={16} /><span className="sr-only">{t("Search bookings", "Ø¯ÙˆÙ‘Ø± Ø¹Ù„Ù‰ Ø§Ù„Ø­Ø¬ÙˆØ²Ø§Øª")}</span><input className="search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search name, phone, plate or bookingâ€¦", "Ø¯ÙˆÙ‘Ø± Ø¨Ø§Ù„Ø§Ø³Ù… Ø£Ùˆ Ø±Ù‚Ù… Ø§Ù„Ù…ÙˆØ¨Ø§ÙŠÙ„ Ø£Ùˆ Ø§Ù„Ù„ÙˆØ­Ø© Ø£Ùˆ Ø§Ù„Ø­Ø¬Ø²â€¦")} /></label>
-      <select className="filter-select" style={{ width: "auto" }} value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">{t("All statuses", "ÙƒÙ„ Ø§Ù„Ø­Ø§Ù„Ø§Øª")}</option><option value="pending">{t("Pending", "Ù…Ø³ØªÙ†ÙŠ")}</option><option value="confirmed">{t("Confirmed", "Ø§ØªØ£ÙƒØ¯")}</option><option value="cancelled">{t("Cancelled", "Ø§ØªÙ„ØºÙ‰")}</option><option value="no-show">{t("No-show", "Ù…Ø§Ø¬Ø§Ø´")}</option></select>
-    </div><span className="top-meta">{filtered.length} {t("records", "Ø³Ø¬Ù„Ø§Øª")}</span></div>
+    <div className="toolbar"><div className="toolbar-start"><label className="search-wrap"><Search size={16} /><span className="sr-only">{t("Search bookings", "دوّر على الحجوزات")}</span><input className="search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search name, phone, plate or booking…", "دوّر بالاسم أو رقم الموبايل أو اللوحة أو الحجز…")} /></label>
+      <select className="filter-select" style={{ width: "auto" }} value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">{t("All statuses", "كل الحالات")}</option><option value="pending">{t("Pending", "مستني")}</option><option value="confirmed">{t("Confirmed", "اتأكد")}</option><option value="cancelled">{t("Cancelled", "اتلغى")}</option><option value="no-show">{t("No-show", "ماجاش")}</option></select>
+    </div><span className="top-meta">{filtered.length} {t("records", "سجلات")}</span></div>
 
     <div className="table-wrap"><table><thead><tr>
-      <th>{t("Customer / vehicle", "Ø§Ù„Ø¹Ù…ÙŠÙ„ / Ø§Ù„Ù…Ø±ÙƒØ¨Ø©")}</th><th>{t("Service", "Ø§Ù„Ø®Ø¯Ù…Ø©")}</th><th>{t("Branch", "Ø§Ù„ÙØ±Ø¹")}</th><th>{t("Drop-off", "Ø§Ù„Ø§Ø³ØªÙ„Ø§Ù…")}</th><th>{t("Expected pickup", "Ø§Ù„ØªØ³Ù„ÙŠÙ… Ø§Ù„Ù…ØªÙˆÙ‚Ø¹")}</th><th>{t("Status", "Ø§Ù„Ø­Ø§Ù„Ø©")}</th><th>{t("Actions", "Ø§Ù„Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª")}</th>
+      <th>{t("Customer / vehicle", "العميل / المركبة")}</th><th>{t("Service", "الخدمة")}</th><th>{t("Branch", "الفرع")}</th><th>{t("Drop-off", "الاستلام")}</th><th>{t("Expected pickup", "التسليم المتوقع")}</th><th>{t("Status", "الحالة")}</th><th>{t("Actions", "الإجراءات")}</th>
     </tr></thead><tbody>
       {filtered.map((booking) => {
         const vehicle = vehicleFor(booking.customerId, booking.vehicleId);
         return <tr key={booking.id}>
-          <td><div className="primary-cell">{customerName(booking.customerId)}</div><div className="secondary-cell mono">{vehicle?.plate} Â· {vehicle?.makeModel}</div></td>
+          <td><div className="primary-cell">{customerName(booking.customerId)}</div><div className="secondary-cell mono">{vehicle?.plate} · {vehicle?.makeModel}</div></td>
           <td>{booking.workSummary?.[lang] ?? serviceName(booking.serviceId)}{booking.acceptedQuoteRef && <div className="secondary-cell mono">{t("Accepted quote", "عرض السعر المقبول")}: {booking.acceptedQuoteRef.quoteId} · {t("revision", "الإصدار")} {booking.acceptedQuoteRef.revision}</div>}</td><td>{branchName(booking.branchId)}</td>
           <td><bdi className="localized-datetime">{dateLabel(booking.dropoffDate, lang)}</bdi><div className="secondary-cell"><bdi className="localized-datetime">{timeLabel(booking.dropoffTime, lang)}</bdi></div></td>
           <td><bdi className="localized-datetime">{dateLabel(booking.expectedPickup, lang)}</bdi></td><td><Status status={booking.status} lang={lang} /></td>
-          <td><div className="action-row">{booking.status === "pending" && <button className="btn btn-sm btn-primary" onClick={() => void confirm(booking.id)}>{t("Confirm", "ØªØ£ÙƒÙŠØ¯")}</button>}{booking.status === "confirmed" && <button className="btn btn-sm" onClick={() => setMoving({bookingId:booking.id,date:booking.dropoffDate,time:booking.dropoffTime})}>{t("Reschedule","تغيير الموعد")}</button>}{(booking.status === "pending" || booking.status === "confirmed") && <button className="btn btn-sm btn-danger" onClick={() => cancel(booking.id)}>{t("Cancel", "Ø¥Ù„ØºØ§Ø¡")}</button>}</div></td>
+          <td><div className="action-row">{booking.status === "pending" && <button className="btn btn-sm btn-primary" onClick={() => void confirm(booking.id)}>{t("Confirm", "تأكيد")}</button>}{booking.status === "confirmed" && <button className="btn btn-sm" onClick={() => setMoving({bookingId:booking.id,date:booking.dropoffDate,time:booking.dropoffTime})}>{t("Reschedule","تغيير الموعد")}</button>}{(booking.status === "pending" || booking.status === "confirmed") && <button className="btn btn-sm btn-danger" onClick={() => cancel(booking.id)}>{t("Cancel", "إلغاء")}</button>}</div></td>
         </tr>;
       })}
-      {!filtered.length && <tr><td colSpan={7}><EmptyState title={t("No matching bookings", "Ù…ÙÙŠØ´ Ø­Ø¬ÙˆØ²Ø§Øª Ù…Ø·Ø§Ø¨Ù‚Ø©")} text={t("Create a booking or adjust the search and status filter.", "Ø§Ø¹Ù…Ù„ Ø­Ø¬Ø² Ø¬Ø¯ÙŠØ¯ Ø£Ùˆ ØºÙŠÙ‘Ø± ÙƒÙ„Ù…Ø© Ø§Ù„Ø¨Ø­Ø« ÙˆÙÙ„ØªØ± Ø§Ù„Ø­Ø§Ù„Ø©.")} /></td></tr>}
+      {!filtered.length && <tr><td colSpan={7}><EmptyState title={t("No matching bookings", "مفيش حجوزات مطابقة")} text={t("Create a booking or adjust the search and status filter.", "اعمل حجز جديد أو غيّر كلمة البحث وفلتر الحالة.")} /></td></tr>}
     </tbody></table></div>
-    {moving&&<div className="form-panel" dir={lang==="ar"?"rtl":"ltr"}><SectionTitle title={t("Reschedule booking","ØªØºÙŠÙŠØ± Ù…ÙˆØ¹Ø¯ Ø§Ù„Ø­Ø¬Ø²")} description={t("The original booking remains if the new slot cannot be confirmed.","ÙŠØ¨Ù‚Ù‰ Ø§Ù„Ø­Ø¬Ø² Ø§Ù„Ø£ØµÙ„ÙŠ Ø¥Ø°Ø§ ØªØ¹Ø°Ø± ØªØ£ÙƒÙŠØ¯ Ø§Ù„Ù…ÙˆØ¹Ø¯ Ø§Ù„Ø¬Ø¯ÙŠØ¯.")}/><div className="form-grid"><label className="form-field">{t("Date","Ø§Ù„ØªØ§Ø±ÙŠØ®")}<input className="field-input" type="date" value={moving.date} onChange={event=>setMoving({...moving,date:event.target.value})}/></label><label className="form-field">{t("Time","Ø§Ù„ÙˆÙ‚Øª")}<select className="field-select" value={moving.time} onChange={event=>setMoving({...moving,time:event.target.value})}><option value="">{t("Choose available time","اختر موعداً متاحاً")}</option>{moveAvailability?.status==="available"&&moveAvailability.slots.map(slot=><option key={slot.dropoffTime} value={slot.dropoffTime}>{slot.dropoffTime}</option>)}</select></label></div><div className="form-actions"><button className="btn" onClick={()=>setMoving(null)}>{t("Close","Ø¥ØºÙ„Ø§Ù‚")}</button><button className="btn btn-primary" onClick={()=>void reschedule()}>{t("Confirm new slot","ØªØ£ÙƒÙŠØ¯ Ø§Ù„Ù…ÙˆØ¹Ø¯ Ø§Ù„Ø¬Ø¯ÙŠØ¯")}</button></div></div>}
+    {moving&&<div className="form-panel" dir={lang==="ar"?"rtl":"ltr"}><SectionTitle title={t("Reschedule booking","تغيير موعد الحجز")} description={t("The original booking remains if the new slot cannot be confirmed.","يبقى الحجز الأصلي إذا تعذر تأكيد الموعد الجديد.")}/><div className="form-grid"><label className="form-field">{t("Date","التاريخ")}<input className="field-input" type="date" value={moving.date} onChange={event=>setMoving({...moving,date:event.target.value})}/></label><label className="form-field">{t("Time","الوقت")}<select className="field-select" value={moving.time} onChange={event=>setMoving({...moving,time:event.target.value})}><option value="">{t("Choose available time","اختر موعداً متاحاً")}</option>{moveAvailability?.status==="available"&&moveAvailability.slots.map(slot=><option key={slot.dropoffTime} value={slot.dropoffTime}>{slot.dropoffTime}</option>)}</select></label></div><div className="form-actions"><button className="btn" onClick={()=>setMoving(null)}>{t("Close","إغلاق")}</button><button className="btn btn-primary" onClick={()=>void reschedule()}>{t("Confirm new slot","تأكيد الموعد الجديد")}</button></div></div>}
   </>;
 }

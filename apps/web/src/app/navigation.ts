@@ -32,10 +32,30 @@ export const navigationGroups: Array<{
   id: NavigationGroupId;
   en: string;
   ar: string;
+  descriptionEn: string;
+  descriptionAr: string;
 }> = [
-  { id: "operations", en: "Daily operations", ar: "التشغيل اليومي" },
-  { id: "customer-care", en: "Customer offers and care", ar: "عروض العملاء وخدماتهم" },
-  { id: "management", en: "Business management", ar: "إدارة النشاط" },
+  {
+    id: "operations",
+    en: "Daily operations",
+    ar: "التشغيل اليومي",
+    descriptionEn: "Bookings, customer conversations, branch work, and vehicle progress.",
+    descriptionAr: "الحجوزات ومحادثات العملاء وشغل الفروع ومراحل المركبات.",
+  },
+  {
+    id: "customer-care",
+    en: "Customer offers and care",
+    ar: "عروض العملاء وخدماتهم",
+    descriptionEn: "Catalogue, quotes, reservations, benefits, and warranty records.",
+    descriptionAr: "الكتالوج وعروض الأسعار والحجوزات المؤجلة والمنافع وسجلات الضمان.",
+  },
+  {
+    id: "management",
+    en: "Business management",
+    ar: "إدارة النشاط",
+    descriptionEn: "Owner reporting, business settings, and staff access.",
+    descriptionAr: "تقارير المالك وإعدادات النشاط وصلاحيات الموظفين.",
+  },
 ];
 
 export const navigation: WorkspaceNavigationItem[] = [
