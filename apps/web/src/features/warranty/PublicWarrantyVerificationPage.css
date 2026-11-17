@@ -1,31 +1,20 @@
 .public-verification-page {
-  --pv-ink:#263f37;
-  --pv-muted:#6b7d73;
-  --pv-line:#d8e2da;
-  --pv-paper:#fbfcf8;
-  --pv-surface:#ffffff;
-  --pv-green:#28705d;
-  --pv-green-soft:#eaf3ed;
-  --pv-amber:#8a672e;
-  --pv-red:#984d42;
+  --pv-ink:var(--ink);
+  --pv-muted:var(--muted);
+  --pv-line:var(--line);
+  --pv-paper:var(--paper);
+  --pv-surface:var(--paper);
+  --pv-green:var(--teal-dark);
+  --pv-green-soft:var(--teal-soft);
+  --pv-amber:var(--amber);
+  --pv-red:var(--red);
   min-height:100dvh;
   display:flex;
   flex-direction:column;
   padding:0 clamp(18px,5vw,72px);
   color:var(--pv-ink);
-  background:
-    radial-gradient(ellipse at 10% 0%, rgba(211,229,215,.42), transparent 34rem),
-    var(--pv-paper);
+  background:var(--pv-paper);
   font-family:"IBM Plex Sans Arabic","IBM Plex Sans",sans-serif;
-}
-.public-verification-page::before {
-  position:fixed;
-  z-index:0;
-  inset:0;
-  pointer-events:none;
-  opacity:.13;
-  content:"";
-  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.16'/%3E%3C/svg%3E");
 }
 .public-verification-page > * { position:relative; z-index:1; }
 .public-verification-header { display:flex; align-items:center; justify-content:space-between; min-height:72px; border-bottom:1px solid #e2e9e2; }

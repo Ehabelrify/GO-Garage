@@ -1,5 +1,5 @@
-.warranty-page { --w-ink:#203b39; --w-muted:#687c77; --w-line:#d9e4df; --w-paper:#fbfcf9; --w-tint:#edf4ef; --w-deep:#24574e; --w-gold:#a87933; }
-.warranty-page .w-intro { display:flex; align-items:center; gap:14px; margin:0 0 22px; padding:15px 17px; border:1px solid #d7e4dc; background:linear-gradient(105deg,#f6faf5,#edf5ef); color:var(--w-ink); }
+.warranty-page { --w-ink:var(--ink); --w-muted:var(--muted); --w-line:var(--line); --w-paper:var(--paper); --w-tint:var(--teal-soft); --w-deep:var(--teal-dark); --w-gold:var(--amber); }
+.warranty-page .w-intro { display:flex; align-items:center; gap:14px; margin:0 0 22px; padding:15px 17px; border:1px solid var(--line); background:var(--teal-soft); color:var(--ink); }
 .warranty-page .w-intro-mark { display:grid; place-items:center; width:39px; height:39px; flex:none; color:#356b5c; background:#e0eee5; }
 .warranty-page .w-intro strong { display:block; font-size:13px; }
 .warranty-page .w-intro p { margin:3px 0 0; color:var(--w-muted); font-size:11px; line-height:1.55; }

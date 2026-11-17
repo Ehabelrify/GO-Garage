@@ -1,16 +1,14 @@
 .demo-panel {
-  --demo-ink: #1e3934;
-  --demo-muted: #6d8079;
-  --demo-line: #dce6df;
-  --demo-teal: #176d5c;
-  --demo-soft: #f3f7f3;
+  --demo-ink: var(--ink);
+  --demo-muted: var(--muted);
+  --demo-line: var(--line);
+  --demo-teal: var(--teal);
+  --demo-soft: var(--teal-soft);
   width: min(100%, 470px);
   color: var(--demo-ink);
-  background:
-    linear-gradient(135deg, rgba(222, 237, 226, .48), transparent 46%),
-    #fbfcf8;
-  border: 1px solid #d5e1d9;
-  box-shadow: 0 18px 48px rgba(27, 61, 49, .09), 0 2px 5px rgba(27, 61, 49, .035);
+  background:var(--paper);
+  border:1px solid var(--line);
+  box-shadow:var(--shadow);
   padding: clamp(20px, 4vw, 29px);
   animation: demo-rise .36s cubic-bezier(.2,.8,.2,1) both;
 }

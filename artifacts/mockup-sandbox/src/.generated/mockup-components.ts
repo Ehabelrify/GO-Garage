@@ -9,5 +9,7 @@ export const modules: ModuleMap = {
   "./components/mockups/garage-os/SignIn.tsx": () => import("../components/mockups/garage-os/SignIn.tsx"),
   "./components/mockups/garage-os/Technician.tsx": () => import("../components/mockups/garage-os/Technician.tsx"),
   "./components/mockups/garage-os/WarrantyRegister.tsx": () => import("../components/mockups/garage-os/WarrantyRegister.tsx"),
+  "./components/mockups/garage-os-unified/Current.tsx": () => import("../components/mockups/garage-os-unified/Current.tsx"),
+  "./components/mockups/garage-os-unified/GroupedWorkspace.tsx": () => import("../components/mockups/garage-os-unified/GroupedWorkspace.tsx"),
   "./components/mockups/templates/WarmLanguageLearningDashboard-CS6jL8/App.tsx": () => import("../components/mockups/templates/WarmLanguageLearningDashboard-CS6jL8/App.tsx")
 };

@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState } from "react";
 import {
-  Activity, CalendarDays, CheckCircle2, ChevronDown, CircleDollarSign, ClipboardList,
-  Gauge, Gift, Package, ShieldAlert, ShieldCheck, Settings2, Truck, UserRoundCog, Users, Wrench, MessageCircle,
+  Activity, CheckCircle2, ChevronDown, CircleDollarSign, ClipboardList, MessageCircle,
+  MoreHorizontal, Package, ShieldAlert, Wrench, X,
 } from "lucide-react";
 import { useClerk, useUser } from "@clerk/react";
 import { Link, useLocation } from "wouter";
@@ -9,6 +9,7 @@ import { useGarageStore, type GarageActor } from "../shared/store";
 import { RouteChunk } from "./RouteChunk";
 import type { GarageRole, PageId } from "@garage/domain";
 import { branchDisplay, customerDisplay, serviceDisplay, type Lang, type ModalConfig } from "../shared/ui";
+import { groupedNavigationForRole, navigationForRole, primaryNavigationForRole } from "./navigation";
 const overviewPage = () => import("../features/overview/OverviewPage").then((m) => ({ default: m.OverviewPage }));
 const settingsPage = () => import("../features/settings/SettingsPage").then((m) => ({ default: m.SettingsPage }));
 const bookingsPage = () => import("../features/bookings/BookingsPage").then((m) => ({ default: m.BookingsPage }));
@@ -31,31 +32,6 @@ const roleLabels: Record<GarageRole, { en: string; ar: string }> = {
   receptionist: { en: "Reception", ar: "موظف الاستقبال" },
   technician: { en: "Technician", ar: "الفني" },
 };
-
-const navigation: Array<{
-  id: PageId;
-  path: string;
-  icon: typeof Gauge;
-  en: string;
-  ar: string;
-  roles: GarageRole[];
-}> = [
-  { id: "catalogue", path: "/workspace/catalogue", icon: Package, en: "Catalogue", ar: "الكتالوج", roles: ["owner"] },
-  { id: "quotes", path: "/workspace/quotes", icon: ClipboardList, en: "Quotes", ar: "عروض الأسعار", roles: ["owner", "branch-manager", "receptionist"] },
-  { id: "promotions", path: "/workspace/promotions", icon: CircleDollarSign, en: "Promotions", ar: "العروض الترويجية", roles: ["owner", "branch-manager", "receptionist"] },
-  { id: "reservations", path: "/workspace/reservations", icon: CalendarDays, en: "Reservations", ar: "الحجوزات المؤجلة", roles: ["owner", "branch-manager", "receptionist"] },
-  { id: "benefits", path: "/workspace/benefits", icon: Gift, en: "Benefits", ar: "المنافع", roles: ["owner", "branch-manager", "receptionist"] },
-  { id: "transport", path: "/workspace/transport", icon: Truck, en: "Transport", ar: "النقل", roles: ["owner", "branch-manager", "receptionist"] },
-  { id: "finance", path: "/workspace/finance", icon: CircleDollarSign, en: "Operational finance", ar: "المالية التشغيلية", roles: ["owner"] },
-  { id: "overview", path: "/workspace/overview", icon: Gauge, en: "Overview", ar: "نظرة عامة", roles: ["owner", "branch-manager"] },
-  { id: "bookings", path: "/workspace/bookings", icon: CalendarDays, en: "Bookings", ar: "الحجوزات", roles: ["owner", "branch-manager", "receptionist"] },
-  { id: "workshop", path: "/workspace/workshop", icon: Wrench, en: "Workshop", ar: "الورشة", roles: ["owner", "branch-manager", "technician"] },
-  { id: "customers", path: "/workspace/customers", icon: Users, en: "Customers", ar: "العملاء", roles: ["owner", "branch-manager", "receptionist"] },
-  { id: "warranties", path: "/workspace/warranties", icon: ShieldCheck, en: "Warranties", ar: "الضمانات", roles: ["owner", "branch-manager", "receptionist"] },
-  { id: "settings", path: "/workspace/settings", icon: Settings2, en: "Settings", ar: "الإعدادات", roles: ["owner"] },
-  { id: "staff", path: "/workspace/staff", icon: UserRoundCog, en: "Staff access", ar: "صلاحيات الموظفين", roles: ["owner"] },
-  { id: "whatsapp", path: "/workspace/whatsapp", icon: MessageCircle, en: "Messaging inbox", ar: "صندوق الرسائل", roles: ["owner", "branch-manager", "receptionist"] },
-];
 
 const holdItems = [
   { en: "WhatsApp connection", ar: "ربط واتساب", icon: MessageCircle },
@@ -149,13 +125,38 @@ function ReadyWorkspace({
   setModal: (config: ModalConfig | null) => void;
 }) {
   const [location] = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const lang: Lang = state.locale;
   const rtl = lang === "ar";
   const t = (english: string, arabic: string) => lang === "ar" ? arabic : english;
   const page = location.split("/").filter(Boolean).at(-1) as PageId | undefined;
-  const navItems = navigation.filter((item) => item.roles.includes(actor.role));
+  const navItems = navigationForRole(actor.role);
+  const groupedNavItems = groupedNavigationForRole(actor.role);
+  const mobileNavItems = primaryNavigationForRole(actor.role);
+  const mobileNavIds = new Set(mobileNavItems.map((item) => item.id));
+  const hasMoreNavigation = navItems.some((item) => !mobileNavIds.has(item.id));
   const selectedPage = navItems.find((item) => item.id === page);
+  const activeGroup = groupedNavItems.find((group) => group.id === selectedPage?.group);
+  const workspaceTabs = selectedPage ? navItems.filter((item) => item.group === selectedPage.group) : [];
   const defaultPage = actor.role === "receptionist" ? "bookings" : actor.role === "technician" ? "workshop" : "overview";
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileMenuOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     if (!selectedPage) navigate(`/workspace/${defaultPage}`);
@@ -185,9 +186,14 @@ function ReadyWorkspace({
       </Link>
       <div className="nav-label">{t("Your workspace", "مساحة شغلك")}</div>
       <nav className="nav-list" aria-label={t("Main navigation", "التنقل الأساسي")}>
-        {navItems.map(({ id, path, icon: Icon, en, ar }) => <Link key={id} className={`nav-item ${page === id ? "active" : ""}`} href={path} aria-current={page === id ? "page" : undefined}>
-          <Icon size={18} strokeWidth={1.8} /><span>{t(en, ar)}</span>
-        </Link>)}
+        {groupedNavItems.map((group) => <details className="nav-group" key={group.id} open={group.id === selectedPage?.group}>
+          <summary className="nav-group-heading"><span>{t(group.en, group.ar)}</span><ChevronDown className="nav-group-chevron" size={14} /></summary>
+          <div className="nav-group-items">
+            {group.items.map(({ id, path, icon: Icon, en, ar }) => <Link key={id} className={`nav-item ${page === id ? "active" : ""}`} href={path} aria-current={page === id ? "page" : undefined}>
+              <Icon size={17} strokeWidth={1.8} /><span>{t(en, ar)}</span>
+            </Link>)}
+          </div>
+        </details>)}
       </nav>
       {(actor.role === "owner" || actor.role === "branch-manager") && <div className="hold-nav-block">
         <div className="nav-label">{t("On hold", "لسه مش متاح")}</div>
@@ -225,6 +231,18 @@ function ReadyWorkspace({
           <button className="mobile-signout-button" type="button" onClick={signOut}>{t("Sign out", "تسجيل الخروج")}</button>
         </div>
       </header>
+      {workspaceTabs.length > 1 && <nav className="workspace-tabs" aria-label={t(`${activeGroup?.en ?? "Workspace"} pages`, `صفحات ${activeGroup?.ar ?? "مساحة العمل"}`)}>
+        <span className="workspace-tabs-label">{t(activeGroup?.en ?? "", activeGroup?.ar ?? "")}</span>
+        <div className="workspace-tabs-list">
+          {workspaceTabs.map(({ id, path, en, ar }) => <Link
+            key={id}
+            className={`workspace-tab ${page === id ? "active" : ""}`}
+            href={path}
+            aria-current={page === id ? "page" : undefined}
+            onClick={() => setMobileMenuOpen(false)}
+          >{t(en, ar)}</Link>)}
+        </div>
+      </nav>}
       {store.refreshWarning && <div role="alert" className="refresh-warning" style={{ padding: "12px 20px", background: "#fff3cd", color: "#513d00" }}>
         {t("Your change may be saved, but the latest workspace data could not be loaded. The information shown may be outdated.", "قد يكون التغيير اتحفظ، لكن ماقدرناش نحمّل أحدث بيانات مساحة العمل. البيانات الظاهرة ممكن تكون قديمة.")}
         {" "}<button className="btn" type="button" onClick={() => void store.refresh()}>{t("Refresh data", "تحديث البيانات")}</button>
@@ -248,11 +266,37 @@ function ReadyWorkspace({
       </main>
     </div>
 
-    <nav className="mobile-nav" aria-label={t("Main navigation", "التنقل الأساسي")}>
-      {navItems.map(({ id, path, icon: Icon, en, ar }) => <Link key={id} className={`nav-item ${page === id ? "active" : ""}`} href={path}>
+    <nav className="mobile-nav" aria-label={t("Quick navigation", "التنقل السريع")} data-count={mobileNavItems.length + Number(hasMoreNavigation)}>
+      {mobileNavItems.map(({ id, path, icon: Icon, en, ar }) => <Link key={id} className={`mobile-nav-item ${page === id ? "active" : ""}`} href={path} aria-current={page === id ? "page" : undefined} onClick={() => setMobileMenuOpen(false)}>
         <Icon size={18} /><span>{t(en, ar)}</span>
       </Link>)}
+      {hasMoreNavigation && <button
+        className={`mobile-nav-item mobile-nav-more ${mobileMenuOpen ? "active" : ""}`}
+        type="button"
+        aria-expanded={mobileMenuOpen}
+        aria-controls="mobile-workspace-menu"
+        onClick={() => setMobileMenuOpen((open) => !open)}
+      ><MoreHorizontal size={19} /><span>{t("More", "المزيد")}</span></button>}
     </nav>
+    {mobileMenuOpen && <div className="mobile-menu-layer">
+      <button className="mobile-menu-scrim" type="button" aria-label={t("Close navigation menu", "إغلاق قائمة التنقل")} onClick={() => setMobileMenuOpen(false)} />
+      <nav className="mobile-workspace-menu" id="mobile-workspace-menu" aria-label={t("All workspace sections", "كل أقسام مساحة العمل")}>
+        <div className="mobile-menu-head">
+          <div><span className="eyebrow">{t("Garage OS", "جراج أو إس")}</span><strong>{t("Workspace sections", "أقسام مساحة العمل")}</strong></div>
+          <button type="button" aria-label={t("Close navigation", "إغلاق التنقل")} onClick={() => setMobileMenuOpen(false)}><X size={18} /></button>
+        </div>
+        {groupedNavItems.map((group) => <section className="mobile-nav-group" key={group.id}>
+          <h2>{t(group.en, group.ar)}</h2>
+          <div>{group.items.map(({ id, path, icon: Icon, en, ar }) => <Link
+            key={id}
+            className={`mobile-route ${page === id ? "active" : ""}`}
+            href={path}
+            aria-current={page === id ? "page" : undefined}
+            onClick={() => setMobileMenuOpen(false)}
+          ><Icon size={17} /><span>{t(en, ar)}</span><span className="mobile-route-arrow" aria-hidden="true">{rtl ? "←" : "→"}</span></Link>)}</div>
+        </section>)}
+      </nav>
+    </div>}
     {toast && <div role="status" className="toast"><CheckCircle2 size={17} />{toast}</div>}
     {modal && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setModal(null); }}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
       <h2 id="modal-title">{modal.title}</h2><p>{modal.body}</p>

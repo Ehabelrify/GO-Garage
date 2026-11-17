@@ -1,14 +1,14 @@
 .wa-page {
-  --wa-ink: #213b3b;
-  --wa-muted: #71817c;
-  --wa-line: #dce4dd;
-  --wa-paper: #fffefa;
-  --wa-canvas: #f3f5ef;
-  --wa-green: #286b57;
-  --wa-green-weak: #e6f0e8;
-  --wa-amber: #8b652c;
-  --wa-amber-weak: #f7f0df;
-  --wa-red: #9d5145;
+  --wa-ink: var(--ink);
+  --wa-muted: var(--muted);
+  --wa-line: var(--line);
+  --wa-paper: var(--paper);
+  --wa-canvas: var(--canvas);
+  --wa-green: var(--teal-dark);
+  --wa-green-weak: var(--teal-soft);
+  --wa-amber: var(--amber);
+  --wa-amber-weak: var(--amber-soft);
+  --wa-red: var(--red);
   color: var(--wa-ink);
   min-width: 0;
   font-family: inherit;
@@ -32,7 +32,7 @@
 .wa-sim-chip { color:#765c2d; background:#fbf5e8; border:1px solid #eadcbf; letter-spacing:.06em; }
 .wa-safety {
   display:flex; align-items:flex-start; gap:12px; margin-bottom:14px; padding:13px 16px;
-  border:1px solid #d9e4d9; background:linear-gradient(100deg,#eff5ed,#f8f7ed);
+  border:1px solid var(--line); background:var(--teal-soft);
 }
 .wa-safety-mark { display:grid; place-items:center; flex:none; width:34px; height:34px; color:var(--wa-green); background:#dfebdf; }
 .wa-safety strong { display:block; font-size:13px; }
@@ -101,7 +101,7 @@
 .wa-contact-copy strong { display:block; font-size:13px; }
 .wa-contact-copy small { display:block; margin-top:3px; color:var(--wa-muted); font-size:10px; }
 .wa-chat-head-meta { display:flex; align-items:center; justify-content:flex-end; gap:7px; }
-.wa-thread { display:flex; flex-direction:column; gap:9px; min-height:280px; max-height:425px; overflow:auto; padding:16px clamp(12px,2vw,22px); background-color:#f2f4ed; background-image:radial-gradient(#e0e6dc .7px,transparent .7px); background-size:14px 14px; }
+.wa-thread { display:flex; flex-direction:column; gap:9px; min-height:280px; max-height:425px; overflow:auto; padding:16px clamp(12px,2vw,22px); background-color:var(--wa-canvas); }
 .wa-thread-empty { max-width:310px; margin:auto; text-align:center; }
 .wa-thread-empty-mark { display:grid; place-items:center; width:44px; height:44px; margin:0 auto 11px; color:#557764; background:#e1ebe0; }
 .wa-thread-empty strong { display:block; font-size:14px; }
