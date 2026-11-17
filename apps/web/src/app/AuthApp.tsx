@@ -12,10 +12,16 @@ import { ArrowUpLeft, ShieldCheck, Wrench } from "lucide-react";
 import { useSavedLocale } from "../shared/locale";
 
 const publicWarrantyPage = () => import("../features/warranty/PublicWarrantyVerificationPage").then((m) => ({ default: m.PublicWarrantyVerificationPage }));
+const publicWhatsAppDemoPage = () => import("../features/whatsapp/demo/PublicWhatsAppDemoPage").then((m) => ({ default: m.PublicWhatsAppDemoPage }));
 
 function PublicWarrantyRoute({ params }: { params: { token: string } }) {
   const { locale } = useSavedLocale();
   return <RouteChunk loader={publicWarrantyPage} lang={locale} pageProps={{ params }} />;
+}
+
+function PublicWhatsAppDemoRoute() {
+  const { locale } = useSavedLocale();
+  return <RouteChunk loader={publicWhatsAppDemoPage} lang={locale} pageProps={{}} />;
 }
 
 const clerkPubKey = publishableKeyFromHost(
@@ -123,7 +129,7 @@ function LandingPage() {
           <Link className="btn btn-primary" href="/sign-in">{t("Open workspace", "ادخل مساحة الشغل")} <ArrowUpLeft size={16} /></Link>
           <span>{t("Each team member has an individual invitation", "كل فرد في الفريق له دعوة خاصة")}</span>
         </div>
-        {import.meta.env.DEV && <DemoAccountPanel lang={locale} onSignedIn={() => setLocation("/workspace/overview")} />}
+        {import.meta.env.DEV && <DemoAccountPanel lang={locale} onSignedIn={() => setLocation("/workspace/overview")} onOpenDemo={() => setLocation("/demo")} />}
       </div>
       <div className="landing-preview" aria-hidden="true">
         <div className="preview-top"><span className="preview-dot" /><span>GARAGE OS · ACCESS MODEL</span><span className="preview-date">ROLE-BASED WORKSPACE</span></div>
@@ -172,7 +178,7 @@ function SignInRoute() {
         forceRedirectUrl={`${basePath}/workspace/overview`}
         appearance={clerkAppearance}
       />
-      {import.meta.env.DEV && <DemoAccountPanel lang={locale} onSignedIn={() => setLocation("/workspace/overview")} />}
+      {import.meta.env.DEV && <DemoAccountPanel lang={locale} onSignedIn={() => setLocation("/workspace/overview")} onOpenDemo={() => setLocation("/demo")} />}
     </div>
   </div>;
 }
@@ -251,6 +257,7 @@ function ClerkRoutes() {
   >
     <Switch>
       <Route path="/warranty/verify/:token" component={PublicWarrantyRoute} />
+      <Route path="/demo" component={PublicWhatsAppDemoRoute} />
       <Route path="/" component={HomeRoute} />
       <Route path="/sign-in/*?" component={SignInRoute} />
       <Route path="/sign-up/*?" component={SignUpRoute} />

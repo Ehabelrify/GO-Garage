@@ -145,6 +145,26 @@
 .demo-submit:active:not(:disabled) { transform: translateY(0); }
 .demo-submit:focus-visible, .demo-retry:focus-visible { outline: 3px solid rgba(23,109,92,.3); outline-offset: 3px; }
 .demo-submit:disabled { opacity: .64; cursor: wait; }
+.demo-demo-link {
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 9px 13px;
+  color: #245b49;
+  background: #f4f8f4;
+  border: 1px solid #cddbd0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .16s, border-color .16s, transform .16s;
+}
+.demo-demo-link:hover { background: #eaf2eb; border-color: #9bbba7; transform: translateY(-1px); }
+.demo-demo-link:focus-visible { outline: 3px solid rgba(23,109,92,.3); outline-offset: 3px; }
 .demo-spinner { animation: demo-spin .9s linear infinite; }
 .demo-server-note {
   display: block;
@@ -252,7 +272,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .demo-panel, .demo-spinner, .demo-skeleton::after { animation: none; }
-  .demo-account-option, .demo-submit { transition: none; }
+  .demo-account-option, .demo-submit, .demo-demo-link { transition: none; }
 }
 
 /* Keep demo account details legible at a glance on compact screens. */

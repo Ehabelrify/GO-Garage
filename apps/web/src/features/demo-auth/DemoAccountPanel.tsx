@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowUpLeft, ArrowUpRight, Check, CircleAlert, LoaderCircle, ShieldCheck, Wrench } from "lucide-react";
+import { ArrowUpLeft, ArrowUpRight, Check, CircleAlert, LoaderCircle, MessageCircle, ShieldCheck, Wrench } from "lucide-react";
 import "./DemoAccountPanel.css";
 
 type DemoRole = "owner" | "branch-manager" | "receptionist" | "technician";
@@ -10,7 +10,7 @@ type DemoSessionResponse = {
   actor?: { email: string; name: string; role: string };
 };
 
-type DemoAccountPanelProps = { lang: "ar" | "en"; onSignedIn: () => void };
+type DemoAccountPanelProps = { lang: "ar" | "en"; onSignedIn: () => void; onOpenDemo: () => void };
 
 const copy = {
   ar: {
@@ -20,6 +20,7 @@ const copy = {
     current: "أنت دلوقتي داخل بحساب للعرض",
     currentIntro: "الجلسة دي شغالة بهوية مؤقتة للعرض.",
     continue: "كمّل لمساحة الشغل",
+    whatsappDemo: "جرّب عرض واتساب",
     choose: "اختار حساب للعرض",
     note: "الحسابات دي مؤقتة للتطوير، ومش حسابات موظفين حقيقية.",
     loading: "بنتأكد إن حسابات العرض متاحة",
@@ -44,6 +45,7 @@ const copy = {
     current: "Your demo session is ready",
     currentIntro: "You’re using a temporary demo identity.",
     continue: "Continue to workspace",
+    whatsappDemo: "Try the WhatsApp demo",
     choose: "Choose a demo identity",
     note: "Temporary development-only accounts — these are not real staff identities.",
     loading: "Checking demo account availability",
@@ -69,7 +71,7 @@ function isDemoRole(role: string): role is DemoRole {
   return roleOrder.includes(role as DemoRole);
 }
 
-export function DemoAccountPanel({ lang, onSignedIn }: DemoAccountPanelProps) {
+export function DemoAccountPanel({ lang, onSignedIn, onOpenDemo }: DemoAccountPanelProps) {
   const t = copy[lang];
   const [availability, setAvailability] = useState<"loading" | "ready" | "error" | "disabled">("loading");
   const [accounts, setAccounts] = useState<DemoAccount[]>([]);
@@ -187,6 +189,9 @@ export function DemoAccountPanel({ lang, onSignedIn }: DemoAccountPanelProps) {
           <button className="demo-submit" type="button" onClick={onSignedIn}>
             {t.continue}<Arrow size={16} aria-hidden="true" />
           </button>
+          <button className="demo-demo-link" type="button" onClick={onOpenDemo}>
+            <MessageCircle size={15} aria-hidden="true" />{t.whatsappDemo}
+          </button>
         </div>
       ) : (
         <div className="demo-choose">
@@ -227,6 +232,9 @@ export function DemoAccountPanel({ lang, onSignedIn }: DemoAccountPanelProps) {
           <p className="demo-disclaimer">{t.note}</p>
           <button className="demo-submit" type="button" disabled={!selectedId || pending} onClick={() => void startSession()}>
             {pending ? <><LoaderCircle size={16} className="demo-spinner" aria-hidden="true" />{t.pending}</> : <>{t.continue}<Arrow size={16} aria-hidden="true" /></>}
+          </button>
+          <button className="demo-demo-link" type="button" onClick={onOpenDemo}>
+            <MessageCircle size={15} aria-hidden="true" />{t.whatsappDemo}
           </button>
           <span className="demo-server-note" aria-hidden="true">ROLE ACCESS IS VERIFIED SERVER-SIDE</span>
         </div>
