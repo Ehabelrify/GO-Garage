@@ -681,7 +681,7 @@ router.post("/conversations/:conversationId/booking-confirm", async (req, res) =
     return res.json({
       ok: true,
       message: parsed.data.lang === "ar"
-        ? "Ø±ÙØ¶ Ø§Ù„Ø¹Ù…ÙŠÙ„ Ù…Ø³ÙˆØ¯Ø© Ø§Ù„Ø­Ø¬Ø² Ø§Ù„Ø§ÙØªØ±Ø§Ø¶ÙŠØ› Ù„Ù… ÙŠØªÙ… Ø¥Ù†Ø´Ø§Ø¡ Ø­Ø¬Ø²."
+        ? "رفض العميل مسودة الحجز الافتراضي؛ لم يتم إنشاء حجز."
         : "The customer declined the fictional booking draft; no booking was created.",
       simulation: true,
       deliveryState: "not-sent",
@@ -692,8 +692,8 @@ router.post("/conversations/:conversationId/booking-confirm", async (req, res) =
     ...outcome,
     message: parsed.data.lang === "ar"
       ? outcome.status === "confirmed"
-        ? "ØªÙ… ØªØ£ÙƒÙŠØ¯ Ø§Ù„Ø­Ø¬Ø² Ø§Ù„Ø§ÙØªØ±Ø§Ø¶ÙŠ Ø¨Ø¹Ø¯ Ù…ÙˆØ§ÙÙ‚Ø© Ø§Ù„Ø¹Ù…ÙŠÙ„ Ø§Ù„ØµØ±ÙŠØ­Ø©. Ù„Ù… ØªÙØ±Ø³Ù„ Ø£ÙŠ Ø±Ø³Ø§Ù„Ø©."
-        : "ØªÙ… Ø­ÙØ¸ Ø·Ù„Ø¨ Ø§Ù„Ø­Ø¬Ø² Ø§Ù„Ø§ÙØªØ±Ø§Ø¶ÙŠ Ø¨Ø¹Ø¯ Ù…ÙˆØ§ÙÙ‚Ø© Ø§Ù„Ø¹Ù…ÙŠÙ„ØŒ ÙˆÙ‡Ùˆ Ø¨Ø§Ù†ØªØ¸Ø§Ø± Ù…Ø±Ø§Ø¬Ø¹Ø© Ø§Ù„ÙØ±ÙŠÙ‚. Ù„Ù… ØªÙØ±Ø³Ù„ Ø£ÙŠ Ø±Ø³Ø§Ù„Ø©."
+          ? "تم تأكيد الحجز الافتراضي بعد موافقة العميل الصريحة. لم تُرسل أي رسالة."
+          : "تم حفظ طلب الحجز الافتراضي بعد موافقة العميل، وهو بانتظار مراجعة الفريق. لم تُرسل أي رسالة."
       : outcome.status === "confirmed"
         ? "Fictional booking confirmed after explicit customer confirmation. No customer message was sent."
         : "Fictional booking request saved after confirmation and is pending staff review. No customer message was sent.",
