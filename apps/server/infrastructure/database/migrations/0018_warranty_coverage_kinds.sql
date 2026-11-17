@@ -30,7 +30,7 @@ ALTER TABLE warranty_policies
   ADD COLUMN coverage_kind text NOT NULL DEFAULT 'fixed',
   ADD COLUMN lifetime_definition jsonb;
 ALTER TABLE warranty_policies ALTER COLUMN duration_months DROP NOT NULL;
-ALTER TABLE warranty_policies DROP CONSTRAINT warranty_policies_duration_months_check;
+ALTER TABLE warranty_policies DROP CONSTRAINT IF EXISTS warranty_policies_duration_months_check;
 ALTER TABLE warranty_policies ADD CONSTRAINT warranty_policy_term_shape CHECK (
   (coverage_kind = 'fixed' AND duration_months IS NOT NULL AND duration_months BETWEEN 1 AND 120 AND lifetime_definition IS NULL)
   OR (coverage_kind = 'lifetime' AND duration_months IS NULL AND
@@ -43,7 +43,8 @@ ALTER TABLE warranties
   ADD COLUMN lifetime_definition jsonb,
   ADD COLUMN terminated_on date;
 ALTER TABLE warranties ALTER COLUMN expires_on DROP NOT NULL;
-ALTER TABLE warranties DROP CONSTRAINT warranties_expires_on_check;
+ALTER TABLE warranties DROP CONSTRAINT IF EXISTS warranties_expires_on_check;
+ALTER TABLE warranties DROP CONSTRAINT IF EXISTS warranties_check;
 ALTER TABLE warranties ADD CONSTRAINT warranty_coverage_term_shape CHECK (
   (coverage_kind = 'fixed' AND expires_on IS NOT NULL AND expires_on >= start_date
     AND lifetime_definition IS NULL AND terminated_on IS NULL)
@@ -102,7 +103,7 @@ $$;
 CREATE TRIGGER warranty_coverage_no_term_change BEFORE UPDATE ON warranties
 FOR EACH ROW EXECUTE FUNCTION warranty_coverage_immutable();
 
-ALTER TABLE warranty_verification_settings DROP CONSTRAINT warranty_verification_settings_check;
+ALTER TABLE warranty_verification_settings DROP CONSTRAINT IF EXISTS warranty_verification_settings_check;
 ALTER TABLE warranty_verification_settings ADD CONSTRAINT warranty_verification_settings_check CHECK (
   approved_fields <@ ARRAY['service', 'status', 'startDate', 'expiresOn', 'branch', 'coverage']::text[]
 );

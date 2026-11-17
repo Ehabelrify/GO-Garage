@@ -20,7 +20,7 @@ const consentUpdate = z.object({
   action: z.enum(["grant", "revoke"]),
   evidenceRef: z.string().regex(/^private:[A-Za-z0-9/_-]+$/).optional(),
   expiresAt: z.string().datetime().optional(),
-  reason: z.string().trim().min(1).max(240).optional(),
+  reason: z.enum(["customer-requested", "policy-expired", "other"]).optional(),
 }).strict().superRefine((input, context) => {
   if (input.action === "grant" && !input.evidenceRef) {
     context.addIssue({ code: "custom", path: ["evidenceRef"], message: "Protected consent evidence is required." });
