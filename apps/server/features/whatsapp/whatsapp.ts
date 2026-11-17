@@ -20,8 +20,10 @@ import { reserveConfirmedBooking, rescheduleConfirmedBooking, cancelConfirmedBoo
 import { listAvailableSlotsForDemand } from "../operations/availability-service";
 import { isWhatsAppProviderDeliveryEnabled, isWhatsAppSimulationWriteEnabled } from "./whatsapp-policy";
 import { canAccessInbox,canActorAccessInboxBranch,loadInboxMembership,setInboxMembership } from "./inbox-access";
+import { customerConsentRouter } from "./consent-routes";
 
 const router = Router();
+router.use("/consents", customerConsentRouter);
 const allowedRoles = ["owner", "branch-manager", "receptionist"];
 
 function id(prefix: string) {
