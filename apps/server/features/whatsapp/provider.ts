@@ -10,6 +10,11 @@ export interface ProviderAdapter {
     content: unknown;
     idempotencyKey: string;
   }): Promise<ProviderSendResult>;
+  /**
+   * Resolve an ambiguous send using the same provider idempotency key or a
+   * provider-issued reference. Return definite-failure only when the provider
+   * confirms the message was not accepted; unresolved results remain held.
+   */
   reconcile?(input: {
     channelId: string;
     idempotencyKey: string;

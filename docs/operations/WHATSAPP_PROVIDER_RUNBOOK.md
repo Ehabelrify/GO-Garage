@@ -12,7 +12,9 @@ Status: disconnected. This document is a cutover gate, not evidence of a live pr
 
 ## Sandbox acceptance (future authorized session)
 
-Use provider-approved test recipients only. Record sanitized evidence for all six channels: valid inbound, invalid signature, replay deduplication, source-channel reply, accepted outbound, delivered/read receipts, out-of-order receipts, definite failure, timeout/unknown outcome and reconciliation. A queued row is not sent evidence. Unknown outcomes remain held for operator review unless the provider can reconcile the same idempotency/provider identifier.
+Use provider-approved test recipients only. Record sanitized evidence for all six channels: valid inbound, invalid signature, replay deduplication, source-channel reply, accepted outbound, delivered/read receipts, out-of-order receipts, definite failure, timeout/unknown outcome and reconciliation, including a worker stop after provider acceptance but before the local result is saved. A queued row is not sent evidence.
+
+When a worker lease expires, the row is quarantined as `unknown-outcome` before any new message is claimed. The restarted worker must reconcile the same idempotency key or provider-issued reference. A confirmed acceptance is recorded without resending; a provider-confirmed non-acceptance may be retried under the normal expiry and attempt limits. If reconciliation is unavailable, errors, or cannot determine the result, keep the row held for operator review. A reconciliation response may authorize retry only when it proves the provider did not accept the message.
 
 ## Cutover and monitoring
 
