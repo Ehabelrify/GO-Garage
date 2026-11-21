@@ -49,10 +49,14 @@ the integration suites. Apply to a disposable database first.
   `catalogue_package_versions.price_change` jsonb used by Owner price-edit drafts. Idempotent (`ADD COLUMN IF NOT EXISTS`,
   `DROP CONSTRAINT IF EXISTS`); existing rows keep EGP; not applied anywhere.
 
-## Adding the next migration (0030)
-1. Create `0030_<short_snake_case_description>.sql` in the migrations directory (next number
-   after `0029_invoice_currency_and_price_edits.sql`; no suffix letters).
+- `0030_invoices.sql` (Wave 2.6): `invoices` (per environment; links to customer, vehicle, booking, job, quote and warranty; status draft|issued|partial|paid|void; unique `(environment_id, idempotency_key)` so a job gets one auto invoice via key `job:<jobId>`; minor-unit totals; number unique per environment once issued), `invoice_lines`, append-only `invoice_events`, append-only `invoice_payment_references` (references only, no gateway) and `invoice_number_sequences` (per branch and year, upserted at issue time). Triggers: history and payment references reject UPDATE/DELETE; lines of a non-draft invoice cannot change; an issued invoice cannot be deleted, renumbered, or have its currency, total, customer or branch changed, and a void invoice cannot reopen. Idempotent (`IF NOT EXISTS`, `DROP TRIGGER IF EXISTS`); not applied anywhere. Numbers 0031 (quotes) and 0032 (plates) come from other agents; the runner sorts by filename so 0030 applies first.
+
+## Adding the next migration (0033)
+1. Create `0033_<short_snake_case_description>.sql` in the migrations directory (next number
+   after `0032_plate_normalization.sql`; no suffix letters).
 2. Write plain SQL; the runner wraps it in a transaction, so do not add `BEGIN`/`COMMIT`.
 3. Update `docs/engineering/DATA_MODEL.md` if the schema contract changes.
 4. Apply it to a disposable database and run the integration suites with
    `GARAGE_TEST_DATABASE_URL` set (CI does this against a Postgres 16 service).
+
+- `0032_plate_normalization.sql` (Wave 2.7): `garage_normalize_plate(text)` (IMMUTABLE SQL function: `translate()` of Arabic-Indic/Eastern digits to ASCII, a-z to A-Z and Alef/Yeh/Kaf/Heh variants to one canonical Arabic letter, `regexp_replace` stripping whitespace, dashes, dot, underscore, tatweel, zero-width/bidi marks and tashkeel, then letters followed by digits). It is the exact twin of `normalizePlate()` in `packages/domain/src/plate.ts`; `plate.test.ts` parses the literals out of the file and compares. Drops the 0027 `vehicles_plate_normalized_idx` and creates `vehicles_plate_key_idx` on `garage_normalize_plate(plate) text_pattern_ops`. Not unique on purpose (legacy spellings could collide); duplicates per customer/branch are refused by the API with 409 `DUPLICATE_PLATE`. Idempotent; not applied anywhere. Changing the function later means a new migration that also rebuilds the index.

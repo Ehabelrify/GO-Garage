@@ -3,9 +3,9 @@
 **Created / last updated:** 15 November 2026 / 21 November 2026
 **Purpose:** Single working tracker for Phase 1 defects, investigation, implementation handoff, and retesting.  
 **Initial intake:** 25 entries: 7 code-review findings, 15 UI-test findings, and 3 engineering follow-ups.  
-**Current intake:** 55 entries (44 below plus 6 hardening/UI entries P1-045–P1-050 and 5 Wave 2.5 entries P1-051–P1-055 recorded 21 November 2026): the original 25, 6 user-feedback/discovery follow-ups, 6 cross-industry research improvements, and 7 approved business/product additions recorded on 16 November 2026.
-**Next available ID:** `P1-056`
-**Current ownership:** 2 entries remain Open/Unassigned and 53 entries are Ready for retest after implementation. Ready entries are P1-001–P1-029 and P1-032–P1-055. No runtime retests were performed; P1-045–P1-055 were additionally never run against a database (migrations 0026-0029 and the seed are unapplied).
+**Current intake:** 60 entries (44 below plus 6 hardening/UI entries P1-045–P1-050, 5 Wave 2.5 entries P1-051–P1-055 and 2 Wave 2.6 quote entries P1-056–P1-057 2 Wave 2.6 invoice entries P1-058–P1-059 and the Wave 2.7 plate entry P1-060 recorded 21 November 2026): the original 25, 6 user-feedback/discovery follow-ups, 6 cross-industry research improvements, and 7 approved business/product additions recorded on 16 November 2026.
+**Next available ID:** `P1-061`
+**Current ownership:** 2 entries remain Open/Unassigned and 58 entries are Ready for retest after implementation. Ready entries are P1-001–P1-029 and P1-032–P1-060. No runtime retests were performed; P1-045–P1-060 were additionally never run against a database (migrations 0026-0030 and 0032 and the seed are unapplied).
 
 ## Sources and application context
 
@@ -97,6 +97,11 @@ Garage OS uses React/Vite, Express, PostgreSQL, Clerk, and `@garage/domain`. It 
 | [P1-053](#p1-053) | Wave 2.5 (21 Nov 2026) | Purge plan and docs for purchases and special requests | Low | P3 | Ready for retest | Source |
 | [P1-054](#p1-054) | Wave 2.5 (21 Nov 2026) | Warranty invoice panel rework and selectable currency (EGP / SAR / USD) | High | P2 | Ready for retest | Source |
 | [P1-055](#p1-055) | Wave 2.5 (21 Nov 2026) | Owner price editing in the Catalogue: versioned, history, publish diff | High | P2 | Ready for retest | Source |
+| [P1-056](#p1-056) | Wave 2.6 (21 Nov 2026) | Auto-generated draft quotes and the shared Create quote action | High | P2 | Ready for retest | Source |
+| [P1-057](#p1-057) | Wave 2.6 (21 Nov 2026) | Printable quote (A4, bilingual) and special-request currency dropdown | Medium | P2 | Ready for retest | Source |
+| [P1-058](#p1-058) | Wave 2.6 (21 Nov 2026) | Generic invoices: auto-generated from delivered jobs, numbering, lifecycle, Invoices tab | High | P2 | Ready for retest | Source |
+| [P1-059](#p1-059) | Wave 2.6 (21 Nov 2026) | Shared printable A4 document sheet, invoice print and warranty invoice print | Medium | P2 | Ready for retest | Source |
+| [P1-060](#p1-060) | Wave 2.7 (21 Nov 2026) | Robust Egyptian plate normalisation: search, duplicate check, inputs | Medium | P2 | Ready for retest | Source |
 
 ## Technical issue details
 
@@ -1351,6 +1356,73 @@ The user approved all recommendations and valuable additions derived from the Go
 **Retest:** Not performed; no database was available. The publish path inserts policy rows and has only been exercised through mocks. Migration `0029` is unapplied. Not production-ready.
 
 
+### P1-056 — Auto-generated draft quotes and the shared "Create quote" action
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-21; user decision (Wave 2.6).
+**Area:** Quotes, special requests, customers.
+**Evidence:** Source and mocked-pool unit tests (`quote-generation.test.ts`, `quote-document.test.ts`).
+
+**Acceptance:** Accepting a special request creates (idempotently, quote id derived from the source) a DRAFT quote and links it via `quote_id`; a failure never undoes the decision. "Create quote" (special request drawer, Customer 360, Vehicle 360, Quotes tab) finds the customer's recent service work, generates a draft from the chosen one (catalogue package for the vehicle category, add-ons, transport fees, approved tax, currency), shows a short picker when several sources exist, opens a blank quote with customer and vehicle preselected when none exist. Existing quote validation (price/tax staleness, currency, authority) is unchanged.
+
+**Implementation — 2026-11-21:** `apps/server/features/commercial/quote-generation.ts` (pure `assembleQuoteDraft`, loaders, `generateQuoteDraft`, `listQuoteSources`), `GET /api/quotes/sources`, `POST /api/quotes/generate`, `decide` calls the generator after accept; web `CreateQuote.tsx`, `quote-generate-api.ts`. No migration.
+
+**Retest:** Not performed; no database was available. SQL in the loaders (bookings, transport fees, benefits, work-occupancy policy) is only exercised through mocks. Discounts from promotions are NOT auto-applied (the server refuses discounts without a configured grant); active benefits only raise a warning. Not production-ready.
+
+### P1-057 — Printable quote and special-request currency dropdown
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-21; user decision (Wave 2.6).
+**Area:** Quotes, special requests.
+**Evidence:** Source and unit tests; no browser or print check.
+
+**Acceptance:** A quote opens a print view (A4, bilingual, RTL-aware) with document number, branch, issue and valid-until dates, customer and vehicle, line items including transport, tax, totals per currency and terms/notes placeholders, and a Print button. The special-request currency is a dropdown of the central list (EGP, SAR, USD) and the server rejects other codes.
+
+**Implementation — 2026-11-21:** `quote-document.ts` (content), `QuotePrint.tsx` and `quote-print.css` (layout, local fallback sheet because `shared/print/DocumentSheet.tsx` did not exist yet), Print button in the quote drawer; `RequestDrawer.tsx` currency select; `special-requests-logic.ts` (server and web) validate with `isSupportedCurrency`.
+
+**Retest:** Not performed; layout, page breaks and RTL print output were not checked in a browser. Not production-ready.
+
+<a id="p1-060"></a>
+
+### P1-060 — Robust Egyptian plate normalisation (search, duplicate check, inputs)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-21; user direction (Wave 2.7).
+**Area:** Customers, vehicles, global search, bookings picker.
+**Evidence:** Source and unit tests (`packages/domain/src/plate.test.ts`, relations/customer-edit/customers-logic tests); the SQL twin is only checked by a test that re-executes the documented semantics from the literals in the migration file.
+
+**Acceptance:** "أ ب ج 1234", "ابج١٢٣٤", "ا ب ج-1234" and "1234 جبا" all find the same vehicle in global search, the customer list and the booking picker. Adding a vehicle whose plate normalises to an existing one for the same customer or a customer in the same branch is refused with 409 `DUPLICATE_PLATE` naming the existing vehicle. Plate inputs show the canonical form live.
+
+**Implementation — 2026-11-21:** `normalizePlate`, `plateSearchKeys`, `plateMatchesQuery`, `formatPlateDisplay`, `isPlausiblePlate` in `@garage/domain` (digits to ASCII; Alef/Yeh/Heh/Kaf variants unified; spaces, dashes, tatweel, zero-width/bidi marks and tashkeel stripped; letters first then digits; Latin not transliterated; letter order kept, search also tries the reversed letters). Migration `0032` adds `garage_normalize_plate()` and replaces the 0027 plate index with an expression index on it. Search, vehicle/customer creation (stores the canonical display form) and web forms/pickers use the shared rules; seeded demo plates are untouched and normalised on read.
+
+**Retest:** Not performed; no database was available. Migration `0032` is unapplied and the SQL function has never run on PostgreSQL. Not production-ready.
+
+### P1-058 — Generic invoices: auto-generated from delivered jobs
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-21; user direction (Wave 2.6: auto-generate wherever possible, one generic template, confirmed template later).
+**Area:** Invoices, finance boundary, seed.
+**Evidence:** Source and mocked-pool unit tests (`apps/server/features/invoicing/*.test.ts`, `apps/web/src/features/invoices/invoice-model.test.ts`, `seed-invoices.test.ts`).
+
+**Acceptance:** Delivering a job creates exactly one draft invoice (idempotency key `job:<jobId>`; repeated delivery, retries and the manual "generate" call return the same invoice) with the accepted-quote lines (package, services, add-ons, discounts, per-line tax) or the booked service unpriced when no quote exists, plus completed transport fees in the same currency; a failure in generation never blocks delivery. Drafts are editable (lines, currency from the central list, optional tax rate, notes, terms); issuing needs every line priced and taxed and assigns `INV-<branch>-<year>-<5 digits>`; payments are references only; void needs a reason and is refused once payments exist; every change appends to an immutable history. Invoices never feed the Finance report (no double counting with the warranty invoice drafts or money events).
+
+**Implementation — 2026-11-21:** migration `0030_invoices.sql` (`invoices`, `invoice_lines`, `invoice_events`, `invoice_payment_references`, `invoice_number_sequences`, immutability and issued-invoice guard triggers); `apps/server/features/invoicing/` (logic, service, routes at `/api/invoices`); one line in the job-stage route calls `autoGenerateInvoiceForDeliveredJob` inside a savepoint; Invoices tab in Bookings (`?tab=invoices&record=`), drawer with line editing, issue/void/payment dialogs; Customer 360 invoices section now lists warranty drafts and job invoices (`kind`); seed `seed-invoices.ts` and purge steps.
+
+**Retest:** Not performed; no database was available. Migration `0030` is unapplied; the numbering upsert, savepoint auto-generation and triggers have only been exercised through mocks. No browser check. Not production-ready.
+
+### P1-059 — Shared printable document sheet (A4, bilingual) for invoices and warranty invoices
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-21; user direction (Wave 2.6 printable documents).
+**Area:** Shared UI, print.
+**Evidence:** Source only (`DocumentSheet`, `print.css`, `invoice-model.test.ts` for the pure model).
+
+**Acceptance:** One config-driven `DocumentSheet` renders any `DocumentModel` (header, parties with plate, line table, totals per currency, notes/terms, disclaimer, signatures) in English LTR or Arabic RTL with logical CSS; `PrintHost` + `PrintButton` print only the sheet on A4 through the browser dialog (Save as PDF). The owner's confirmed template replaces the sheet or CSS without changing callers. The warranty invoice panel prints through it.
+
+**Implementation — 2026-11-21:** `apps/web/src/shared/print/{DocumentSheet.tsx,document-model.ts,print.css}`, exported from the shared components barrel and documented in `UI_PATTERNS.md`; the invoice drawer and `WarrantyInvoicePanel` use it (the old inline print area is no longer printed; `warranty-print.ts` remains for the QR card).
+
+**Retest:** Not performed; no browser check of A4 layout, page breaks, RTL or the print dialog. Business name and logo are placeholders. Not production-ready.
+
 ## Change log
 
 | Date | Change | Runtime verification |
@@ -1385,3 +1457,6 @@ The user approved all recommendations and valuable additions derived from the Go
 | 2026-11-21 | Recorded P1-045–P1-050 for production hardening, invite-only access, UI/UX consolidation (navigation, record registry, capability-gated UI), dummy-data seeder and purge, interlinked records and owner archive; advanced next ID to P1-051 | Source only; no database available, migrations 0026/0027 and seed unrun, no browser or runtime retests |
 | 2026-11-21 | Recorded P1-051–P1-053 (purchases section, special requests with owner review and reply, purge/docs); migration 0028 written, not applied | Source and mocked tests only; no database, browser or runtime retest |
 | 2026-11-21 | Recorded P1-054 (warranty invoice panel rework and selectable EGP/SAR/USD currency) and P1-055 (Owner price editing in the Catalogue); migration 0029 written, not applied; advanced next ID to P1-056 | Source and mocked tests only; no database, no browser or print check, no runtime retests |
+| 2026-11-21 | Recorded P1-056 (auto-generated draft quotes, shared Create quote action) and P1-057 (printable quote, special-request currency dropdown); no migration; advanced next ID to P1-058 | Source and mocked tests only; no database, no browser or print check, no runtime retests |
+| 2026-11-21 | Recorded P1-060 (Egyptian plate normalisation in domain, search, duplicate check and inputs); migration 0032 written, not applied | Source and unit tests only; no database, no browser, no runtime retest |
+| 2026-11-21 | Recorded P1-058 (generic invoices auto-generated from delivered jobs, numbering, lifecycle, Invoices tab) and P1-059 (shared printable document sheet, invoice and warranty invoice print); migration 0030 written, not applied | Source and mocked tests only; no database, no browser, no print check |

@@ -20,6 +20,7 @@ Page recipe: `PageHeader` (title + optional one-line subtitle) + `FilterBar` + `
 | `Money` | `minor`, `currency?="EGP"`, `lang` | Any price. Takes minor units, prints "EGP 1,250". Helpers: `formatMoney`, `minorToMajor`, `majorToMinor` (for major-unit inputs). |
 | `RecordProvider`, `RecordRef`, `RecordRefList` | `RecordProvider{lang,registry}`; `RecordRef{type,id,label?,subtitle?,badge?,mode?: preview/link,hideIcon?}` | Any mention of customer, vehicle (plate), booking, job, quote, reservation, warranty, claim, invoice or conversation. Renders icon + human label (never the id; falls back to the type name). Click opens a shared drawer with back stack and "Open full page". `mode="link"` navigates directly. |
 | `GlobalSearch` | `lang`, `onNavigate(route)`, `fetcher?`, `debounceMs?`, `minLength?` | Mounted in the topbar. `/` (outside inputs) and Ctrl/Cmd+K focus it; 250 ms debounce; results grouped by type; arrow/Enter/Esc. Default fetcher is `fetchSearch`. |
+| `DocumentSheet`, `PrintButton` | `DocumentSheet{model: DocumentModel, className?}`; `PrintButton{lang,label?,disabled?}`; `PrintHost{model}` | Any printable business document (invoice, quote). Generic A4 template: header (business, title, number, status stamp), branch / issue date / valid-until, customer + vehicle (plate), line table (description, qty, unit, discount, tax, amount), totals per currency (never mixed), notes/terms, disclaimer, signatures/footer. `dir` follows `model.lang`; logical CSS; `@media print` hides app chrome and prints only `.doc-print-root` on A4. `PrintHost` portals a screen-hidden copy of the sheet to `document.body`; `PrintButton` sets `body.printing-document` and calls `window.print()` (choose Save as PDF), so only the host prints (scoped; the warranty QR print path is untouched). Files: `shared/print/{DocumentSheet.tsx,document-model.ts,print.css}`. |
 
 ## Registering record types (features)
 
@@ -39,3 +40,7 @@ Owner 10 items, branch manager 7, receptionist 5, technician 1; sidebar and mobi
 ## Not yet built (deferred)
 
 Pickers (`CustomerVehiclePicker`, `QuotePicker`, `PolicyPicker`) and the Customer/Vehicle 360 views belong to the module tasks (W2-3, W2-5, W2-8).
+
+## Printable documents (shared/print)
+
+`DocumentModel` is a pure, template-neutral type: `lang`, `business{name,subtitle?,logoUrl?}`, `title`, `number|null`, `statusLabel?`, `branch`, `issueDate|null`, `validUntil?`, `customer{label,name,lines?}`, `vehicle?{label,plate,description?}`, `lines[{description,detail?,quantity,unitMinor|null,discountMinor?,taxMinor?,amountMinor|null,currency}]`, `totals[{currency,subtotalMinor,discountMinor,taxMinor,totalMinor,paidMinor?,balanceMinor?}]` (one entry per currency), `notes?`, `terms?`, `disclaimer?`, `signatures?`, `footer?`. All amounts are minor units. Callers build the model (rules stay in their module); when the owner's confirmed template arrives, replace `DocumentSheet`/`print.css` and keep the model. The business name and logo are placeholders until the owner supplies them.

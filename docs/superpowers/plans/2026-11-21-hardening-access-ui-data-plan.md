@@ -62,6 +62,20 @@ Pending user actions: approve running migration 0026 on a target DB; Clerk dashb
   the button is the manual path when nothing was auto-generated. Wire `onCreateQuote` in the Special requests tab.
 - Switch the special-request currency field to the central currency dropdown from W2.5-B (packages/domain).
 
+## Wave 2.7 (user-approved 21 Nov 2026: visual checks, plate normalisation, all UX improvements)
+Start now (disjoint files): **V** visual-check CI job (seed -> boot -> screenshots per role, EN/AR-RTL, 360/768/1280, uploaded
+as workflow artifacts; Playwright installed in CI only, nothing added to local machine or package.json unless unavoidable);
+**P** plate search normalisation (Arabic/Latin letters, Arabic-Indic digits, spaces/dashes; shared normaliser in
+packages/domain used by server search, 360 lookups, web inputs; migration 0032 for the index expression).
+After Wave 2.6 (they share App.tsx/navigation/styles): **U1** receptionist fast path + Today board home; **U2** technician mode
+(large actions; photo/note/checklist/report-issue need new API+storage); **U3** reminders/follow-ups (booking reminders,
+warranty-expiry alerts, ready-for-pickup) on the simulation outbox, scheduled, no live provider; **U4** duplicate customer
+detection + merge (owner, audited, reversible window); **U5** owner audit-log screen + exports (CSV) + daily owner summary;
+**U6** saved filters, bulk actions, keyboard shortcuts on big lists; **U7** printable warranty card with QR via DocumentSheet.
+Planned, awaiting user decision/priority (NOT started): role-widget protection (passcode/allow-list or read-only demo owner),
+server-side paging for big lists, health check + error monitoring + backups, CSP once domain known, owner 2FA (Clerk setting),
+remaining role-based checks, large/dense file refactors, tracker summary header.
+
 ## Wave 3
 Stabilization gate (P4): typecheck, test, build, DB-integration run, tracker + docs updates, report to user.
 

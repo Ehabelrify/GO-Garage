@@ -54,7 +54,7 @@ approved business policy. Do not describe the application as production-ready.
   styles.
 - `apps/server/index.ts` is the Replit-facing server composition entry.
 - `apps/server/features/auth/`, `commercial/`, `finance/`, `operations/`,
-  `owner-records/`, `relations/`, `special-requests/`, `warranty/`, `whatsapp/`, and `seed/` contain
+  `owner-records/`, `relations/`, `special-requests/`, `invoicing/` (generic invoices, `/api/invoices`), `warranty/`, `whatsapp/`, and `seed/` contain
   server features (`relations/` = global search, Customer/Vehicle 360, warranty
   resolve; `owner-records/` = Owner soft-archive/restore/audit; `seed/` also holds
   the bilingual dummy-data generator and the go-live purge plan);
@@ -124,7 +124,7 @@ been verified.
   [automations](docs/engineering/AUTOMATIONS.md),
   [WhatsApp](docs/engineering/WHATSAPP_SPEC.md),
   [warranty evidence storage](docs/engineering/WARRANTY_EVIDENCE_STORAGE.md), and
-  [migrations](docs/engineering/MIGRATIONS.md). CI: `.github/workflows/ci.yml`.
+  [migrations](docs/engineering/MIGRATIONS.md), and [visual checks](docs/engineering/VISUAL_CHECKS.md). CI: `.github/workflows/ci.yml`, `.github/workflows/visual.yml`.
 - Operations: [delivery plan](docs/operations/DELIVERY_PLAN.md),
   [decisions](docs/operations/DECISIONS.md), and
   [project log](docs/operations/PROJECT_LOG.md).
