@@ -22,3 +22,5 @@ export {
   fetchSearch, fetchRecord360, resolveWarrantyCode, normaliseSearchResults, normalise360, groupSearchResults,
   type SearchResult, type SearchFetcher, type Record360, type LinkedRecord, type LinkedSection, type ResolvedWarranty,
 } from "../search";
+export { DocumentSheet, PrintButton, PrintHost, printDocument } from "../print/DocumentSheet";
+export { documentLabels, type DocumentModel, type DocumentLine, type DocumentTotal, type DocumentParty, type DocumentVehicle } from "../print/document-model";

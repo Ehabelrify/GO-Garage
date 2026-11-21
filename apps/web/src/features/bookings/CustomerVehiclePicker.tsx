@@ -3,6 +3,7 @@ import { Plus, X } from "lucide-react";
 import type { BranchId, CreateCustomerInput, Locale } from "@garage/domain";
 import { Field, FormSection } from "../../shared/components";
 import { customerDisplay } from "../../shared/ui";
+import { formatPlateDisplay } from "@garage/domain";
 import { matchesCustomer } from "./booking-logic";
 import "./bookings.css";
 
@@ -67,7 +68,7 @@ export function CustomerVehiclePicker({ lang, customers, value, onChange, onCrea
       <FormSection title={t("New customer and vehicle", "عميل ومركبة جديدان")}>
         <Field label={t("Name", "الاسم")} required><input className="field-input" autoComplete="off" value={fresh.name} onChange={(event) => setFresh({ ...fresh, name: event.target.value })} /></Field>
         <Field label={t("Phone", "الهاتف")} required><input className="field-input" type="tel" dir="ltr" autoComplete="off" value={fresh.phone} onChange={(event) => setFresh({ ...fresh, phone: event.target.value })} /></Field>
-        <Field label={t("Plate", "اللوحة")} required><input className="field-input" dir="ltr" autoComplete="off" value={fresh.plate} onChange={(event) => setFresh({ ...fresh, plate: event.target.value })} /></Field>
+        <Field label={t("Plate", "اللوحة")} required hint={fresh.plate.trim() ? `${t("Saved as", "ستُحفظ كـ")} ${formatPlateDisplay(fresh.plate, { isolate: true })}` : undefined}><input className="field-input" dir="auto" autoComplete="off" value={fresh.plate} onChange={(event) => setFresh({ ...fresh, plate: event.target.value })} /></Field>
         <Field label={t("Make and model", "الماركة والموديل")} required><input className="field-input" autoComplete="off" value={fresh.makeModel} onChange={(event) => setFresh({ ...fresh, makeModel: event.target.value })} /></Field>
         <Field label={t("Language", "اللغة")}><select className="field-select" value={fresh.language} onChange={(event) => setFresh({ ...fresh, language: event.target.value as Locale })}><option value="en">English</option><option value="ar">العربية</option></select></Field>
       </FormSection>

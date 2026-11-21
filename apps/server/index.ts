@@ -18,7 +18,8 @@ const isProduction = process.env.NODE_ENV === "production";
 
 // Rate limits (per client IP, fixed window).
 const RATE_WINDOW_MS = 60_000;
-const API_GENERAL_LIMIT = 300; // requests/min across /api
+// requests/min across /api. GARAGE_API_RATE_LIMIT only exists so the CI visual run (one IP, hundreds of page loads) is not throttled; leave it unset in real deployments.
+const API_GENERAL_LIMIT = Number.parseInt(process.env.GARAGE_API_RATE_LIMIT ?? "", 10) > 0 ? Number.parseInt(process.env.GARAGE_API_RATE_LIMIT as string, 10) : 300;
 const PUBLIC_VERIFY_LIMIT = 30; // requests/min on public warranty verification
 const PROVIDER_WEBHOOK_LIMIT = 120; // requests/min on the WhatsApp provider webhook
 const DEMO_SESSION_LIMIT = 10; // POST /api/demo/session per min

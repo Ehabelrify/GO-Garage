@@ -3,7 +3,7 @@ import { canAccessBranch, hasCapability, type Capability, type GarageActor } fro
 import { commercialContext } from "../commercial/policy-service";
 import { canAccessInbox, loadInboxMembership } from "../whatsapp/inbox-access";
 import {
-  digitsOnly, escapeLike, normalizePlate, parseWarrantyCode, restrictedSection,
+  digitsOnly, escapeLike, normalizePlate, parseWarrantyCode, plateLikePatterns, restrictedSection,
   type RelationSection, type SearchType,
 } from "./relations-helpers";
 
@@ -68,9 +68,9 @@ export async function globalSearch(actor: GarageActor, rawQuery: string, types: 
   if (types.includes("vehicle") && plate.length >= 2) {
     const rows = await pool.query<{ id: string; plate: string; make: string; model: string; name: string }>(
       `SELECT v.id, v.plate, v.make, v.model, c.name FROM vehicles v JOIN customers c ON c.id = v.customer_id
-       WHERE ${customerVisible} AND upper(regexp_replace(v.plate, '[\\s-]', '', 'g')) LIKE $3 ESCAPE '\\'
+       WHERE ${customerVisible} AND garage_normalize_plate(v.plate) LIKE ANY($3::text[])
        ORDER BY v.plate LIMIT ${SEARCH_LIMIT}`,
-      [owner, branchIds, `%${escapeLike(plate)}%`],
+      [owner, branchIds, plateLikePatterns(q)],
     );
     for (const row of rows.rows) {
       results.push({ type: "vehicle", id: row.id, title: row.plate, subtitle: `${[row.make, row.model].filter(Boolean).join(" ")} - ${row.name}`, route: routes.vehicle(row.id) });
@@ -161,10 +161,17 @@ const sectionSpecs: SectionSpec[] = [
     sql: (s) => `SELECT x.id, x.warranty_id, x.status, x.summary, w.branch_id, count(*) OVER() AS total
       FROM warranty_claims x JOIN warranties w ON w.id = x.warranty_id WHERE w.${s}=$1 AND ($2 OR w.branch_id = ANY($3::text[])) ORDER BY x.updated_at DESC LIMIT ${PREVIEW_LIMIT}`,
     map: (r) => ({ id: r.id, warrantyId: r.warranty_id, branchId: r.branch_id, status: r.status, summary: r.summary }) },
+  // Warranty invoice drafts (kind "warranty") and generic job invoices (kind "job", migration 0030) in one section.
   { key: "invoices", capability: "warranty.view",
-    sql: (s) => `SELECT x.id, x.warranty_id, x.branch_id, x.status, count(*) OVER() AS total
-      FROM warranty_invoice_drafts x JOIN warranties w ON w.id = x.warranty_id WHERE w.${s}=$1 AND ${branchScope} ORDER BY x.updated_at DESC LIMIT ${PREVIEW_LIMIT}`,
-    map: (r) => ({ id: r.id, warrantyId: r.warranty_id, branchId: r.branch_id, status: r.status }) },
+    sql: (s) => `SELECT u.id, u.warranty_id, u.branch_id, u.status, u.kind, u.number, u.total_minor, u.currency, count(*) OVER() AS total FROM (
+        SELECT x.id, x.warranty_id, x.branch_id, x.status, 'warranty' AS kind, NULL::text AS number, NULL::text AS total_minor, x.currency, x.updated_at
+        FROM warranty_invoice_drafts x JOIN warranties w ON w.id = x.warranty_id WHERE w.${s}=$1 AND ${branchScope}
+        UNION ALL
+        SELECT x.id, x.warranty_id, x.branch_id, x.status, 'job', x.number, x.total_minor::text, x.currency, x.updated_at
+        FROM invoices x WHERE x.${s}=$1 AND x.environment_id=$4 AND ${branchScope} AND ${notArchived("customer", "x.customer_id")}
+      ) u ORDER BY u.updated_at DESC LIMIT ${PREVIEW_LIMIT}`,
+    map: (r) => ({ id: r.id, warrantyId: r.warranty_id, branchId: r.branch_id, status: r.status, kind: r.kind, number: r.number ?? null,
+      total: r.total_minor == null ? null : { minor: Number(r.total_minor), currency: r.currency } }) },
 ];
 
 /** What the customer bought: read model view over accepted quotes (plus quote-less delivered jobs). Amounts keep their own currency. */

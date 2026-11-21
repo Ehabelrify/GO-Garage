@@ -5,6 +5,7 @@ import { DataTable, DetailDrawer, EmptyState, FilterBar, Money, RecordRef, Statu
 import { hasCapability } from "../../shared/capabilities";
 import { useGarageStore } from "../../shared/store";
 import { dateLabel } from "../../shared/ui";
+import { CreateQuote } from "../quotes/CreateQuote";
 import { RequestDrawer } from "./RequestDrawer";
 import { RequestForm } from "./RequestForm";
 import { listRequests } from "./special-requests-api";
@@ -30,6 +31,7 @@ export function SpecialRequestsPanel({ lang, notify }: { lang: Locale; notify: (
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("open");
   const [creating, setCreating] = useState(false);
+  const [quoteFor, setQuoteFor] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(false);
@@ -69,7 +71,9 @@ export function SpecialRequestsPanel({ lang, notify }: { lang: Locale; notify: (
       empty={rows.length === 0
         ? <EmptyState title={t("No special requests yet", "لا توجد طلبات خاصة بعد")} action={canCreate ? <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>{t("New special request", "طلب خاص جديد")}</button> : undefined} />
         : <EmptyState variant="no-results" title={t("No matching requests", "لا توجد طلبات مطابقة")} action={<button type="button" className="btn" onClick={clear}>{t("Clear filters", "مسح التصفية")}</button>} />} />
-    {record && <RequestDrawer lang={lang} id={record} canReview={canReview} canStaffAct={canCreate} onClose={() => setRecord("")} onChanged={() => void load()} />}
+    {record && <RequestDrawer lang={lang} id={record} canReview={canReview} canStaffAct={canCreate} onClose={() => setRecord("")} onChanged={() => void load()} onCreateQuote={(request) => setQuoteFor(request.id)} />}
+    {quoteFor && <CreateQuote lang={lang} requestId={quoteFor} onClose={() => setQuoteFor(null)}
+      onSaved={() => { setQuoteFor(null); notify(t("Draft quote saved.", "تم حفظ مسودة عرض السعر.")); void load(); }} />}
     <DetailDrawer open={creating} onClose={() => setCreating(false)} lang={lang} title={t("New special request", "طلب خاص جديد")}>
       <RequestForm lang={lang} onCancel={() => setCreating(false)} onCreated={(id) => { setCreating(false); notify(t("Request created.", "تم إنشاء الطلب.")); void load(); setRecord(id); }} />
     </DetailDrawer>

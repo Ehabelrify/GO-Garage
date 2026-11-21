@@ -32,7 +32,7 @@ export const defaultRecordRoutes: Record<RecordType, (id: string) => string> = {
   reservation: (id) => `/workspace/quotes?tab=reservations&record=${encodeURIComponent(id)}`,
   warranty: (id) => `/workspace/warranties?record=${encodeURIComponent(id)}`,
   claim: (id) => `/workspace/warranties?tab=claims&record=${encodeURIComponent(id)}`,
-  invoice: (id) => `/workspace/warranties?tab=invoices&record=${encodeURIComponent(id)}`,
+  invoice: (id) => `/workspace/bookings?tab=invoices&record=${encodeURIComponent(id)}`,
   conversation: (id) => `/workspace/whatsapp?record=${encodeURIComponent(id)}`,
   benefit: (id) => `/workspace/quotes?tab=benefits&record=${encodeURIComponent(id)}`,
   transport: (id) => `/workspace/bookings?tab=transport&record=${encodeURIComponent(id)}`,

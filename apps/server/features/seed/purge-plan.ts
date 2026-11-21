@@ -16,6 +16,7 @@ const ENTITLEMENTS = `(SELECT id FROM benefit_entitlements WHERE customer_id IN 
 const REDEMPTIONS = `(SELECT id FROM benefit_redemptions WHERE entitlement_id IN ${ENTITLEMENTS})`;
 const MONEY = `(SELECT id FROM operational_money_events WHERE customer_id IN ${SEEDED_CUSTOMERS} OR id LIKE 'seed-mev-%')`;
 const TRANSPORT = `(SELECT id FROM transport_requests WHERE customer_id IN ${SEEDED_CUSTOMERS})`;
+const INVOICES = `(SELECT id FROM invoices WHERE customer_id IN ${SEEDED_CUSTOMERS} OR id LIKE 'seed-inv-%')`;
 const REQUESTS = `(SELECT id FROM special_requests WHERE customer_id IN ${SEEDED_CUSTOMERS} OR id LIKE 'seed-sr-%')`;
 const SEED_POLICY_VERSIONS = `(SELECT policy_id, version FROM commercial_policy_versions WHERE reason = '${SEED_REASON}')`;
 const SEED_AVAILABILITY = `(SELECT branch_id, version FROM branch_availability_versions WHERE reason = '${SEED_REASON}')`;
@@ -26,6 +27,11 @@ export interface Step { label: string; table: string; where: string; optional?: 
 /** Child-first order. Immutable-history triggers are disabled only for the duration of the transaction. */
 export function buildSteps(options: { keepDemoAccounts: boolean }): Step[] {
   const steps: Step[] = [
+    { label: "Invoice payment references", table: "invoice_payment_references", where: `invoice_id IN ${INVOICES}` },
+    { label: "Invoice history", table: "invoice_events", where: `invoice_id IN ${INVOICES}` },
+    { label: "Invoice lines", table: "invoice_lines", where: `invoice_id IN ${INVOICES}` },
+    { label: "Invoices", table: "invoices", where: `id IN ${INVOICES}` },
+    { label: "Invoice number counters (only when no invoice remains for that branch and year)", table: "invoice_number_sequences", where: "NOT EXISTS (SELECT 1 FROM invoices i WHERE i.branch_id = invoice_number_sequences.branch_id AND extract(year FROM i.issue_date)::int = invoice_number_sequences.year)" },
     { label: "Special request history", table: "special_request_events", where: `request_id IN ${REQUESTS}` },
     { label: "Special requests", table: "special_requests", where: `id IN ${REQUESTS}` },
     { label: "WhatsApp outbox", table: "messaging_outbox", where: `conversation_id IN ${CONVERSATIONS}` },

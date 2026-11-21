@@ -119,6 +119,8 @@ export const statusRegistry: Record<StatusDomain, Record<string, Entry>> = {
   },
   invoice: {
     draft: { en: "Draft", ar: "مسودة", tone: "neutral" },
+    issued: { en: "Issued", ar: "صادرة", tone: "info" },
+    void: { en: "Void", ar: "ملغاة", tone: "danger" },
     unpriced: { en: "Not priced", ar: "بدون سعر", tone: "neutral" },
     unpaid: { en: "Unpaid", ar: "غير مدفوعة", tone: "warning" },
     partial: { en: "Part paid", ar: "مدفوعة جزئياً", tone: "info" },

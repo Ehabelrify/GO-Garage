@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import type { Locale } from "@garage/domain";
 import { Field, FormSection, RequiredNote } from "../../shared/components";
 import { unknownWriteOutcomeCopy } from "../../shared/store";
-import { validateCustomerForm, type CustomerFormErrors } from "./customers-logic";
+import { formatPlateDisplay, validateCustomerForm, type CustomerFormErrors } from "./customers-logic";
 import "./customers.css";
 
 export interface CustomerFormValues {
@@ -20,6 +20,7 @@ const errorCopy: Record<string, { en: string; ar: string }> = {
   INVALID_CUSTOMER: { en: "Check the customer and vehicle details.", ar: "راجع بيانات العميل والمركبة." },
   INVALID_PHONE: { en: "Enter a phone number with 8 to 15 digits.", ar: "أدخل رقم هاتف من 8 إلى 15 رقماً." },
   DUPLICATE_PHONE: { en: "A customer with this phone number already exists.", ar: "يوجد عميل مسجل بهذا الرقم." },
+  DUPLICATE_PLATE: { en: "A vehicle with this plate already exists.", ar: "توجد مركبة مسجلة بنفس اللوحة." },
   FORBIDDEN: { en: "You cannot add customers to this branch.", ar: "لا يمكنك إضافة عملاء لهذا الفرع." },
   ROLE_FORBIDDEN: { en: "Your role cannot make this change.", ar: "صلاحيتك لا تسمح بهذا التغيير." },
 };
@@ -35,8 +36,8 @@ export function writeErrorMessage(code: string, lang: Locale, unsupported = fals
 }
 
 const fieldCopy = {
-  en: { required: "Required", phone: "Use 8 to 15 digits" },
-  ar: { required: "مطلوب", phone: "استخدم من 8 إلى 15 رقماً" },
+  en: { required: "Required", phone: "Use 8 to 15 digits", plate: "Use 1 to 4 letters and 1 to 6 digits" },
+  ar: { required: "مطلوب", phone: "استخدم من 8 إلى 15 رقماً", plate: "استخدم من 1 إلى 4 حروف ومن 1 إلى 6 أرقام" },
 };
 
 interface CustomerFormProps {
@@ -103,8 +104,8 @@ export function CustomerForm({ lang, mode, initial, branches = [], defaultBranch
       </Field>}
     </FormSection>}
     {withVehicle && <FormSection title={mode === "vehicle" ? t("Vehicle", "المركبة") : t("First vehicle", "المركبة الأولى")} columns={2}>
-      <Field label={t("Plate", "اللوحة")} required error={message("plate")}>
-        <input className="field-input mono" dir="ltr" maxLength={20} autoCapitalize="characters" value={values.plate} onChange={(event) => set("plate", event.target.value)} data-autofocus={mode === "vehicle" ? true : undefined} />
+      <Field label={t("Plate", "اللوحة")} required error={message("plate")} hint={values.plate.trim() ? `${t("Saved as", "ستُحفظ كـ")} ${formatPlateDisplay(values.plate, { isolate: true })}` : t("Arabic or Latin letters, any digits", "حروف عربية أو لاتينية وأي أرقام")}>
+        <input className="field-input mono" dir="auto" maxLength={20} autoCapitalize="characters" autoComplete="off" value={values.plate} onChange={(event) => set("plate", event.target.value)} data-autofocus={mode === "vehicle" ? true : undefined} />
       </Field>
       <Field label={t("Make and model", "الماركة والموديل")} required error={message("makeModel")}>
         <input className="field-input" maxLength={100} placeholder={t("Toyota Corolla 2022", "تويوتا كورولا 2022")} value={values.makeModel} onChange={(event) => set("makeModel", event.target.value)} />

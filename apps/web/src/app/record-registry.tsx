@@ -101,6 +101,8 @@ export function buildRecordRegistry(state: GarageState, lang: Locale): RecordReg
     },
     invoice: {
       label: (id) => { const found = invoice(id); const linked = found ? warranty(found.warrantyId) : undefined; return linked ? `${t("Invoice", "فاتورة")} · ${plateOf(linked.customerId, linked.vehicleId)}` : undefined; },
+      // Generic job invoices are not in the workspace store: RecordRef callers pass their number as the label. Warranty drafts open on the Warranties tab.
+      route: (id) => (invoice(id) ? `/workspace/warranties?tab=invoices&record=${encodeURIComponent(id)}` : `/workspace/bookings?tab=invoices&record=${encodeURIComponent(id)}`),
       preview: preview((record) => { const found = invoice(record.id); const linked = found ? warranty(found.warrantyId) : undefined; return found ? <Facts badge={badge("draft", "invoice")} rows={[
         [t("Warranty", "الضمان"), linked ? linked.policyName : ""],
         [t("Customer", "العميل"), linked ? customerDisplay(customer(linked.customerId)?.name ?? "", lang) : ""],

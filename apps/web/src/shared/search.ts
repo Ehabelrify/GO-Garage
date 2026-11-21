@@ -1,3 +1,4 @@
+import { toAsciiDigits } from "@garage/domain";
 import { isRecordType, recordTypes, type RecordType } from "./record-types";
 
 /** GET /api/search?q=&types= -> { results: SearchResult[] } (implemented by W2-S). */
@@ -51,9 +52,23 @@ async function getJson(url: string, signal?: AbortSignal): Promise<unknown | nul
   return response.json().catch(() => null);
 }
 
+/** Tatweel, zero-width and bidi control code points are dropped from search text (kept as numeric ranges, not literals). */
+function isInvisibleSearchChar(code: number): boolean {
+  return code === 0x640 || code === 0xfeff || (code >= 0x200b && code <= 0x200f) || (code >= 0x202a && code <= 0x202e) || (code >= 0x2066 && code <= 0x2069);
+}
+
+/**
+ * Normalises typed search text before it is sent: Arabic-Indic/Eastern digits become ASCII (phones, plates, ids),
+ * tatweel and zero-width/bidi marks are dropped and whitespace is collapsed. Plate letter variants and order are
+ * handled by the server (normalizePlate), so the text is otherwise left as typed.
+ */
+export function prepareSearchQuery(raw: string): string {
+  return [...toAsciiDigits(raw)].filter((ch) => !isInvisibleSearchChar(ch.charCodeAt(0))).join("").replace(/\s+/g, " ").trim();
+}
+
 /** Default fetcher. 404/empty body -> []; other failures throw so the UI can show an error. */
 export const fetchSearch: SearchFetcher = async (query, options) => {
-  const params = new URLSearchParams({ q: query });
+  const params = new URLSearchParams({ q: prepareSearchQuery(query) });
   if (options?.types?.length) params.set("types", options.types.join(","));
   return normaliseSearchResults(await getJson(`/api/search?${params.toString()}`, options?.signal));
 };

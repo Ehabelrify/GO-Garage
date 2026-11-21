@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Locale } from "@garage/domain";
+import { supportedCurrencies, type Locale } from "@garage/domain";
 import { ConfirmDialog, DetailDrawer, EmptyState, Field, Money, RecordRef, Skeleton, StatusBadge } from "../../shared/components";
 import { dateLabel } from "../../shared/ui";
 import { addInfo, closeRequest, decide, readRequest, requestErrorMessage, startReview } from "./special-requests-api";
@@ -130,7 +130,9 @@ export function RequestDrawer({ lang, id, canReview, canStaffAct, onClose, onCha
               <input className="field-input mono" dir="ltr" inputMode="decimal" value={reply.price} onChange={(event) => setField("price", event.target.value)} data-autofocus />
             </Field>
             <Field label={t("Currency", "العملة")} required error={err("currency")}>
-              <input className="field-input mono" dir="ltr" maxLength={3} value={reply.currency} onChange={(event) => setField("currency", event.target.value.toUpperCase())} />
+              <select className="field-select" value={reply.currency} onChange={(event) => setField("currency", event.target.value)}>
+                {supportedCurrencies().map((currency) => <option key={currency.code} value={currency.code}>{currency.code} - {currency.name[lang]}</option>)}
+              </select>
             </Field>
             <Field label={t("Duration (days)", "المدة (أيام)")} required error={err("durationDays")}>
               <input className="field-input" type="number" min={1} dir="ltr" value={reply.durationDays} onChange={(event) => setField("durationDays", event.target.value)} />

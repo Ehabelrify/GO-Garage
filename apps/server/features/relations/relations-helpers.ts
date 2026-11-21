@@ -1,3 +1,4 @@
+import { normalizePlate as normalizePlateKey, plateSearchKeys, toAsciiDigits } from "@garage/domain";
 import { hashWarrantyVerificationToken, isWarrantyVerificationTokenFormat } from "../warranty/warranty-verification";
 
 export const searchTypes = ["customer", "vehicle", "booking", "quote", "warranty"] as const;
@@ -8,13 +9,18 @@ export function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (character) => `\\${character}`);
 }
 
-/** Upper-case plate without spaces or dashes; mirrors the vehicles_plate_normalized_idx expression. */
+/** Canonical plate key (Arabic/Latin letters, Arabic-Indic digits, spaces/dashes/tatweel); SQL twin: garage_normalize_plate (migration 0032). */
 export function normalizePlate(value: string): string {
-  return value.replace(/[\s-]/g, "").toUpperCase();
+  return normalizePlateKey(value);
+}
+
+/** LIKE patterns for plate search: forward and reversed-letter keys, contains-match, wildcards escaped. */
+export function plateLikePatterns(value: string): string[] {
+  return plateSearchKeys(value).map((key) => `%${escapeLike(key)}%`);
 }
 
 export function digitsOnly(value: string): string {
-  return value.replace(/\D/g, "");
+  return toAsciiDigits(value).replace(/\D/g, "");
 }
 
 export function parseSearchTypes(raw: unknown): SearchType[] {

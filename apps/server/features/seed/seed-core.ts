@@ -26,6 +26,7 @@ export const TABLE_ORDER = [
   "warranties", "warranty_termination_events", "warranty_verification_tokens", "warranty_qr_print_events",
   "warranty_claims", "warranty_claim_attachments", "warranty_audit_events", "warranty_verification_settings_audit",
   "warranty_invoice_drafts", "warranty_invoice_draft_items",
+  "invoice_number_sequences", "invoices", "invoice_lines", "invoice_events", "invoice_payment_references",
   "benefit_entitlements", "benefit_windows", "benefit_redemptions", "benefit_reversals", "benefit_audit",
   "transport_requests", "transport_private_contacts", "transport_events",
   "finance_definition_attestations", "operational_money_events", "operational_money_event_reversals",

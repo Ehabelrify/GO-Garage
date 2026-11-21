@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FileText, Pencil, Plus, Printer, Save, Trash2, X } from "lucide-react";
 import {
   calculateWarrantyInvoiceTotals, currencyDefinition, formatCurrencyAmount, isSupportedCurrency, resolveCurrency, supportedCurrencies,
@@ -10,9 +10,8 @@ import type {
   WarrantyInvoicePaymentMethod,
   WarrantyRecord,
 } from "@garage/domain";
-import { Collapsible, ConfirmDialog, Field, FormSection, Notice, RequiredNote, StatusBadge } from "../../shared/components";
+import { Collapsible, ConfirmDialog, Field, FormSection, Notice, PrintHost, RequiredNote, StatusBadge, printDocument, type DocumentModel } from "../../shared/components";
 import { unknownWriteOutcomeCopy, useGarageStore } from "../../shared/store";
-import { startWarrantyPrint } from "./warranty-print";
 import { useWarrantyDraftState } from "./warranty-form-state";
 
 interface WarrantyInvoicePanelProps {
@@ -96,10 +95,7 @@ export function WarrantyInvoicePanel({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [expanded, setExpanded] = useState(false);
-  const [printPending, setPrintPending] = useState(false);
   const [pendingCurrency, setPendingCurrency] = useState<string | null>(null);
-  const printAreaRef = useRef<HTMLDivElement>(null);
-  const printCleanupRef = useRef<(() => void) | null>(null);
   const draftCurrency = resolveCurrency(draft.currency, storedCurrency);
   const totals = useMemo(
     () => calculateWarrantyInvoiceTotals(draft.items, draft.taxRatePercent, draft.paidAmount),
@@ -111,28 +107,15 @@ export function WarrantyInvoicePanel({
   );
   const currencyLocked = Boolean(invoice && invoice.paidAmount > 0);
   const hasAmounts = draft.items.some((item) => item.unitAmount !== null);
-
-  useEffect(() => () => printCleanupRef.current?.(), []);
+  const dateText = (value: string) => new Date(value).toLocaleDateString(locale === "ar" ? "ar-EG-u-nu-latn" : "en-GB");
 
   useEffect(() => {
     setEditing(false); setExpanded(false); setError(""); setNotice("");
-    printCleanupRef.current?.();
   }, [store.actor?.userId, store.actor?.isDemo, warranty.id]);
 
   useEffect(() => {
     if (!editing) setDraft(invoice ? inputFromInvoice(invoice) : emptyDraft(storedCurrency));
   }, [invoice, editing]);
-
-  useEffect(() => {
-    if (!printPending || !expanded) return;
-    const frame = window.requestAnimationFrame(() => {
-      setPrintPending(false);
-      if (printAreaRef.current?.id === `w-invoice-${invoice?.id}`) {
-        printCleanupRef.current = startWarrantyPrint("invoice", printAreaRef.current);
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [printPending, expanded, invoice?.id]);
 
   const createDraft = async () => {
     setBusy(true);
@@ -163,11 +146,37 @@ export function WarrantyInvoicePanel({
     setNotice(t("Draft invoice saved. It has not been issued.", "مسودة الفاتورة اتحفظت. ما اتصدرتش."));
   };
 
-  const printDraft = () => {
-    setNotice("");
-    setExpanded(true);
-    setPrintPending(true);
-  };
+  // Generic printable A4 document (shared DocumentSheet). Warranty drafts are never tax invoices; the disclaimer says so.
+  const printModel = useMemo<DocumentModel | null>(() => {
+    if (!invoice) return null;
+    const exponent = currencyDefinition(storedCurrency)?.minorUnitExponent ?? 2;
+    const minor = (value: number | null) => (value === null ? null : Math.round(value * 10 ** exponent));
+    const lines = invoice.items.map((item) => ({
+      description: item.description, quantity: item.quantity, unitMinor: minor(item.unitAmount),
+      amountMinor: item.unitAmount === null ? null : minor(item.quantity * item.unitAmount), currency: storedCurrency,
+    }));
+    return {
+      lang: locale,
+      business: { name: "Go Stores", subtitle: text(locale, "Workshop services", "خدمات الورشة") },
+      title: text(locale, "Warranty work invoice", "فاتورة شغل الضمان"),
+      number: null,
+      statusLabel: text(locale, "Draft", "مسودة"),
+      branch: branchLabel,
+      issueDate: dateText(invoice.updatedAt),
+      customer: { label: text(locale, "Customer", "العميل"), name: customerName },
+      vehicle: { label: text(locale, "Vehicle", "المركبة"), plate: vehicleLabel, description: serviceLabel },
+      lines,
+      totals: [{
+        currency: storedCurrency, subtotalMinor: minor(savedTotals.subtotal), discountMinor: 0, taxMinor: minor(savedTotals.taxAmount), totalMinor: minor(savedTotals.total),
+        paidMinor: minor(invoice.paidAmount) ?? 0, balanceMinor: minor(savedTotals.balance),
+      }],
+      notes: undefined,
+      disclaimer: text(locale, "Draft for review only. Tax treatment, official template, and final issuance are pending Owner approval. Do not use as a tax invoice or proof of payment.",
+        "مسودة للمراجعة فقط. المعاملة الضريبية والقالب الرسمي والإصدار النهائي بانتظار موافقة المالك. لا تستخدمها كفاتورة ضريبية أو إثبات دفع."),
+      signatures: [{ label: text(locale, "Prepared by", "أعدها") }, { label: text(locale, "Customer signature", "توقيع العميل") }],
+    };
+  }, [invoice, storedCurrency, savedTotals, locale, branchLabel, customerName, vehicleLabel, serviceLabel]);
+  const printDraft = () => { setNotice(""); printDocument(); };
 
   const updateItem = (index: number, updates: Partial<WarrantyInvoiceDraftInput["items"][number]>) => {
     setDraft((current) => ({
@@ -188,7 +197,6 @@ export function WarrantyInvoicePanel({
     const definition = currencyDefinition(code);
     return definition ? `${definition.name[locale]} (${definition.symbol[locale]})` : code;
   };
-  const dateText = (value: string) => new Date(value).toLocaleDateString(locale === "ar" ? "ar-EG-u-nu-latn" : "en-GB");
   const invalid = !draft.items.length || draft.items.some((item) => !item.description.trim() || item.quantity <= 0) || !isSupportedCurrency(draftCurrency);
   const owner = store.actor?.role === "owner";
 
@@ -293,7 +301,7 @@ export function WarrantyInvoicePanel({
         </div>
       </form>}
 
-      <div className="w-invoice-print-area" id={`w-invoice-${invoice.id}`} ref={printAreaRef} dir={locale === "ar" ? "rtl" : "ltr"}>
+      <div className="w-invoice-print-area" id={`w-invoice-${invoice.id}`} dir={locale === "ar" ? "rtl" : "ltr"}>
         <div className="w-invoice-print-title">
           <div><span>{t("WORKSHOP INVOICE", "فاتورة ورشة")}</span><h3>{t("DRAFT · NOT A FINAL INVOICE", "مسودة · مش فاتورة نهائية")}</h3></div>
           <bdi>{currencyLabel(storedCurrency)}</bdi>
@@ -329,6 +337,7 @@ export function WarrantyInvoicePanel({
       {error && <div className="w-error" role="alert">{error}</div>}
     </>}
 
+    {printModel && <PrintHost model={printModel} />}
     <ConfirmDialog
       open={pendingCurrency !== null} lang={locale}
       title={t("Change the invoice currency?", "تغيير عملة الفاتورة؟")}

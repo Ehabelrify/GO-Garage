@@ -3,12 +3,12 @@ import { Router, type Request, type Response } from "express";
 import { clerkClient } from "@clerk/express";
 import { z } from "zod";
 import { initialState } from "../seed/seed-data";
-import { canTransitionJob, checkBookingCapacity, configuredNumber, configuredServiceHours } from "@garage/domain";
+import { formatPlateDisplay, canTransitionJob, checkBookingCapacity, configuredNumber, configuredServiceHours } from "@garage/domain";
 import type { Branch, BranchId, Booking, Service } from "@garage/domain";
 import { canAccessBranch, canAccessJob, canManageBookings, canManageSettings, canManageStaff, capabilities, ownerOnlyCapabilities, roleDefaultCapabilities, sanitizeOverrides, type GarageRole } from "../auth/authz";
 import { requireMembership, actorFor } from "../auth/auth";
 import { loadGarageBootstrap } from "./bootstrap";
-import { customerPatchSchema, customerVehicleSchema, normalizePhone, splitMakeModel } from "./customer-edit";
+import { customerPatchSchema, customerVehicleSchema, findDuplicatePlate, normalizePhone, plateField, splitMakeModel } from "./customer-edit";
 import { pool, withTransaction } from "../../infrastructure/database/db";
 import { dateOnlyFromSql } from "../../infrastructure/database/date-only";
 import { reserveConfirmedBooking, rescheduleConfirmedBooking, cancelConfirmedBooking, type BookingReservationResult } from "./booking-service";
@@ -38,6 +38,8 @@ import { workQueueRouter } from "./work-queue-routes";
 import { relationsRouter } from "../relations/relations-routes";
 import { ownerRecordsRouter } from "../owner-records/owner-records";
 import { specialRequestsRouter } from "../special-requests/special-requests-routes";
+import { invoiceRouter } from "../invoicing/invoice-routes";
+import { autoGenerateInvoiceForDeliveredJob } from "../invoicing/invoice-service";
 import { BenefitError, materializeBenefitsInTransaction } from "../commercial/benefit-service";
 import { lockReservationForJobDelivery, redeemReservationOnJobDelivery } from "../commercial/reservation-service";
 import { commercialContext } from "../commercial/policy-service";
@@ -66,6 +68,10 @@ function forbidden(res: Response) {
 
 function routeError(res: Response, status: number, code: string, message: string) {
   return res.status(status).json({ code, message });
+}
+
+function duplicatePlateError(res: Response, existing: { vehicleId: string; customerId: string; plate: string }) {
+  return res.status(409).json({ code: "DUPLICATE_PLATE", message: "A vehicle with this plate already exists.", existingVehicle: { id: existing.vehicleId, customerId: existing.customerId, plate: existing.plate } });
 }
 
 function capacityError(res: Response, issue: string | undefined) {
@@ -273,6 +279,7 @@ router.use("/finance", financeRouter);
 router.use("/work-queues", workQueueRouter);
 router.use("/owner/records", ownerRecordsRouter);
 router.use("/special-requests", specialRequestsRouter);
+router.use("/invoices", invoiceRouter);
 router.use(relationsRouter);
 router.use("/warranties", warrantyRouter);
 router.use("/whatsapp", createWhatsAppRouter());
@@ -346,7 +353,7 @@ router.post("/customers", async (req, res) => {
   const parsed = z.object({
     name: z.string().trim().min(1).max(120),
     phone: z.string().trim().min(8).max(32),
-    plate: z.string().trim().min(2).max(20),
+    plate: plateField,
     makeModel: z.string().trim().min(2).max(100),
     language: z.enum(["ar", "en"]).default("ar"),
     branchId: z.string().min(1),
@@ -359,6 +366,9 @@ router.post("/customers", async (req, res) => {
   if (normalizedPhone.length < 8 || normalizedPhone.length > 15) {
     return routeError(res, 400, "INVALID_PHONE", "Enter a valid phone number.");
   }
+
+  const duplicate = await findDuplicatePlate(pool, plate, { branchIds: [branchId] });
+  if (duplicate) return duplicatePlateError(res, duplicate);
 
   const customerId = makeId("customer");
   const vehicleId = makeId("vehicle");
@@ -379,7 +389,7 @@ router.post("/customers", async (req, res) => {
       );
       await client.query(
         "INSERT INTO vehicles (id, customer_id, make, model, year, plate) VALUES ($1, $2, $3, $4, $5, $6)",
-        [vehicleId, customerId, make, model || "Vehicle", year, plate],
+        [vehicleId, customerId, make, model || "Vehicle", year, formatPlateDisplay(plate)],
       );
     });
   } catch (error) {
@@ -432,10 +442,13 @@ router.post("/customers/:id/vehicles", async (req, res) => {
   if (!parsed.success) return routeError(res, 400, "INVALID_VEHICLE", "Check the vehicle details.");
   if (!await editableCustomer(currentActor, req.params.id)) return routeError(res, 404, "CUSTOMER_NOT_FOUND", "Customer not found.");
   const { make, model, year } = splitMakeModel(parsed.data.makeModel);
+  const customerBranches = await pool.query<{ branch_id: string }>("SELECT branch_id FROM customer_branches WHERE customer_id=$1", [req.params.id]);
+  const duplicate = await findDuplicatePlate(pool, parsed.data.plate, { customerId: req.params.id, branchIds: customerBranches.rows.map((row) => row.branch_id) });
+  if (duplicate) return duplicatePlateError(res, duplicate);
   const vehicleId = makeId("vehicle");
   await pool.query(
     "INSERT INTO vehicles (id, customer_id, make, model, year, plate) VALUES ($1, $2, $3, $4, $5, $6)",
-    [vehicleId, req.params.id, make, model, year, parsed.data.plate],
+    [vehicleId, req.params.id, make, model, year, formatPlateDisplay(parsed.data.plate)],
   );
   res.status(201).json({ ok: true, vehicleId });
 });
@@ -798,6 +811,7 @@ router.patch("/jobs/:jobId/stage", async (req, res) => {
     if(parsed.data.nextStage==="delivered"&&job.accepted_quote_id&&job.accepted_quote_revision){
       await materializeBenefitsInTransaction(client,commercialContext,currentActor,{quoteRef:{quoteId:job.accepted_quote_id,revision:job.accepted_quote_revision},trigger:"delivered"});
     }
+    if(parsed.data.nextStage==="delivered")await autoGenerateInvoiceForDeliveredJob(client,job.id);
     return "ok" as const;
   }).catch((error: unknown) => {
     if (error instanceof WarrantyIssuanceError) return error;

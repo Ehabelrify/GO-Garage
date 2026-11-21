@@ -1,4 +1,4 @@
-import type { Customer, Locale } from "@garage/domain";
+import { formatPlateDisplay, isPlausiblePlate, normalizePlate, plateMatchesQuery, type Customer, type Locale } from "@garage/domain";
 import type { StatusDomain } from "../../shared/components/StatusBadge";
 import type { RecordType } from "../../shared/record-types";
 import { formatMoney } from "../../shared/format";
@@ -11,7 +11,8 @@ export const sectionKeys = [
 ] as const;
 export type SectionKey = (typeof sectionKeys)[number];
 
-export const normalisePlate = (value: string) => value.replace(/[\s-]/g, "").toUpperCase();
+export const normalisePlate = (value: string) => normalizePlate(value);
+export { formatPlateDisplay, isPlausiblePlate, plateMatchesQuery };
 export const digitsOf = (value: string) => value.replace(/\D/g, "");
 
 /** Search by name, phone digits, plate (spaces/dashes ignored) or make/model. */
@@ -24,7 +25,7 @@ export function filterCustomers(customers: Customer[], query: string): Customer[
     customer.name.toLowerCase().includes(text)
     || (digits.length >= 3 && digitsOf(customer.phone).includes(digits))
     || customer.vehicles.some((vehicle) =>
-      (plate.length >= 2 && normalisePlate(vehicle.plate).includes(plate)) || vehicle.makeModel.toLowerCase().includes(text)));
+      (plate.length >= 2 && plateMatchesQuery(vehicle.plate, text)) || vehicle.makeModel.toLowerCase().includes(text)));
 }
 
 export function findByPlate(customers: Customer[], plate: string): { customer: Customer; vehicle: Customer["vehicles"][number] } | null {
@@ -38,7 +39,7 @@ export function findByPlate(customers: Customer[], plate: string): { customer: C
 }
 
 export type CustomerFormFields = { name: string; phone: string; plate: string; makeModel: string };
-export type CustomerFormErrors = Partial<Record<keyof CustomerFormFields, "required" | "phone">>;
+export type CustomerFormErrors = Partial<Record<keyof CustomerFormFields, "required" | "phone" | "plate">>;
 
 export function validateCustomerForm(form: CustomerFormFields, options: { vehicle?: boolean } = {}): CustomerFormErrors {
   const needVehicle = options.vehicle ?? true;
@@ -48,6 +49,7 @@ export function validateCustomerForm(form: CustomerFormFields, options: { vehicl
   if (!form.phone.trim()) errors.phone = "required";
   else if (digits.length < 8 || digits.length > 15) errors.phone = "phone";
   if (needVehicle && form.plate.trim().length < 2) errors.plate = "required";
+  else if (needVehicle && !isPlausiblePlate(form.plate)) errors.plate = "plate";
   if (needVehicle && form.makeModel.trim().length < 2) errors.makeModel = "required";
   return errors;
 }
@@ -203,6 +205,10 @@ export function describeItem(section: SectionKey, raw: Record<string, unknown>, 
     case "claims":
       return { type: "claim", id, label: str(raw.summary) ?? (ar ? "مطالبة" : "Claim"), status: str(raw.status), domain: "claim", date: null };
     case "invoices":
+      if (raw.kind === "job") {
+        const number = str(raw.number);
+        return { type: "invoice", id, label: number ?? (ar ? "مسودة فاتورة" : "Invoice draft"), status: str(raw.status), domain: "invoice", date: null, amount: quoteTotal(raw.total) };
+      }
       return { type: "invoice", id, label: ar ? "مسودة فاتورة" : "Invoice draft", status: str(raw.status), domain: "invoice", date: null };
     case "conversations": {
       const unreadCount = typeof raw.unreadCount === "number" ? raw.unreadCount : 0;

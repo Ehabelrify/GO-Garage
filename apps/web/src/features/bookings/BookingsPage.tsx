@@ -29,6 +29,7 @@ const bookingErrorCopy: Record<string, { en: string; ar: string }> = {
   INVALID_CUSTOMER: { en: "Complete the customer and vehicle fields.", ar: "أكمل بيانات العميل والمركبة." },
   INVALID_PHONE: { en: "Enter a valid phone number (8 to 15 digits).", ar: "أدخل رقم هاتف صحيحاً (من 8 إلى 15 رقماً)." },
   DUPLICATE_PHONE: { en: "A customer with this phone number already exists.", ar: "يوجد عميل بنفس رقم الهاتف." },
+  DUPLICATE_PLATE: { en: "A vehicle with this plate already exists.", ar: "توجد مركبة مسجلة بنفس اللوحة." },
 };
 
 type PendingAction = { kind: "cancel" | "no-show"; bookingId: string } | null;

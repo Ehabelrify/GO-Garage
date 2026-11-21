@@ -1,4 +1,4 @@
-import type { Locale } from "@garage/domain";
+import { isSupportedCurrency, type Locale } from "@garage/domain";
 import { majorToMinor } from "../../shared/format";
 
 /** Pure rules for the special-requests UI: parsing server payloads, form validation, decision payloads. */
@@ -105,7 +105,7 @@ export function validateReply(form: ReplyForm): ReplyField[] {
   const bad: ReplyField[] = [];
   if (form.decision === "accepted") {
     if (majorToMinor(form.price, form.currency) === null) bad.push("price");
-    if (!/^[A-Z]{3}$/.test(form.currency)) bad.push("currency");
+    if (!isSupportedCurrency(form.currency)) bad.push("currency");
     const days = Number(form.durationDays);
     if (!Number.isInteger(days) || days <= 0) bad.push("durationDays");
     if (!form.availableFrom) bad.push("availableFrom");

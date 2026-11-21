@@ -33,7 +33,7 @@ describe("customer search", () => {
 describe("form rules", () => {
   it("validates required fields and phone length", () => {
     expect(validateCustomerForm({ name: "", phone: "123", plate: "A", makeModel: "" })).toEqual({ name: "required", phone: "phone", plate: "required", makeModel: "required" });
-    expect(validateCustomerForm({ name: "A", phone: "+20 100 123 4567", plate: "AB", makeModel: "Kia" })).toEqual({});
+    expect(validateCustomerForm({ name: "A", phone: "+20 100 123 4567", plate: "AB 12", makeModel: "Kia" })).toEqual({});
     expect(validateCustomerForm({ name: "A", phone: "0100 123 4567", plate: "", makeModel: "" }, { vehicle: false })).toEqual({});
   });
   it("never preselects 'all' as the add-form branch", () => {
@@ -111,5 +111,17 @@ describe("timeline and routing", () => {
     expect(recordFromParams(new URLSearchParams("customerId=c1"))).toEqual({ kind: "customer", id: "c1" });
     expect(recordFromParams(new URLSearchParams("vehicleId=v1"))).toEqual({ kind: "vehicle", id: "v1" });
     expect(recordFromParams(new URLSearchParams(""))).toBeNull();
+  });
+});
+
+describe("Arabic plate matching", () => {
+  const arabic = [{ id: "c9", name: "Ali", phone: "01000000000", language: "ar" as const, vehicles: [{ id: "v9", plate: "أ ب ج 1234", makeModel: "Kia" }] }];
+  it("finds the vehicle for every typed form", () => {
+    for (const query of ["ابج١٢٣٤", "ا ب ج-1234", "1234 جبا", "أ ب ج 1234"]) expect(filterCustomers(arabic, query), query).toHaveLength(1);
+    expect(filterCustomers(arabic, "ابد1234")).toHaveLength(0);
+    expect(findByPlate(arabic, "ابج ١٢٣٤")?.vehicle.id).toBe("v9");
+  });
+  it("flags implausible plates in the form", () => {
+    expect(validateCustomerForm({ name: "A", phone: "0100 123 4567", plate: "12345", makeModel: "Kia" })).toEqual({ plate: "plate" });
   });
 });

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, CarFront, Pencil, Plus, Sparkles } from "lucide-react";
+import { ArrowLeft, CarFront, FileText, Pencil, Plus, Sparkles } from "lucide-react";
 import type { GarageState, Locale } from "@garage/domain";
 import { Link } from "wouter";
 import { DetailDrawer, EmptyState, Notice, PageHeader, RecordRef, Skeleton } from "../../shared/components";
@@ -8,6 +8,7 @@ import { customerDisplay } from "../../shared/ui";
 import { CustomerForm, writeErrorMessage } from "./CustomerForm";
 import { addVehicle, updateCustomer } from "./customers-api";
 import { vehicleLabel } from "./customers-logic";
+import { CreateQuote } from "../quotes/CreateQuote";
 import { RequestForm } from "../special-requests/RequestForm";
 import { useRecord360 } from "./use-record360";
 import { ContactFacts, PlateChips, SectionsView } from "./Record360View";
@@ -34,7 +35,7 @@ export function CustomerDetail({ lang, state, id, canEdit, notify }: DetailProps
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const store = useGarageStore();
   const { state: result, reload } = useRecord360("customer", id);
-  const [drawer, setDrawer] = useState<"edit" | "vehicle" | "request" | null>(null);
+  const [drawer, setDrawer] = useState<"edit" | "vehicle" | "request" | "quote" | null>(null);
 
   if (result.status !== "ready") return <>
     <PageHeader title={t("Customer", "العميل")} actions={<Back lang={lang} />} />
@@ -61,6 +62,7 @@ export function CustomerDetail({ lang, state, id, canEdit, notify }: DetailProps
       eyebrow={t("Customer", "العميل")}
       actions={<>
         <Back lang={lang} />
+        {canEdit && <button type="button" className="btn" onClick={() => setDrawer("quote")}><FileText size={16} aria-hidden="true" />{t("Create quote", "إنشاء عرض سعر")}</button>}
         {canEdit && <button type="button" className="btn" onClick={() => setDrawer("request")}><Sparkles size={16} aria-hidden="true" />{t("New special request", "طلب خاص جديد")}</button>}
         {canEdit && <button type="button" className="btn" onClick={() => setDrawer("vehicle")}><Plus size={16} aria-hidden="true" />{t("Add vehicle", "إضافة مركبة")}</button>}
         {canEdit && <button type="button" className="btn btn-primary" onClick={() => setDrawer("edit")}><Pencil size={16} aria-hidden="true" />{t("Edit", "تعديل")}</button>}
@@ -85,6 +87,8 @@ export function CustomerDetail({ lang, state, id, canEdit, notify }: DetailProps
       <RequestForm lang={lang} customerId={customer.id} vehicleId={vehicles.length === 1 ? vehicles[0].id : undefined} onCancel={() => setDrawer(null)}
         onCreated={() => { setDrawer(null); notify(t("Request created.", "تم إنشاء الطلب.")); reload(); }} />
     </DetailDrawer>
+    {drawer === "quote" && <CreateQuote lang={lang} customerId={customer.id} onClose={() => setDrawer(null)}
+      onSaved={() => { setDrawer(null); notify(t("Quote saved.", "تم حفظ عرض السعر.")); reload(); }} />}
     <DetailDrawer open={drawer === "vehicle"} onClose={() => setDrawer(null)} lang={lang} title={t("Add vehicle", "إضافة مركبة")}>
       <CustomerForm lang={lang} mode="vehicle" onCancel={() => setDrawer(null)}
         onSubmit={async (values) => after(await addVehicle(customer.id, { plate: values.plate.trim(), makeModel: values.makeModel.trim() }), t("Vehicle added.", "تمت إضافة المركبة."))} />
@@ -92,8 +96,9 @@ export function CustomerDetail({ lang, state, id, canEdit, notify }: DetailProps
   </>;
 }
 
-export function VehicleDetail({ lang, state, id, notify: _notify }: DetailProps) {
+export function VehicleDetail({ lang, state, id, canEdit, notify }: DetailProps) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
+  const [quoting, setQuoting] = useState(false);
   const { state: result, reload } = useRecord360("vehicle", id);
   if (result.status !== "ready") return <>
     <PageHeader title={t("Vehicle", "المركبة")} actions={<Back lang={lang} />} />
@@ -106,7 +111,10 @@ export function VehicleDetail({ lang, state, id, notify: _notify }: DetailProps)
       eyebrow={t("Vehicle", "المركبة")}
       title={vehicle.plate}
       subtitle={[vehicleLabel(vehicle), vehicle.color].filter(Boolean).join(" · ") || undefined}
-      actions={<Back lang={lang} />}
+      actions={<>
+        <Back lang={lang} />
+        {canEdit && customer && <button type="button" className="btn btn-primary" onClick={() => setQuoting(true)}><FileText size={16} aria-hidden="true" />{t("Create quote", "إنشاء عرض سعر")}</button>}
+      </>}
     />
     <div className="cust-head-card">
       {customer
@@ -117,5 +125,7 @@ export function VehicleDetail({ lang, state, id, notify: _notify }: DetailProps)
       {customer && <ContactFacts phone={customer.phone} lang={lang} />}
     </div>
     <SectionsView data={result.data} state={state} lang={lang} />
+    {quoting && customer && <CreateQuote lang={lang} customerId={customer.id} vehicleId={vehicle.id} onClose={() => setQuoting(false)}
+      onSaved={() => { setQuoting(false); notify(t("Quote saved.", "تم حفظ عرض السعر.")); reload(); }} />}
   </>;
 }

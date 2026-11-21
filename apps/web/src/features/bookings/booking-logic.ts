@@ -1,4 +1,4 @@
-import type { BranchId, Booking, Job } from "@garage/domain";
+import { plateMatchesQuery, type BranchId, type Booking, type Job } from "@garage/domain";
 
 export type DateRange = "all" | "today" | "tomorrow" | "week" | "upcoming" | "past";
 export const dateRanges: DateRange[] = ["all", "today", "tomorrow", "week", "upcoming", "past"];
@@ -90,5 +90,5 @@ export function matchesCustomer(customer: { name: string; phone: string; vehicle
   const compact = needle.replace(/\s/g, "");
   return customer.name.toLowerCase().includes(needle)
     || (digits.length > 0 && customer.phone.replace(/\D/g, "").includes(digits))
-    || customer.vehicles.some((vehicle) => vehicle.plate.toLowerCase().replace(/\s/g, "").includes(compact) || vehicle.makeModel.toLowerCase().includes(needle));
+    || customer.vehicles.some((vehicle) => plateMatchesQuery(vehicle.plate, needle) || vehicle.plate.toLowerCase().replace(/\s/g, "").includes(compact) || vehicle.makeModel.toLowerCase().includes(needle));
 }
