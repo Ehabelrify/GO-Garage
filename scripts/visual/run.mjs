@@ -133,6 +133,11 @@ async function newContext(browser, { role, locale, width, cookie }) {
     window.__printCalls = 0;
     window.print = () => { window.__printCalls += 1; };
   }, locale);
+  // Primary path: define the stubs in the page before any app code runs. Clerk's loader returns early when
+  // window.Clerk / window.__internal_ClerkUICtor already exist, so no script is ever requested from the fake host.
+  await context.addInitScript(CLERK_JS_STUB);
+  await context.addInitScript(CLERK_UI_STUB);
+  // Fallback only: answer the script URLs if something still requests them.
   await context.route(/\/npm\/@clerk\/clerk-js@[^/]+\/dist\/clerk\.browser\.js/, (route) =>
     route.fulfill({ status: 200, contentType: "application/javascript", headers: { "access-control-allow-origin": "*" }, body: CLERK_JS_STUB }));
   await context.route(/\/npm\/@clerk\/ui@[^/]+\/dist\/ui\.browser\.js/, (route) =>
