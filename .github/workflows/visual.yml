@@ -21,7 +21,7 @@ concurrency:
 jobs:
   visual:
     name: Screenshots, overflow, API and a11y checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     services:
       postgres:
