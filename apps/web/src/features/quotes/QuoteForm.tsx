@@ -109,7 +109,7 @@ export function QuoteForm({ lang, base, prefill, onSaved, formId = "quote-form",
   const params = (state: "draft" | "offered") => ({
     base: base ?? null, branchId, customerId: who.customerId, vehicle: vehicleSelection, mode, pkg: chosenPackage, items,
     terms: terms ? { acceptancePolicy: terms.acceptancePolicy, taxTreatment: terms.taxTreatment } : null,
-    validThrough, reason, actorId: actor?.userId ?? "", occupancyFor, state, newId: uid,
+    validThrough, reason, actorId: actor?.userId ?? "", occupancyFor, state, newId: uid, currency: base?.lines[0]?.unitPrice.currency,
   });
   const preview = useMemo(() => {
     const built = buildDraftInput(params("draft"));
@@ -140,6 +140,7 @@ export function QuoteForm({ lang, base, prefill, onSaved, formId = "quote-form",
   const updateItem = (id: string, patch: Partial<CustomItem>) => setItems((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
   const serviceLabel = (id: string) => lookups.serviceName(id);
   const revising = !!base?.quoteId;
+  const currencyCode = base?.lines[0]?.unitPrice.currency ?? "EGP";
 
   return <form id={formId} className="qo-stack" onSubmit={(event) => { event.preventDefault(); void save("draft"); }} noValidate>
     <RequiredNote text={t("Required", "حقل مطلوب")} />
@@ -223,10 +224,10 @@ export function QuoteForm({ lang, base, prefill, onSaved, formId = "quote-form",
             <Field label={t("Quantity", "الكمية")} required>
               <input className="field-input" type="number" min={1} step={1} value={item.quantity} onChange={(event) => updateItem(item.id, { quantity: Math.max(1, Math.floor(Number(event.target.value) || 1)) })} />
             </Field>
-            <Field label={t("Price each (EGP)", "السعر للوحدة (جنيه)")} required>
+            <Field label={t(`Price each (${currencyCode})`, `السعر للوحدة (${currencyCode})`)} required>
               <input className="field-input" inputMode="decimal" value={item.unitPrice} onChange={(event) => updateItem(item.id, { unitPrice: event.target.value })} placeholder={mode === "inspection" ? t("After inspection", "بعد الفحص") : "0"} />
             </Field>
-            <Field label={t("Tax (EGP)", "الضريبة (جنيه)")}>
+            <Field label={t(`Tax (${currencyCode})`, `الضريبة (${currencyCode})`)}>
               <input className="field-input" inputMode="decimal" value={item.tax} onChange={(event) => updateItem(item.id, { tax: event.target.value })} />
             </Field>
           </div>

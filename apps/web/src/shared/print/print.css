@@ -1,0 +1,62 @@
+/* Printable A4 document. Logical properties only; RTL follows the sheet's dir attribute. */
+.doc-sheet { max-inline-size: 210mm; margin-inline: auto; padding: 14mm 12mm; background: #fff; color: #172c34; border: 1px solid var(--line); font-size: 12px; line-height: 1.5; }
+.doc-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding-block-end: 10px; border-block-end: 2px solid var(--teal); }
+.doc-business { display: flex; align-items: center; gap: 10px; }
+.doc-business strong { display: block; font-size: 15px; }
+.doc-business small { display: block; color: var(--muted); }
+.doc-logo, .doc-logo-placeholder { inline-size: 44px; block-size: 44px; border-radius: 2px; object-fit: contain; }
+.doc-logo-placeholder { display: grid; place-items: center; background: var(--teal-soft); color: var(--teal-dark); font-weight: 700; text-transform: uppercase; }
+.doc-title-block { text-align: end; }
+.doc-title-block h2 { margin: 0; font-size: 20px; }
+.doc-title-block p { margin: 2px 0 0; }
+.doc-title-block p span { color: var(--muted); }
+.doc-stamp { display: inline-block; margin-block-start: 4px; padding: 2px 8px; border: 1px solid var(--amber); color: var(--amber); font-weight: 700; font-size: 11px; letter-spacing: .04em; }
+.doc-meta { display: flex; flex-wrap: wrap; gap: 6px 24px; margin: 10px 0; }
+.doc-meta div { display: flex; gap: 6px; }
+.doc-meta dt { color: var(--muted); }
+.doc-meta dd { margin: 0; font-weight: 600; }
+.doc-parties { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-block: 8px 12px; padding: 8px 10px; background: var(--paper); border: 1px solid var(--line-soft); }
+.doc-parties small { display: block; color: var(--muted); }
+.doc-parties strong, .doc-parties span { display: block; }
+.doc-table { inline-size: 100%; border-collapse: collapse; }
+.doc-table th, .doc-table td { padding: 6px 8px; border-block-end: 1px solid var(--line); text-align: start; vertical-align: top; }
+.doc-table th { background: var(--teal-soft); font-size: 11px; }
+.doc-table .num { text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.doc-table td small { display: block; color: var(--muted); }
+.doc-table tr { break-inside: avoid; }
+.doc-totals { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; margin-block: 12px; }
+.doc-total-block { inline-size: min(100%, 300px); margin: 0; }
+.doc-total-block div { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+.doc-total-block dt { color: var(--muted); }
+.doc-total-block dd { margin: 0; font-variant-numeric: tabular-nums; }
+.doc-total-block .doc-grand { border-block: 1px solid var(--ink); font-weight: 700; font-size: 14px; }
+.doc-total-block .doc-grand dt { color: inherit; }
+.doc-notes { display: grid; gap: 8px; margin-block: 8px; break-inside: avoid; }
+.doc-notes small { color: var(--muted); }
+.doc-notes p, .doc-disclaimer { margin: 2px 0; white-space: pre-wrap; }
+.doc-disclaimer { padding: 6px 8px; border: 1px dashed var(--amber); color: var(--amber); font-size: 11px; break-inside: avoid; }
+.doc-footer { margin-block-start: 22px; break-inside: avoid; }
+.doc-signatures { display: flex; gap: 32px; }
+.doc-signatures div { flex: 1; }
+.doc-signatures span { display: block; block-size: 34px; border-block-end: 1px solid var(--ink); }
+.doc-signatures small { color: var(--muted); }
+.doc-footer p { margin-block: 10px 0; color: var(--muted); font-size: 11px; text-align: center; }
+
+@media (max-width: 760px) {
+  .doc-sheet { padding: 12px; overflow-x: auto; }
+  .doc-header { flex-direction: column; }
+  .doc-title-block { text-align: start; }
+}
+
+@page { size: A4; margin: 12mm; }
+/* Screen: the print host is never visible. Print: only while a document print is active (body.printing-document),
+   everything except the host is removed from layout so no blank pages appear. Scoped so the warranty QR print is unaffected. */
+.doc-print-host { display: none; }
+@media print {
+  body.printing-document { background: #fff !important; }
+  body.printing-document > *:not(.doc-print-host) { display: none !important; }
+  body.printing-document > .doc-print-host { display: block !important; }
+  body.printing-document .doc-sheet { max-inline-size: none; margin: 0; padding: 0; border: 0; }
+  body.printing-document .doc-table thead { display: table-header-group; }
+  .no-print { display: none !important; }
+}

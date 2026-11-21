@@ -70,6 +70,8 @@ export interface BuildParams {
   occupancyFor: (serviceId: string) => PolicyRef | null;
   state: "draft" | "offered";
   newId: (prefix: string) => string;
+  /** Currency for custom lines; defaults to the base quote's currency, then EGP. */
+  currency?: string;
 }
 
 /** Pure translation of the friendly form into the exact payload the server validates. */
@@ -104,6 +106,7 @@ export function buildDraftInput(p: BuildParams): { input: QuoteDraftInput } | { 
   }
   if (!p.reason.trim()) return { error: "reason" };
   if (p.items.length === 0) return { error: "item-service" };
+  const currency = p.currency ?? p.base?.lines[0]?.unitPrice.currency ?? DEFAULT_CURRENCY;
   const scope: ScopeItem[] = [];
   const work: WorkComponent[] = [];
   const lines: QuoteLine[] = [];
@@ -123,8 +126,8 @@ export function buildDraftInput(p: BuildParams): { input: QuoteDraftInput } | { 
     work.push({ id: p.newId("work"), serviceId: item.serviceId, scopeItemIds: [scopeId], occupancyRule: occupancy });
     lines.push({
       id: p.newId("line"), scopeItemId: scopeId, quantity: item.quantity,
-      unitPrice: { minor: price ?? 0, currency: DEFAULT_CURRENCY }, discount: { minor: 0, currency: DEFAULT_CURRENCY },
-      tax: tax === null ? null : { minor: tax, currency: DEFAULT_CURRENCY },
+      unitPrice: { minor: price ?? 0, currency }, discount: { minor: 0, currency },
+      tax: tax === null ? null : { minor: tax, currency },
     });
   }
   return { input: { ...common, packageVersion: null, scope, work, lines, priceOrigin: { kind: p.mode, actorId: p.actorId, reason: p.reason.trim() } } };

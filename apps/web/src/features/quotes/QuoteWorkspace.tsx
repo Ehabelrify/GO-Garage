@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Printer } from "lucide-react";
 import type { BenefitEntitlement, Locale, QuoteDraftInput } from "@garage/domain";
 import { benefitApi, quoteApi, reservationApi, useGarageStore } from "../../shared/store";
 import { Collapsible, DataTable, DetailDrawer, EmptyState, FilterBar, Money, PageHeader, RecordRef, Skeleton, StatusBadge, TabBar, TabPanel, useUrlState, type Column } from "../../shared/components";
@@ -14,6 +14,8 @@ import { commercialError } from "./commercial-errors";
 import { useLoader } from "./commercial-data";
 import { buildLookups, tr } from "./lookups";
 import { useOffersNav } from "./nav";
+import { CreateQuote } from "./CreateQuote";
+import { QuotePrint } from "./QuotePrint";
 import { QuoteForm, type QuoteFormState } from "./QuoteForm";
 import { QuoteAcceptance, QuoteSummaryView } from "./QuoteReview";
 import { followupLabels, filterQuotes, isExpired, latestPerQuote, type QuoteRow } from "./quote-logic";
@@ -35,6 +37,8 @@ export function QuoteWorkspace({ lang, embedded = false }: { lang: Locale; embed
   const [followup, setFollowup] = useState("all");
   const [form, setForm] = useState<{ base?: QuoteDraftInput } | null>(null);
   const [message, setMessage] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const formApi = useRef<QuoteFormState | null>(null);
   const [formBusy, setFormBusy] = useState(false);
   const rows = list.data;
@@ -61,8 +65,8 @@ export function QuoteWorkspace({ lang, embedded = false }: { lang: Locale; embed
   }
 
   return <div className="qo-page">
-    {!embedded && <PageHeader title={t("Quotes", "عروض الأسعار")} actions={canCreate && <button type="button" className="btn btn-primary" onClick={() => { setMessage(""); setForm({}); }}><Plus size={16} aria-hidden="true" />{t("New quote", "عرض سعر جديد")}</button>} />}
-    {embedded && canCreate && <div className="qo-row"><button type="button" className="btn btn-primary" onClick={() => { setMessage(""); setForm({}); }}><Plus size={16} aria-hidden="true" />{t("New quote", "عرض سعر جديد")}</button></div>}
+    {!embedded && <PageHeader title={t("Quotes", "عروض الأسعار")} actions={canCreate && <button type="button" className="btn btn-primary" onClick={() => { setMessage(""); setCreating(true); }}><Plus size={16} aria-hidden="true" />{t("Create quote", "إنشاء عرض سعر")}</button>} />}
+    {embedded && canCreate && <div className="qo-row"><button type="button" className="btn btn-primary" onClick={() => { setMessage(""); setCreating(true); }}><Plus size={16} aria-hidden="true" />{t("Create quote", "إنشاء عرض سعر")}</button></div>}
     {message && <p role="status" className="qo-muted">{message}</p>}
     <FilterBar lang={lang} search={{ value: query, onChange: setQuery, placeholder: t("Search customer or plate", "ابحث بالعميل أو اللوحة") }}
       filters={[
@@ -73,20 +77,26 @@ export function QuoteWorkspace({ lang, embedded = false }: { lang: Locale; embed
     <DataTable<QuoteRow> columns={columns} rows={shown} rowKey={(row) => row.ref.quoteId} lang={lang} caption={t("Quotes", "عروض الأسعار")}
       onRowClick={(row) => setRecord(row.ref.quoteId)} selectedKey={record || null} loading={list.loading && rows.length === 0} error={list.error} onRetry={list.reload}
       empty={rows.length === 0
-        ? <EmptyState title={t("No quotes yet", "لا توجد عروض أسعار بعد")} action={canCreate ? <button type="button" className="btn btn-primary" onClick={() => setForm({})}>{t("New quote", "عرض سعر جديد")}</button> : undefined} />
+        ? <EmptyState title={t("No quotes yet", "لا توجد عروض أسعار بعد")} action={canCreate ? <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>{t("Create quote", "إنشاء عرض سعر")}</button> : undefined} />
         : <EmptyState variant="no-results" title={t("No matching quotes", "لا توجد عروض مطابقة")} action={<button type="button" className="btn" onClick={clear}>{t("Clear filters", "مسح التصفية")}</button>} />} />
 
     <DetailDrawer open={!!record} onClose={() => setRecord("")} lang={lang} wide
       title={open ? lookups.customerName(open.input.customerId) || t("Quote", "عرض سعر") : t("Quote", "عرض سعر")}
       subtitle={open ? `${lookups.plate(open.input.vehicle.vehicleId)} · ${t("Revision", "المراجعة")} ${open.ref.revision}`.replace(/^ · /, "") : undefined}
-      footer={open && canCreate && open.state !== "accepted" ? <>
+      footer={open ? <>
+        <button type="button" className="btn" onClick={() => setPrinting(true)}><Printer size={16} aria-hidden="true" />{t("Print", "طباعة")}</button>
+        {canCreate && open.state !== "accepted" && <>
         {open.state === "offered" && open.followup.status !== "answered" && <button type="button" className="btn" onClick={() => void markAnswered(open)}>{t("Mark follow-up answered", "تحديد المتابعة كمُجاب عنها")}</button>}
         <button type="button" className="btn btn-primary" onClick={() => { setMessage(""); setForm({ base: { ...open.input, priorRevision: open.ref, quoteId: open.ref.quoteId, state: "draft" } }); }}>{t("Revise", "مراجعة جديدة")}</button>
+        </>}
       </> : undefined}>
       {record && !open && (list.loading ? <Skeleton rows={4} label={t("Loading", "جارٍ التحميل")} /> : <EmptyState title={t("Quote not found", "لم يتم العثور على العرض")} />)}
       {open && <QuoteDrawerBody key={open.ref.quoteId} lang={lang} quote={open} lookups={lookups} accepted={rows.filter((row) => row.state === "accepted")} onChanged={list.reload} goTo={goTo} />}
     </DetailDrawer>
 
+    {printing && open && <QuotePrint lang={lang} quote={open} lookups={lookups} onClose={() => setPrinting(false)} />}
+    {creating && <CreateQuote lang={lang} onClose={() => setCreating(false)}
+      onSaved={(ref) => { setCreating(false); list.reload(); setRecord(ref.quoteId); setMessage(t("Quote saved.", "تم حفظ عرض السعر.")); }} />}
     <DetailDrawer open={form !== null} onClose={() => setForm(null)} lang={lang} wide
       title={form?.base ? t("Revise quote", "مراجعة عرض السعر") : t("New quote", "عرض سعر جديد")}
       footer={<>

@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { pool, withTransaction } from "../../infrastructure/database/db";
 import { hasCapability, type GarageActor } from "../auth/authz";
+import { commercialContext } from "../commercial/policy-service";
+import { generateQuoteDraft } from "../commercial/quote-generation";
 import {
   canTransition, decisionStatus, toRequest, validateDecision,
   type CreateInput, type DecisionInput, type RequestRow, type RequestStatus,
@@ -123,7 +125,19 @@ export const decide = async (actor: GarageActor, id: string, input: DecisionInpu
   requireWriter(actor, true);
   const missing = validateDecision(input);
   if (missing.length) throw new SpecialRequestError(400, "DECISION_INCOMPLETE", `Missing or invalid: ${missing.join(", ")}.`);
-  return mutate(actor, id, input.expectedRevision, "decide", async (client, row) => {
+  const decided = await decideCore(actor, id, input);
+  if (input.decision !== "accepted") return { ...decided, generatedQuote: null };
+  // Auto-generate the draft quote (idempotent per request). Best effort: a failure never undoes the decision; staff can retry with "Create quote".
+  try {
+    const generated = await generateQuoteDraft(commercialContext, actor, { kind: "special-request", requestId: id });
+    return { ...(await getRequest(actor, id)), generatedQuote: { ref: generated.quote, created: generated.created, warnings: generated.warnings } };
+  } catch {
+    return { ...decided, generatedQuote: null };
+  }
+};
+
+const decideCore = (actor: GarageActor, id: string, input: DecisionInput) =>
+  mutate(actor, id, input.expectedRevision, "decide", async (client, row) => {
     const accepted = input.decision === "accepted";
     const next = decisionStatus(input.decision);
     await client.query(
@@ -137,7 +151,6 @@ export const decide = async (actor: GarageActor, id: string, input: DecisionInpu
       durationDays: accepted ? input.durationDays : null, availableFrom: accepted ? input.availableFrom : null, offerValidUntil: accepted ? input.offerValidUntil ?? null : null,
     });
   });
-};
 
 /** Staff answer the owner's question; the request returns to review. */
 export const addInfo = (actor: GarageActor, id: string, expectedRevision: number, text: string) =>

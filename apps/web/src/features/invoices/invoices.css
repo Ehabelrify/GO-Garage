@@ -1,0 +1,13 @@
+.invoice-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-block-end: 12px; }
+.invoice-links { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.invoice-lines { inline-size: 100%; border-collapse: collapse; margin-block: 8px; }
+.invoice-lines th, .invoice-lines td { padding: 6px 8px; border-block-end: 1px solid var(--line); text-align: start; vertical-align: top; }
+.invoice-lines td small { display: block; color: var(--muted); }
+.invoice-totals { margin: 8px 0 16px; margin-inline-start: auto; inline-size: min(100%, 320px); }
+.invoice-totals div { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+.invoice-totals dt { color: var(--muted); }
+.invoice-totals dd { margin: 0; }
+.invoice-totals .invoice-grand { border-block: 1px solid var(--ink); font-weight: 700; }
+.invoice-line-edit { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; align-items: end; padding-block-end: 10px; border-block-end: 1px dashed var(--line); }
+.invoice-payments, .invoice-history { padding-inline-start: 18px; margin-block: 4px; }
+.invoice-detail h3 { font-size: 14px; margin-block: 14px 4px; }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isSupportedCurrency } from "@garage/domain";
 
 /** Pure rules for special requests (no database access): schemas, status transitions, customer-safe projection. */
 
@@ -9,8 +10,8 @@ export const decisions = ["accepted", "declined", "needs-info"] as const;
 export type Decision = (typeof decisions)[number];
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => !Number.isNaN(Date.parse(`${value}T12:00:00Z`)), "Invalid date");
-/** Currency list is central (W2.5-B); until it lands any ISO-4217-shaped code is accepted. */
-const currency = z.string().regex(/^[A-Z]{3}$/);
+/** Currency must be in the central list (packages/domain/src/currencies.ts). */
+const currency = z.string().refine(isSupportedCurrency, "Unsupported currency");
 
 export const createSchema = z.object({
   customerId: z.string().min(1).max(100),
