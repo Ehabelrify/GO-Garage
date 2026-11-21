@@ -252,6 +252,11 @@ async function runTask(browser, cookies, { role, locale, width }, routes, rows) 
       }
       rows.push(row);
       log(`${row.status.padEnd(4)} ${role}/${locale}/${width}/${route.id}${row.reasons.length ? ` - ${row.reasons.join("; ")}` : ""}`);
+      if (row.status === "FAIL") {
+        for (const e of row.pageErrors.slice(0, 3)) log(`    page error: ${e.replace(/\s+/g, " ").slice(0, 400)}`);
+        for (const e of row.consoleErrors.slice(0, 3)) log(`    console error: ${e.replace(/\s+/g, " ").slice(0, 300)}`);
+        for (const e of row.failedRequests.slice(0, 4)) log(`    failed request: ${e}`);
+      }
       if (row.status === "FAIL") for (const f of row.apiFailures.filter((x) => x.status >= 500)) log(`::error title=API ${f.status} ${f.method} ${f.path}::${role}/${locale}/${width}/${route.id} ${f.body.replace(/\s+/g, " ").slice(0, 200)}`);
     }
   } finally {
@@ -405,6 +410,12 @@ async function main() {
     // First task alone so Vite warms its dependency cache before parallel visits.
     const [first, ...rest] = tasks;
     if (first) await runTask(browser, cookies, first, first.routes, rows).catch((e) => log(`task failed ${first.role}/${first.locale}/${first.width}: ${e.message}`));
+    // Fail fast: if the very first task rendered nothing, every other task would only repeat the same 30s timeouts.
+    if (rows.length > 0 && rows.every((r) => r.status === "FAIL" && r.reasons.some((x) => x.startsWith("Workspace did not render")))) {
+      log("::error title=Visual checks::The app never rendered (stuck on the loading screen). Most likely the Clerk browser stub; see the page/console errors above. Stopping early.");
+      process.exitCode = 1;
+      return;
+    }
     const queue = [...rest];
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
       for (let t = queue.shift(); t; t = queue.shift()) {
