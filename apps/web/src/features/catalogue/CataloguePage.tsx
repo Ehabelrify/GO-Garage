@@ -1,313 +1,469 @@
-import { useEffect, useState, type FormEvent } from "react";
-import type { GradeVersion, PackageVersion, ScopeItem, WorkComponent } from "@garage/domain";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { hasCapability } from "../../shared/capabilities";
+import { DEFAULT_CURRENCY, isSupportedCurrency, resolveCurrency, type GradeVersion, type PackageVersion } from "@garage/domain";
 import { useGarageStore } from "../../shared/store";
+import {
+  Collapsible, ConfirmDialog, DataTable, DetailDrawer, EmptyState, Field, FilterBar, FormSection, Money, Notice, PageHeader,
+  RequiredNote, StatusBadge, TabBar, TabPanel, formatMoney, majorToMinor, minorToMajor, useUrlState, type Column,
+} from "../../shared/components";
+import {
+  addOnUsage, approvalGap, confirmation, gradeLabel, historyOf, latestById, normaliseDraft, occupancyOptions,
+  priceMatrix, priceMinor, roofState, validateDraft, type Category, type MatrixRow, type RoofState,
+} from "./catalogue-logic";
+import { PackageForm } from "./PackageForm";
+import { PriceEditor, PriceHistory } from "./PriceEditor";
+import { aggregationOptions, canPublish, isExampleData, priceDiff, priceFormFrom, taxRuleOptions, validatePriceForm, type PriceFormState } from "./price-logic";
+import "./catalogue.css";
 
-const lines = (value: string) => value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
-const unconfigured = { state: "unconfigured" as const, missing: ["Owner configuration required"] };
+type Lang = "ar" | "en";
+type Action = { kind: "publish" | "retire" | "archive"; entity: "package" | "grade"; id: string; version: number; revision: number; name: string };
 
 function blankPackage(): PackageVersion {
   const scopeId = `scope-${crypto.randomUUID()}`;
+  const unconfigured = { state: "unconfigured" as const, missing: ["Owner configuration required"] };
   return {
-    ref: { id: `pkg-${crypto.randomUUID()}`, version: 1 },
-    revision: 1,
-    kind: "package",
-    name: { ar: "", en: "" },
-    vehicleCategoryIds: [],
-    vehicleModels: [],
-    branchIds: [],
-    effectiveFrom: null,
-    effectiveThrough: null,
+    ref: { id: `pkg-${crypto.randomUUID()}`, version: 1 }, revision: 1, kind: "package", name: { ar: "", en: "" },
+    vehicleCategoryIds: [], vehicleModels: [], branchIds: [], effectiveFrom: null, effectiveThrough: null,
     scope: [{ id: scopeId, serviceId: "", gradeVersion: null, areas: [], roof: "not-applicable", addOnIds: [], exclusions: [], quantity: 1 }],
     work: [{ id: `work-${crypto.randomUUID()}`, serviceId: "", scopeItemIds: [scopeId], occupancyRule: { id: "", version: 1 } }],
-    price: unconfigured,
-    tax: unconfigured,
-    workAggregation: unconfigured,
-    provenance: "",
-    approval: null,
-    state: "draft",
+    price: unconfigured, tax: unconfigured, workAggregation: unconfigured, provenance: "", approval: null, state: "draft",
   };
 }
 
-function friendlyError(code: string | undefined, fallback: string, t: (en: string, ar: string) => string) {
-  const messages: Record<string, [string, string]> = {
-    INVALID_CATALOGUE: ["Review the required catalogue fields.", "راجع حقول الكتالوج المطلوبة."],
-    INVALID_DRAFT: ["Review the draft fields and try again.", "راجع حقول المسودة ثم حاول مرة أخرى."],
-    UNKNOWN_REFERENCE: ["Check that each branch, service, and category exists.", "تأكد من وجود كل فرع وخدمة وفئة."],
-    CATEGORY_REQUIRED: ["Add or select at least one vehicle category.", "أضف فئة مركبة واحدة على الأقل أو اخترها."],
-    INVALID_COMPONENT: ["Check the work items and the scope items they refer to.", "راجع عناصر العمل ونطاق العناصر المرتبطة بها."],
-    UNKNOWN_POLICY: ["Use an existing approved work policy reference.", "استخدم مرجع سياسة عمل معتمدة موجودة."],
-    APPROVAL_REQUIRED: ["Use a protected evidence reference starting with private: and enter a reason.", "استخدم مرجع دليل محمياً يبدأ بـ private: وأدخل السبب."],
-    CONFIGURATION_MISSING: ["Approve price, tax, and work settings before publishing this package.", "اعتمد إعدادات السعر والضريبة والعمل قبل نشر هذه الباقة."],
-    REASON_REQUIRED: ["Enter a reason before retiring this record.", "أدخل سبباً قبل إيقاف هذا السجل."],
-    VEHICLE_NOT_FOUND: ["Check the vehicle ID and try again.", "راجع معرف المركبة وحاول مرة أخرى."],
-    STALE_CATALOGUE: ["The catalogue changed. Refresh and edit the latest version.", "تغير الكتالوج. حدّث الصفحة وعدّل أحدث إصدار."],
-    STALE_GRADE: ["The grade changed. Refresh and edit the latest version.", "تغيرت الدرجة. حدّث الصفحة وعدّل أحدث إصدار."],
-  };
-  const copy = messages[code ?? ""];
-  return copy ? t(copy[0], copy[1]) : fallback;
-}
+const errorCopy: Record<string, [string, string]> = {
+  INVALID_CATALOGUE: ["Review the required catalogue fields.", "راجع حقول الكتالوج المطلوبة."],
+  INVALID_DRAFT: ["Review the draft fields and try again.", "راجع حقول المسودة ثم حاول مرة أخرى."],
+  UNKNOWN_REFERENCE: ["Check that each branch, service, and category exists.", "تأكد من وجود كل فرع وخدمة وفئة."],
+  CATEGORY_REQUIRED: ["Add or select at least one vehicle category.", "أضف فئة مركبة واحدة على الأقل أو اخترها."],
+  INVALID_COMPONENT: ["Check the work items and the scope items they refer to.", "راجع عناصر العمل ونطاق العناصر المرتبطة بها."],
+  UNKNOWN_POLICY: ["Use an existing approved work policy.", "استخدم سياسة عمل معتمدة موجودة."],
+  APPROVAL_REQUIRED: ["Use a protected evidence reference starting with private: and enter a reason.", "استخدم مرجع دليل محمياً يبدأ بـ private: وأدخل السبب."],
+  CONFIGURATION_MISSING: ["Approve price, tax, and work settings before publishing this package.", "اعتمد إعدادات السعر والضريبة والعمل قبل نشر هذه الباقة."],
+  REASON_REQUIRED: ["Enter a reason first.", "أدخل السبب أولاً."],
+  VEHICLE_NOT_FOUND: ["That vehicle could not be found. Pick it again.", "تعذر العثور على المركبة. اخترها مرة أخرى."],
+  STALE_CATALOGUE: ["The catalogue changed. Refresh and edit the latest version.", "تغير الكتالوج. حدّث الصفحة وعدّل أحدث إصدار."],
+  STALE_GRADE: ["The grade changed. Refresh and edit the latest version.", "تغيرت الدرجة. حدّث الصفحة وعدّل أحدث إصدار."],
+  ROLE_FORBIDDEN: ["You do not have permission to manage the catalogue.", "ليس لديك صلاحية إدارة الكتالوج."],
+  UNSUPPORTED_CURRENCY: ["Choose a currency from the supported list.", "اختر عملة من القائمة المدعومة."],
+  MIXED_CURRENCY: ["Price and tax must use the same currency.", "يجب أن يستخدم السعر والضريبة العملة نفسها."],
+  EFFECTIVE_DATE_INVALID: ["Check the effective date. It cannot be in the future or after the package end date.", "راجع تاريخ السريان. لا يمكن أن يكون في المستقبل أو بعد نهاية الباقة."],
+  PACKAGE_RETIRED: ["A retired package cannot be repriced.", "لا يمكن إعادة تسعير باقة متوقفة."],
+};
 
-export function CataloguePage({ lang }: { lang: "ar" | "en" }) {
+export function CataloguePage({ lang }: { lang: Lang }) {
   const store = useGarageStore();
-  const t = (en: string, ar: string) => lang === "ar" ? ar : en;
+  const t = useCallback((en: string, ar: string) => lang === "ar" ? ar : en, [lang]);
   const [versions, setVersions] = useState<PackageVersion[]>([]);
   const [grades, setGrades] = useState<GradeVersion[]>([]);
-  const [categories, setCategories] = useState<Array<{ id: string; name: { ar: string; en: string } }>>([]);
-  const [categoryEn, setCategoryEn] = useState("");
-  const [categoryAr, setCategoryAr] = useState("");
-  const [vehicleId, setVehicleId] = useState("");
-  const [vehicleCategoryId, setVehicleCategoryId] = useState("");
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState(false);
+  const [message, setMessage] = useState<{ text: string; tone: "info" | "warning" } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const [tab, setTab] = useUrlState("tab", "packages");
+  const [view, setView] = useUrlState("view", "list");
+  const [openId, setOpenId] = useUrlState("record", "");
+  const [search, setSearch] = useState("");
+  const [stateFilter, setStateFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+
+  const [priceTarget, setPriceTarget] = useState<PackageVersion | null>(null);
+  const [priceForm, setPriceForm] = useState<PriceFormState | null>(null);
+  const [priceErrors, setPriceErrors] = useState<Record<string, string>>({});
   const [packageDraft, setPackageDraft] = useState<PackageVersion | null>(null);
+  const [draftIsNew, setDraftIsNew] = useState(false);
+  const [draftErrors, setDraftErrors] = useState<Record<string, string>>({});
+  const [gradeOpen, setGradeOpen] = useState(false);
   const [gradeDraft, setGradeDraft] = useState({ en: "", ar: "", thickness: "", provenance: "" });
+  const [categoryOpen, setCategoryOpen] = useState(false);
+  const [categoryDraft, setCategoryDraft] = useState({ en: "", ar: "" });
+  const [classify, setClassify] = useState({ vehicleId: "", categoryId: "" });
+  const [action, setAction] = useState<Action | null>(null);
   const [evidenceRef, setEvidenceRef] = useState("");
   const [reason, setReason] = useState("");
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
+
   const services = store.state?.services ?? [];
   const branches = store.state?.branches ?? [];
-  const vehicles = (store.state?.customers ?? []).flatMap(customer => customer.vehicles.map(vehicle => ({ ...vehicle, customerName: customer.name })));
+  const vehicles = (store.state?.customers ?? []).flatMap((customer) => customer.vehicles.map((vehicle) => ({ ...vehicle, customerName: customer.name })));
+  const canManage = !forbidden && hasCapability(store.actor, "catalogue.manage");
 
-  async function read() {
+  const read = useCallback(async () => {
     const [response, gradeResponse, categoryResponse] = await Promise.all([
-      fetch("/api/catalogue/versions"),
-      fetch("/api/catalogue/grades"),
-      fetch("/api/catalogue/categories"),
+      fetch("/api/catalogue/versions"), fetch("/api/catalogue/grades"), fetch("/api/catalogue/categories"),
     ]);
-    if (!response.ok || !gradeResponse.ok || !categoryResponse.ok) throw new Error(t("Catalogue unavailable. Refresh and try again.", "الكتالوج غير متاح. حدّث الصفحة وحاول مرة أخرى."));
+    if ([response, gradeResponse, categoryResponse].some((r) => r.status === 403)) { setForbidden(true); return; }
+    if (!response.ok || !gradeResponse.ok || !categoryResponse.ok) throw new Error(t("Catalogue unavailable. Try again.", "الكتالوج غير متاح. حاول مرة أخرى."));
     setVersions(await response.json() as PackageVersion[]);
     setGrades(await gradeResponse.json() as GradeVersion[]);
-    setCategories(await categoryResponse.json() as typeof categories);
-  }
+    setCategories(await categoryResponse.json() as Category[]);
+  }, [t]);
 
-  useEffect(() => { void read().catch((error) => setMessage(error instanceof Error ? error.message : String(error))); }, []);
+  const load = useCallback(() => {
+    setLoading(true);
+    setLoadError(null);
+    read().catch((error) => setLoadError(error instanceof Error ? error.message : String(error))).finally(() => setLoading(false));
+  }, [read]);
+  useEffect(load, [load]);
 
-  async function post(path: string, body: object): Promise<boolean> {
+  async function send(url: string, body: object): Promise<boolean> {
     setBusy(true);
-    setMessage("");
+    setMessage(null);
     try {
-      const response = await fetch(`/api/catalogue/${path}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const result = await response.json() as { message?: string; code?: string };
-      if (!response.ok) throw new Error(friendlyError(result.code, result.message ?? t("The change could not be saved.", "تعذر حفظ التغيير."), t));
+      const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const result = await response.json().catch(() => ({})) as { message?: string; code?: string };
+      if (!response.ok) {
+        const copy = errorCopy[result.code ?? ""];
+        throw new Error(copy ? t(copy[0], copy[1]) : result.message ?? t("The change could not be saved.", "تعذر حفظ التغيير."));
+      }
       await read();
-      setMessage(t("Saved. Review the version history.", "تم الحفظ. راجع سجل الإصدارات."));
+      setMessage({ text: t("Saved.", "تم الحفظ."), tone: "info" });
       return true;
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
+      setMessage({ text: error instanceof Error ? error.message : String(error), tone: "warning" });
       return false;
     } finally {
       setBusy(false);
     }
   }
+  const post = (path: string, body: object) => send(`/api/catalogue/${path}`, body);
 
-  function publish(path: string, body: object) {
-    if (!/^private:[A-Za-z0-9/_-]+$/.test(evidenceRef.trim()) || !reason.trim()) {
-      setMessage(t("Use a protected evidence reference starting with private: and enter a reason before publishing.", "استخدم مرجع دليل محمياً يبدأ بـ private: وأدخل السبب قبل النشر."));
-      return;
-    }
-    void post(path, body);
+  const latestPackages = useMemo(() => [...latestById(versions).values()], [versions]);
+  const latestGrades = useMemo(() => [...latestById(grades).values()], [grades]);
+  const occupancy = useMemo(() => occupancyOptions(versions), [versions]);
+  const serviceName = (id: string) => { const s = services.find((item) => item.id === id); return s ? (lang === "ar" && s.nameAr ? s.nameAr : s.name) : t("Unknown service", "خدمة غير معروفة"); };
+  const branchName = (id: string) => { const b = branches.find((item) => item.id === id); return b ? (lang === "ar" && b.nameAr ? b.nameAr : b.name) : t("Unknown branch", "فرع غير معروف"); };
+  const categoryName = (id: string) => categories.find((c) => c.id === id)?.name[lang] ?? t("Unknown category", "فئة غير معروفة");
+  const roofLabel = (state: RoofState) => ({
+    included: t("Roof included", "السقف مشمول"), excluded: t("Roof extra", "السقف إضافي"),
+    mixed: t("Roof varies", "السقف يختلف"), "not-applicable": t("No roof option", "بدون خيار سقف"),
+  })[state];
+
+  const priceBadge = (p: PackageVersion) => confirmation(p) === "confirmed"
+    ? <span className="status" data-tone="success">{t("Confirmed", "مؤكد")}</span>
+    : <span className="status" data-tone="warning" title={t("Example price, not yet confirmed by the owner", "سعر مثال لم يؤكده المالك بعد")}>{t("Advertised", "معلن")}</span>;
+  const priceCell = (p: PackageVersion) => {
+    const price = priceMinor(p);
+    return price ? <Money minor={price.minor} currency={price.currency} lang={lang} /> : <span className="cat-muted">{t("Price pending", "السعر قيد التحديد")}</span>;
+  };
+
+  const filteredPackages = latestPackages.filter((p) => {
+    if (stateFilter !== "all" && p.state !== stateFilter) return false;
+    if (categoryFilter !== "all" && !p.vehicleCategoryIds.includes(categoryFilter)) return false;
+    const q = search.trim().toLowerCase();
+    return !q || `${p.name.en} ${p.name.ar}`.toLowerCase().includes(q);
+  });
+  const clearFilters = () => { setSearch(""); setStateFilter("all"); setCategoryFilter("all"); };
+  const filtersActive = Boolean(search.trim()) || stateFilter !== "all" || categoryFilter !== "all";
+
+  function startPackage(source?: PackageVersion) {
+    setDraftErrors({});
+    if (!source) { setDraftIsNew(true); setPackageDraft({ ...blankPackage(), branchIds: branches.length === 1 ? [branches[0].id] : [] }); return; }
+    setDraftIsNew(false);
+    setPackageDraft({ ...source, ref: { id: source.ref.id, version: source.ref.version + 1 }, revision: source.revision + 1, approval: null, state: "draft" });
   }
 
-  const latest = new Map<string, PackageVersion>();
-  for (const version of versions) if (!latest.has(version.ref.id)) latest.set(version.ref.id, version);
-  const latestGrade = new Map<string, GradeVersion>();
-  for (const grade of grades) if (!latestGrade.has(grade.ref.id)) latestGrade.set(grade.ref.id, grade);
-
-  function editPackage(source?: PackageVersion) {
-    if (!source) {
-      setPackageDraft(blankPackage());
-      return;
-    }
-    setPackageDraft({
-      ...source,
-      ref: { id: source.ref.id, version: source.ref.version + 1 },
-      revision: source.revision + 1,
-      approval: null,
-      state: "draft",
-    });
-  }
-
-  function updateScope(index: number, patch: Partial<ScopeItem>) {
-    setPackageDraft((current) => {
-      if (!current) return current;
-      const priorId = current.scope[index]?.id;
-      const nextId = patch.id ?? priorId;
-      return {
-        ...current,
-        scope: current.scope.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item),
-        work: priorId === nextId ? current.work : current.work.map((item) => ({ ...item, scopeItemIds: item.scopeItemIds.map((id) => id === priorId ? nextId : id) })),
-      };
-    });
-  }
-
-  function removeScope(index: number) {
-    setPackageDraft((current) => {
-      if (!current || current.scope.length <= 1) return current;
-      const removedId = current.scope[index].id;
-      const work = current.work.map((item) => ({ ...item, scopeItemIds: item.scopeItemIds.filter((id) => id !== removedId) })).filter((item) => item.scopeItemIds.length > 0);
-      return { ...current, scope: current.scope.filter((_, itemIndex) => itemIndex !== index), work };
-    });
-  }
-
-  function updateWork(index: number, patch: Partial<WorkComponent>) {
-    setPackageDraft((current) => current ? { ...current, work: current.work.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item) } : current);
-  }
-
-  function savePackage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function savePackage() {
     if (!packageDraft) return;
-    const prior = latest.get(packageDraft.ref.id);
-    if (!packageDraft.ref.id.trim()) {
-      setMessage(t("Enter a package ID.", "أدخل معرف الباقة."));
-      return;
+    const normalised = normaliseDraft(packageDraft);
+    const found = validateDraft(normalised);
+    const mapped = Object.fromEntries(Object.entries(found).map(([key, [en, ar]]) => [key, t(en, ar)]));
+    setDraftErrors(mapped);
+    if (Object.keys(mapped).length) return;
+    const prior = latestById(versions).get(normalised.ref.id);
+    if (await post("drafts", { package: normalised, expectedRevision: prior?.revision ?? 0 })) {
+      setPackageDraft(null);
+      setOpenId(normalised.ref.id);
     }
-    void (async () => {
-      if (await post("drafts", { package: packageDraft, expectedRevision: prior?.revision ?? 0 })) setPackageDraft(null);
-    })();
   }
 
-  function saveGrade(event: FormEvent<HTMLFormElement>) {
+  const today = () => new Date().toISOString().slice(0, 10);
+  function startPrice(source: PackageVersion) {
+    setPriceErrors({});
+    setPriceTarget(source);
+    setPriceForm(priceFormFrom(source, resolveCurrency(source.price.state === "approved" ? source.price.value.currency : null, DEFAULT_CURRENCY), today(), minorToMajor));
+  }
+
+  async function savePrice() {
+    if (!priceTarget || !priceForm) return;
+    const found = validatePriceForm(priceForm, majorToMinor, today(), isSupportedCurrency);
+    const mapped = Object.fromEntries(Object.entries(found).map(([key, [en, ar]]) => [key, t(en, ar)]));
+    setPriceErrors(mapped);
+    if (Object.keys(mapped).length) return;
+    const taxRule = taxRuleOptions(versions).find((rule) => rule.key === priceForm.taxRuleKey)?.ref;
+    const aggregation = aggregationOptions(versions).find((option) => option.key === priceForm.aggregationKey);
+    const ok = await post("price-drafts", {
+      packageId: priceTarget.ref.id, expectedVersion: priceTarget.ref.version, expectedRevision: priceTarget.revision,
+      price: { minor: majorToMinor(priceForm.price, priceForm.currency), currency: priceForm.currency },
+      tax: { minor: majorToMinor(priceForm.tax || "0", priceForm.currency), currency: priceForm.currency },
+      effectiveFrom: priceForm.effectiveFrom, reason: priceForm.reason.trim(),
+      ...(taxRule ? { taxRule } : {}), ...(aggregation ? { aggregation: { rule: aggregation.rule, mode: aggregation.mode } } : {}),
+    });
+    if (ok) { setPriceTarget(null); setPriceForm(null); setOpenId(priceTarget.ref.id); }
+  }
+
+  async function saveGrade(event: FormEvent) {
     event.preventDefault();
     const id = `grade-${crypto.randomUUID()}`;
-    const latestValue = latestGrade.get(id);
     const grade: GradeVersion = {
-      ref: { id, version: (latestValue?.ref.version ?? 0) + 1 },
-      revision: (latestValue?.revision ?? 0) + 1,
-      name: { en: gradeDraft.en.trim(), ar: gradeDraft.ar.trim() },
+      ref: { id, version: 1 }, revision: 1, name: { en: gradeDraft.en.trim(), ar: gradeDraft.ar.trim() },
       thicknessMicrometres: gradeDraft.thickness.trim() ? Number(gradeDraft.thickness) : null,
-      provenance: gradeDraft.provenance.trim(),
-      approval: null,
-      state: "draft",
+      provenance: gradeDraft.provenance.trim(), approval: null, state: "draft",
     };
-    void (async () => {
-      if (await post("grades/drafts", { grade, expectedRevision: latestValue?.revision ?? 0 })) {
-        setGradeDraft({ en: "", ar: "", thickness: "", provenance: "" });
-      }
-    })();
+    if (await post("grades/drafts", { grade, expectedRevision: 0 })) { setGradeDraft({ en: "", ar: "", thickness: "", provenance: "" }); setGradeOpen(false); }
   }
 
+  async function saveCategory(event: FormEvent) {
+    event.preventDefault();
+    if (await post("categories", { id: `category-${crypto.randomUUID()}`, name: { en: categoryDraft.en.trim(), ar: categoryDraft.ar.trim() } })) { setCategoryDraft({ en: "", ar: "" }); setCategoryOpen(false); }
+  }
+
+  async function saveClassification(event: FormEvent) {
+    event.preventDefault();
+    if (await post("vehicle-classifications", classify)) setClassify({ vehicleId: "", categoryId: "" });
+  }
+
+  const needsEvidence = action?.kind === "publish";
+  const actionGap = action ? (needsEvidence ? approvalGap(evidenceRef, reason) : reason.trim() ? null : "reason") : null;
+  const publishing = action?.kind === "publish" && action.entity === "package" ? latestById(versions).get(action.id) : undefined;
+  const diff = publishing?.priceChange ? priceDiff(publishing.priceChange.previous.price, publishing.priceChange.price) : null;
+  const actionCopy = action && ({
+    publish: { title: t("Publish this version?", "نشر هذا الإصدار؟"), confirm: t("Publish", "نشر") },
+    retire: { title: t("Retire this record?", "إيقاف هذا السجل؟"), confirm: t("Retire", "إيقاف") },
+    archive: { title: t("Archive this record?", "أرشفة هذا السجل؟"), confirm: t("Archive", "أرشفة") },
+  })[action.kind];
+
+  async function runAction() {
+    if (!action) return;
+    const base = action.entity === "package" ? { packageId: action.id } : { gradeId: action.id };
+    const prefix = action.entity === "package" ? "" : "grades/";
+    let ok = false;
+    if (action.kind === "publish") ok = await post(`${prefix}publications`, { ...base, expectedRevision: action.revision, evidenceRef: evidenceRef.trim(), reason: reason.trim() });
+    else if (action.kind === "retire") ok = await post(`${prefix}retirements`, { ...base, expectedVersion: action.version, expectedRevision: action.revision, reason: reason.trim() });
+    else ok = await send(`/api/owner/records/${action.entity === "package" ? "catalogue-package" : "catalogue-grade"}/${encodeURIComponent(action.id)}/archive`, { reason: reason.trim() });
+    if (ok) { setAction(null); setEvidenceRef(""); setReason(""); if (action.kind === "archive") setOpenId(""); }
+  }
+  const startAction = (next: Action) => { setEvidenceRef(""); setReason(""); setAction(next); };
+
+  const packageColumns: Column<PackageVersion>[] = [
+    { key: "name", header: t("Package", "الباقة"), primary: true, sortable: true, sortValue: (p) => p.name[lang], render: (p) => <>{p.name[lang]}{p.kind === "standalone" && <span className="tag">{t("Service", "خدمة")}</span>}</> },
+    { key: "categories", header: t("Vehicles", "المركبات"), render: (p) => p.vehicleCategoryIds.map(categoryName).join(", ") || <span className="cat-muted">{t("Not set", "غير محدد")}</span> },
+    { key: "price", header: t("Price", "السعر"), numeric: true, sortable: true, sortValue: (p) => priceMinor(p)?.minor ?? null, render: priceCell },
+    { key: "basis", header: t("Price status", "حالة السعر"), render: priceBadge },
+    { key: "state", header: t("State", "الحالة"), sortable: true, sortValue: (p) => p.state, render: (p) => <StatusBadge status={p.state} domain="policy" lang={lang} /> },
+    { key: "actions", header: "", hideOnCard: true, render: (p) => canManage && p.state !== "retired"
+      ? <button type="button" className="btn btn-sm" onClick={(e) => { e.stopPropagation(); startPrice(p); }}>{t("Edit price", "تعديل السعر")}</button> : null },
+  ];
+
+  const matrixColumns: Column<MatrixRow>[] = [
+    { key: "name", header: t("Package", "الباقة"), primary: true, sortable: true, sortValue: (r) => r.pkg.name[lang], render: (r) => r.pkg.name[lang] },
+    ...categories.map((category): Column<MatrixRow> => ({
+      key: `c-${category.id}`, header: category.name[lang], numeric: true,
+      render: (r) => !r.appliesTo[category.id] ? <span className="cat-muted">—</span>
+        : r.cells[category.id] ? <Money minor={r.cells[category.id]!.minor} currency={r.cells[category.id]!.currency} lang={lang} />
+        : <span className="cat-muted">{t("Pending", "قيد التحديد")}</span>,
+    })),
+    { key: "roof", header: t("Roof", "السقف"), render: (r) => roofLabel(r.roof) },
+    { key: "basis", header: t("Price status", "حالة السعر"), render: (r) => priceBadge(r.pkg) },
+  ];
+
+  const addOns = addOnUsage(latestPackages);
+  const addOnColumns: Column<(typeof addOns)[number]>[] = [
+    { key: "name", header: t("Add-on", "الإضافة"), primary: true, sortable: true, sortValue: (a) => serviceName(a.serviceId), render: (a) => serviceName(a.serviceId) },
+    { key: "used", header: t("Offered with", "متاحة مع"), render: (a) => a.packageIds.map((id) => latestById(versions).get(id)?.name[lang] ?? "").filter(Boolean).join(", ") },
+  ];
+
+  const gradeColumns: Column<GradeVersion>[] = [
+    { key: "name", header: t("Grade", "الدرجة"), primary: true, sortable: true, sortValue: (g) => gradeLabel(g, lang), render: (g) => gradeLabel(g, lang) },
+    { key: "thickness", header: t("Thickness", "السُمك"), numeric: true, render: (g) => g.thicknessMicrometres === null ? <span className="cat-muted">{t("Not confirmed", "غير مؤكد")}</span> : `${g.thicknessMicrometres} μm` },
+    { key: "state", header: t("State", "الحالة"), sortable: true, sortValue: (g) => g.state, render: (g) => <StatusBadge status={g.state} domain="policy" lang={lang} /> },
+    { key: "actions", header: "", hideOnCard: true, render: (g) => canManage && g.state === "draft"
+      ? <button type="button" className="btn btn-sm" onClick={(e) => { e.stopPropagation(); startAction({ kind: "publish", entity: "grade", id: g.ref.id, version: g.ref.version, revision: g.revision, name: gradeLabel(g, lang) }); }}>{t("Publish", "نشر")}</button>
+      : g.state === "published" && canManage
+        ? <button type="button" className="btn btn-danger btn-sm" onClick={(e) => { e.stopPropagation(); startAction({ kind: "retire", entity: "grade", id: g.ref.id, version: g.ref.version, revision: g.revision, name: gradeLabel(g, lang) }); }}>{t("Retire", "إيقاف")}</button>
+        : null },
+  ];
+
+  const current = openId ? latestById(versions).get(openId) : undefined;
+  const gradeNameOf = (ref: { id: string }) => { const g = latestGrades.find((x) => x.ref.id === ref.id); return g ? gradeLabel(g, lang) : t("Unknown grade", "درجة غير معروفة"); };
+
+  const detailFooter = current && canManage && <>
+    {current.state !== "retired" && <button type="button" className="btn" disabled={busy} onClick={() => startPrice(current)}>{t("Edit price", "تعديل السعر")}</button>}
+    {current.state !== "retired" && <button type="button" className="btn" disabled={busy} onClick={() => startPackage(current)}>{current.state === "draft" ? t("Edit draft", "تعديل المسودة") : t("New draft version", "مسودة إصدار جديد")}</button>}
+    {current.state === "draft" && <button type="button" className="btn btn-primary" disabled={busy || !canPublish(current)} title={!canPublish(current) ? t("Approve price, tax and work settings first", "اعتمد السعر والضريبة والعمل أولاً") : undefined}
+      onClick={() => startAction({ kind: "publish", entity: "package", id: current.ref.id, version: current.ref.version, revision: current.revision, name: current.name[lang] })}>{t("Publish", "نشر")}</button>}
+    {current.state === "published" && <button type="button" className="btn btn-danger" disabled={busy}
+      onClick={() => startAction({ kind: "retire", entity: "package", id: current.ref.id, version: current.ref.version, revision: current.revision, name: current.name[lang] })}>{t("Retire", "إيقاف")}</button>}
+    <button type="button" className="btn btn-danger" disabled={busy}
+      onClick={() => startAction({ kind: "archive", entity: "package", id: current.ref.id, version: current.ref.version, revision: current.revision, name: current.name[lang] })}>{t("Archive", "أرشفة")}</button>
+  </>;
+
+  const addLabel = tab === "grades" ? t("Add grade", "إضافة درجة") : tab === "categories" ? t("Add category", "إضافة فئة") : t("Add package", "إضافة باقة");
+  const onAdd = () => tab === "grades" ? setGradeOpen(true) : tab === "categories" ? setCategoryOpen(true) : startPackage();
+  const hasAdvertised = latestPackages.some((p) => confirmation(p) === "advertised");
+
+  const tabs = [
+    { id: "packages", label: t("Packages", "الباقات"), count: latestPackages.length },
+    { id: "grades", label: t("Grades", "الدرجات"), count: latestGrades.length },
+    { id: "categories", label: t("Categories", "الفئات"), count: categories.length },
+  ];
+  const activeTab = tabs.some((x) => x.id === tab) ? tab : "packages";
+
   return <div dir={lang === "ar" ? "rtl" : "ltr"}>
-    <h1>{t("Catalogue and packages", "الكتالوج والباقات")}</h1>
-    <p>{t("Manage named package and grade records. Prices stay unconfigured until their approved policy is available.", "أدر الباقات والدرجات بالحقول الواضحة. تظل الأسعار غير مهيأة حتى تتوفر السياسة المعتمدة.")}</p>
-    {message && <p role="status">{message}</p>}
+    <PageHeader
+      title={t("Catalogue", "الكتالوج")}
+      actions={canManage ? <button type="button" className="btn btn-primary" onClick={onAdd}>{addLabel}</button> : undefined}
+    />
+    {message ? <Notice tone={message.tone}>{message.text}</Notice>
+      : hasAdvertised && <Notice tone="info">{t("Advertised prices are examples until the owner confirms them.", "الأسعار المعلنة أمثلة حتى يؤكدها المالك.")}</Notice>}
 
-    <section className="panel section-gap">
-      <div className="panel-title-row">
-        <div><h2 className="panel-title">{t("Packages", "الباقات")}</h2><p className="panel-desc">{t("Each version keeps its scope and approval history.", "يحتفظ كل إصدار بالنطاق وسجل الموافقات.")}</p></div>
-        <button className="btn btn-primary" type="button" onClick={() => editPackage()}>{t("New package", "باقة جديدة")}</button>
-      </div>
-      {versions.map((p) => <article className="catalogue-record" key={`${p.ref.id}:${p.ref.version}`}>
-        <h3>{p.name[lang]} · v{p.ref.version}</h3>
-        <p>{p.state} · {p.kind} · {p.branchIds.map(id=>branches.find(branch=>branch.id===id)?.name??id).join(", ")}</p>
-        <p>{t("Categories", "الفئات")}: {p.vehicleCategoryIds.map(id=>categories.find(category=>category.id===id)?.name[lang]??id).join(", ") || t("Not set", "غير محددة")} · {t("Price", "السعر")}: {p.price.state === "approved" ? `${p.price.value.minor} ${p.price.value.currency}` : t("Not configured", "غير مهيأ")} · {t("Tax", "الضريبة")}: {p.tax.state === "approved" ? p.tax.value.amount ? `${p.tax.value.amount.minor} ${p.tax.value.amount.currency}` : `${t("Rule", "قاعدة")}: ${p.tax.value.rule.id}` : t("Not configured", "غير مهيأ")}</p>
-        <details><summary>{t("Full package configuration","إعدادات الباقة كاملة")}</summary><p className="mono">{t("Internal reference","مرجع داخلي")}: {p.ref.id}</p>
-        <p>{t("Models", "الطرازات")}: {p.vehicleModels.join(", ") || t("All listed categories", "كل الفئات المحددة")} · {t("Effective", "السريان")}: {p.effectiveFrom ?? t("Not set", "غير محدد")} — {p.effectiveThrough ?? t("No end date", "بلا تاريخ انتهاء")}</p>
-        <ul>{p.scope.map((item) => <li key={item.id}>{services.find(service=>service.id===item.serviceId)?.name??item.serviceId} — {item.areas.join(", ") || t("No areas listed", "لم تُحدد مناطق")} · {t("Quantity", "الكمية")}: {item.quantity} · {t("Roof", "السقف")}: {item.roof} · {t("Add-ons", "الإضافات")}: {item.addOnIds.join(", ") || "—"} · {t("Exclusions", "الاستثناءات")}: {item.exclusions.join(", ") || "—"}</li>)}</ul>
-        {p.work.length > 0 && <ul>{p.work.map((item) => <li key={item.id}>{services.find(service=>service.id===item.serviceId)?.name??item.serviceId} · {t("Scope items","بنود النطاق")}: {item.scopeItemIds.length} · {t("Occupancy policy", "سياسة الإشغال")}: {item.occupancyRule.id} v{item.occupancyRule.version}</li>)}</ul>}
-        </details>
-        {p.state === "draft" && latest.get(p.ref.id)?.ref.version === p.ref.version && <button className="btn" type="button" disabled={busy} onClick={() => editPackage(p)}>{t("Edit draft", "تعديل المسودة")}</button>}
-        {p.state === "draft" && latest.get(p.ref.id)?.ref.version === p.ref.version && <button className="btn" type="button" disabled={busy} onClick={() => publish("publications", { packageId: p.ref.id, expectedRevision: p.revision, evidenceRef, reason })}>{t("Publish approved draft", "نشر المسودة المعتمدة")}</button>}
-        {p.state === "published" && latest.get(p.ref.id)?.ref.version === p.ref.version && <button className="btn btn-danger" type="button" disabled={busy || !reason.trim()} onClick={() => void post("retirements", { packageId: p.ref.id, expectedVersion: p.ref.version, expectedRevision: p.revision, reason })}>{t("Retire package", "إيقاف الباقة")}</button>}
-      </article>)}
-      {!versions.length && <p className="form-hint">{t("No package versions have been added yet.", "لم تتم إضافة إصدارات باقات بعد.")}</p>}
-    </section>
+    {forbidden ? <EmptyState variant="error" title={t("No access", "لا يوجد وصول")} text={t("Managing the catalogue needs owner permission.", "إدارة الكتالوج تحتاج صلاحية المالك.")} /> : <>
+      <TabBar tabs={tabs} value={activeTab} onChange={setTab} ariaLabel={t("Catalogue sections", "أقسام الكتالوج")} idPrefix="cat" />
 
-    {packageDraft && <form className="form-panel section-gap" onSubmit={savePackage}>
-      <h2>{t("Package draft", "مسودة باقة")}</h2>
-      <p className="form-hint">{t("Use one line per category, model, branch, area, add-on, or exclusion. Price and tax remain unconfigured until approved policies are available.", "اكتب كل فئة أو طراز أو فرع أو منطقة أو إضافة أو استثناء في سطر. يظل السعر والضريبة غير مهيأين حتى تتوفر السياسات المعتمدة.")}</p>
-      <div className="form-grid">
-        <label className="form-field">{t("Package type", "نوع الباقة")}<select className="field-select" value={packageDraft.kind} onChange={(event) => setPackageDraft({ ...packageDraft, kind: event.target.value as PackageVersion["kind"] })}><option value="package">{t("Package", "باقة")}</option><option value="standalone">{t("Standalone service", "خدمة منفردة")}</option></select></label>
-        <label className="form-field">{t("Name in English", "الاسم بالإنجليزية")}<input className="field-input" required value={packageDraft.name.en} onChange={(event) => setPackageDraft({ ...packageDraft, name: { ...packageDraft.name, en: event.target.value } })} /></label>
-        <label className="form-field">{t("Name in Arabic", "الاسم بالعربية")}<input className="field-input" required value={packageDraft.name.ar} onChange={(event) => setPackageDraft({ ...packageDraft, name: { ...packageDraft.name, ar: event.target.value } })} /></label>
-        <label className="form-field">{t("Vehicle categories", "فئات المركبات")}<select className="field-select" multiple required value={packageDraft.vehicleCategoryIds} onChange={(event) => setPackageDraft({ ...packageDraft, vehicleCategoryIds: Array.from(event.target.selectedOptions, option => option.value) })}>{categories.map(category=><option key={category.id} value={category.id}>{category.name[lang]}</option>)}</select></label>
-        <label className="form-field">{t("Vehicle models", "طرازات المركبات")}<textarea className="field-textarea" value={packageDraft.vehicleModels.join("\n")} onChange={(event) => setPackageDraft({ ...packageDraft, vehicleModels: lines(event.target.value) })} /></label>
-        <label className="form-field">{t("Available branches", "الفروع المتاحة")}<select className="field-select" multiple required value={packageDraft.branchIds} onChange={(event) => setPackageDraft({ ...packageDraft, branchIds: Array.from(event.target.selectedOptions, option => option.value) })}>{branches.map(branch=><option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
-        <label className="form-field">{t("Source / provenance", "المصدر") }<textarea className="field-textarea" value={packageDraft.provenance} onChange={(event) => setPackageDraft({ ...packageDraft, provenance: event.target.value })} /></label>
-        <label className="form-field">{t("Effective from", "ساري من")}<input className="field-input" type="date" value={packageDraft.effectiveFrom ?? ""} onChange={(event) => setPackageDraft({ ...packageDraft, effectiveFrom: event.target.value || null })} /></label>
-        <label className="form-field">{t("Effective through", "ساري حتى")}<input className="field-input" type="date" value={packageDraft.effectiveThrough ?? ""} onChange={(event) => setPackageDraft({ ...packageDraft, effectiveThrough: event.target.value || null })} /></label>
-      </div>
-      <h3>{t("Included work scope", "نطاق العمل المشمول")}</h3>
-      {packageDraft.scope.map((item, index) => <div className="form-subsection" key={item.id}>
-        <div className="form-grid">
-          <label className="form-field">{t("Service", "الخدمة")}<select className="field-select" required value={item.serviceId} onChange={(event) => updateScope(index, { serviceId: event.target.value })}><option value="">{t("Choose a service","اختر خدمة")}</option>{services.map(service=><option key={service.id} value={service.id}>{service.name}</option>)}</select></label>
-          <label className="form-field">{t("Published grade","الدرجة المنشورة")}<select className="field-select" value={item.gradeVersion?`${item.gradeVersion.id}:${item.gradeVersion.version}`:""} onChange={event=>{const [id,version]=event.target.value.split(":");updateScope(index,{gradeVersion:id?{id,version:Number(version)}:null});}}><option value="">{t("No grade","بدون درجة")}</option>{grades.filter(grade=>grade.state==="published").map(grade=><option key={`${grade.ref.id}:${grade.ref.version}`} value={`${grade.ref.id}:${grade.ref.version}`}>{grade.name[lang]} · v{grade.ref.version}</option>)}{item.gradeVersion&&!grades.some(grade=>grade.ref.id===item.gradeVersion?.id&&grade.ref.version===item.gradeVersion?.version)&&<option value={`${item.gradeVersion.id}:${item.gradeVersion.version}`}>{item.gradeVersion.id} · v{item.gradeVersion.version}</option>}</select></label>
-          <label className="form-field">{t("Areas included", "المناطق المشمولة")}<textarea className="field-textarea" value={item.areas.join("\n")} onChange={(event) => updateScope(index, { areas: lines(event.target.value) })} /></label>
-          <label className="form-field">{t("Add-on services", "الخدمات الإضافية")}<select className="field-select" multiple value={item.addOnIds} onChange={event=>updateScope(index,{addOnIds:Array.from(event.target.selectedOptions,option=>option.value)})}>{services.map(service=><option key={service.id} value={service.id}>{service.name}</option>)}</select></label>
-          <label className="form-field">{t("Exclusions", "الاستثناءات")}<textarea className="field-textarea" value={item.exclusions.join("\n")} onChange={(event) => updateScope(index, { exclusions: lines(event.target.value) })} /></label>
-          <label className="form-field">{t("Roof", "السقف")}<select className="field-select" value={item.roof} onChange={(event) => updateScope(index, { roof: event.target.value as ScopeItem["roof"] })}><option value="not-applicable">{t("Not applicable", "لا ينطبق")}</option><option value="included">{t("Included", "مشمول")}</option><option value="excluded">{t("Excluded", "مستثنى")}</option></select></label>
-          <label className="form-field">{t("Quantity", "الكمية")}<input className="field-input" type="number" min={1} step={1} required value={item.quantity} onChange={(event) => updateScope(index, { quantity: Number(event.target.value) })} /></label>
-        </div>
-        {packageDraft.scope.length > 1 && <button className="btn btn-danger" type="button" onClick={() => removeScope(index)}>{t("Remove scope item", "حذف بند النطاق")}</button>}
-      </div>)}
-      <button className="btn" type="button" onClick={() => {
-         const id = `scope-${crypto.randomUUID()}`;
-        setPackageDraft({ ...packageDraft, scope: [...packageDraft.scope, { id, serviceId: "", gradeVersion: null, areas: [], roof: "not-applicable", addOnIds: [], exclusions: [], quantity: 1 }] });
-      }}>{t("Add scope item", "إضافة بند نطاق")}</button>
-      <h3>{t("Work components", "مكونات العمل")}</h3>
-      {packageDraft.work.map((item, index) => <div className="form-subsection" key={`${item.id}-${index}`}>
-        <div className="form-grid">
-          <label className="form-field">{t("Service", "الخدمة")}<select className="field-select" required value={item.serviceId} onChange={(event) => updateWork(index, { serviceId: event.target.value })}><option value="">{t("Choose a service","اختر خدمة")}</option>{services.map(service=><option key={service.id} value={service.id}>{service.name}</option>)}</select></label>
-          <fieldset className="form-field policy-options"><legend className="field-label">{t("Scope included","النطاق المشمول")}</legend>{packageDraft.scope.map(scopeItem=><label className="policy-check" key={scopeItem.id}><input type="checkbox" checked={item.scopeItemIds.includes(scopeItem.id)} onChange={event=>updateWork(index,{scopeItemIds:event.target.checked?[...item.scopeItemIds,scopeItem.id]:item.scopeItemIds.filter(id=>id!==scopeItem.id)})}/>{services.find(service=>service.id===scopeItem.serviceId)?.name??t("Unselected service","خدمة غير محددة")}</label>)}</fieldset>
-          <label className="form-field">{t("Approved occupancy policy ID", "معرف سياسة إشغال معتمدة")}<input className="field-input" required value={item.occupancyRule.id} onChange={(event) => updateWork(index, { occupancyRule: { ...item.occupancyRule, id: event.target.value } })} /></label>
-          <label className="form-field">{t("Policy version", "إصدار السياسة")}<input className="field-input" type="number" min={1} required value={item.occupancyRule.version} onChange={(event) => updateWork(index, { occupancyRule: { ...item.occupancyRule, version: Number(event.target.value) } })} /></label>
-        </div>
-        {packageDraft.work.length > 1 && <button className="btn btn-danger" type="button" onClick={() => setPackageDraft({ ...packageDraft, work: packageDraft.work.filter((_, itemIndex) => itemIndex !== index) })}>{t("Remove work component", "حذف مكون العمل")}</button>}
-      </div>)}
-      <button className="btn" type="button" onClick={() => setPackageDraft({ ...packageDraft, work: [...packageDraft.work, { id: `work-${crypto.randomUUID()}`, serviceId: "", scopeItemIds: [], occupancyRule: { id: "", version: 1 } }] })}>{t("Add work component", "إضافة مكون عمل")}</button>
-      <p className="form-hint">{t("This draft keeps existing price, tax, and work-aggregation settings. New drafts leave them unconfigured until Owner-approved policies exist.", "تحتفظ المسودة بإعدادات السعر والضريبة وتجميع العمل الحالية. تترك المسودات الجديدة هذه القيم غير مهيأة حتى تتوفر سياسات معتمدة من المالك.")}</p>
-      <div className="form-actions">
-        <button className="btn" type="button" onClick={() => setPackageDraft(null)}>{t("Close", "إغلاق")}</button>
-        <button className="btn btn-primary" type="submit" disabled={busy}>{t("Save package draft", "حفظ مسودة الباقة")}</button>
-      </div>
-    </form>}
+      <TabPanel idPrefix="cat" id="packages" active={activeTab === "packages"}>
+        <FilterBar lang={lang} onClear={clearFilters} resultCount={filteredPackages.length}
+          search={{ value: search, onChange: setSearch, placeholder: t("Search packages", "ابحث في الباقات") }}
+          filters={[
+            { key: "state", label: t("State", "الحالة"), value: stateFilter, onChange: setStateFilter, options: [{ value: "all", label: t("All states", "كل الحالات") }, { value: "draft", label: t("Draft", "مسودة") }, { value: "published", label: t("Published", "منشورة") }, { value: "retired", label: t("Retired", "متقاعدة") }] },
+            { key: "category", label: t("Vehicle", "المركبة"), value: categoryFilter, onChange: setCategoryFilter, options: [{ value: "all", label: t("All vehicles", "كل المركبات") }, ...categories.map((c) => ({ value: c.id, label: c.name[lang] }))] },
+          ]}>
+          <div className="cat-actions" role="group" aria-label={t("View", "العرض")}>
+            <button type="button" className={`btn btn-sm${view !== "matrix" ? " btn-primary" : ""}`} aria-pressed={view !== "matrix"} onClick={() => setView("list")}>{t("List", "قائمة")}</button>
+            <button type="button" className={`btn btn-sm${view === "matrix" ? " btn-primary" : ""}`} aria-pressed={view === "matrix"} onClick={() => setView("matrix")}>{t("Price matrix", "جدول الأسعار")}</button>
+          </div>
+        </FilterBar>
+        {view !== "matrix"
+          ? <DataTable<PackageVersion> columns={packageColumns} rows={filteredPackages} rowKey={(p) => p.ref.id} lang={lang} caption={t("Packages", "الباقات")}
+              loading={loading} error={loadError} onRetry={load} onRowClick={(p) => setOpenId(p.ref.id)} selectedKey={openId || null} initialSort={{ key: "name", direction: "asc" }}
+              empty={filtersActive
+                ? <EmptyState variant="no-results" title={t("No packages match", "لا توجد باقات مطابقة")} action={<button type="button" className="btn" onClick={clearFilters}>{t("Clear filters", "مسح التصفية")}</button>} />
+                : <EmptyState title={t("No packages yet", "لا توجد باقات بعد")} action={canManage ? <button type="button" className="btn btn-primary" onClick={() => startPackage()}>{t("Add package", "إضافة باقة")}</button> : undefined} />} />
+          : <>
+              <DataTable<MatrixRow> columns={matrixColumns} rows={priceMatrix(filteredPackages, categories)} rowKey={(r) => r.id} lang={lang} caption={t("Price matrix", "جدول الأسعار")}
+                loading={loading} error={loadError} onRetry={load} onRowClick={(r) => setOpenId(r.id)} selectedKey={openId || null}
+                empty={<EmptyState variant={filtersActive ? "no-results" : "no-data"} title={t("Nothing to show", "لا يوجد ما يعرض")} />} />
+              {addOns.length > 0 && <>
+                <h2 className="cat-matrix-note">{t("Add-ons", "الإضافات")}</h2>
+                <DataTable<(typeof addOns)[number]> columns={addOnColumns} rows={addOns} rowKey={(a) => a.serviceId} lang={lang} caption={t("Add-ons", "الإضافات")} />
+              </>}
+            </>}
+      </TabPanel>
 
-    <section className="panel section-gap">
-      <h2>{t("Grades", "الدرجات")}</h2>
-      <p className="panel-desc">{t("A grade describes a material option; thickness remains empty when it has not been confirmed.", "توضح الدرجة خيار المادة؛ ويظل السُمك فارغاً إذا لم يتم تأكيده.")}</p>
-      {grades.map((grade) => <article className="catalogue-record" key={`${grade.ref.id}:${grade.ref.version}`}>
-        <strong>{grade.name[lang]} · {grade.ref.id} v{grade.ref.version}</strong>
-        <p>{grade.state} · {grade.thicknessMicrometres === null ? t("Thickness not set", "السُمك غير محدد") : `${grade.thicknessMicrometres} μm`}</p>
-        {grade.state === "draft" && latestGrade.get(grade.ref.id)?.ref.version === grade.ref.version && <button className="btn" type="button" disabled={busy} onClick={() => publish("grades/publications", { gradeId: grade.ref.id, expectedRevision: grade.revision, evidenceRef, reason })}>{t("Publish grade", "نشر الدرجة")}</button>}
-        {grade.state === "published" && latestGrade.get(grade.ref.id)?.ref.version === grade.ref.version && <button className="btn btn-danger" type="button" disabled={busy || !reason.trim()} onClick={() => void post("grades/retirements", { gradeId: grade.ref.id, expectedVersion: grade.ref.version, expectedRevision: grade.revision, reason })}>{t("Retire grade", "إيقاف الدرجة")}</button>}
-      </article>)}
-      <form className="form-subsection" onSubmit={saveGrade}>
-        <h3>{t("Create grade draft", "إنشاء مسودة درجة")}</h3>
-        <div className="form-grid">
-          <label className="form-field">{t("Name in English", "الاسم بالإنجليزية")}<input className="field-input" required value={gradeDraft.en} onChange={(event) => setGradeDraft({ ...gradeDraft, en: event.target.value })} /></label>
-          <label className="form-field">{t("Name in Arabic", "الاسم بالعربية")}<input className="field-input" required value={gradeDraft.ar} onChange={(event) => setGradeDraft({ ...gradeDraft, ar: event.target.value })} /></label>
-          <label className="form-field">{t("Thickness in micrometres", "السُمك بالميكرومتر")}<input className="field-input" type="number" min={1} step={1} value={gradeDraft.thickness} onChange={(event) => setGradeDraft({ ...gradeDraft, thickness: event.target.value })} /></label>
-          <label className="form-field full">{t("Source / provenance", "المصدر")}<textarea className="field-textarea" value={gradeDraft.provenance} onChange={(event) => setGradeDraft({ ...gradeDraft, provenance: event.target.value })} /></label>
-        </div>
-        <button className="btn btn-primary" type="submit" disabled={busy}>{t("Save grade draft", "حفظ مسودة الدرجة")}</button>
+      <TabPanel idPrefix="cat" id="grades" active={activeTab === "grades"}>
+        <DataTable<GradeVersion> columns={gradeColumns} rows={latestGrades} rowKey={(g) => g.ref.id} lang={lang} caption={t("Grades", "الدرجات")} loading={loading} error={loadError} onRetry={load}
+          empty={<EmptyState title={t("No grades yet", "لا توجد درجات بعد")} action={canManage ? <button type="button" className="btn btn-primary" onClick={() => setGradeOpen(true)}>{t("Add grade", "إضافة درجة")}</button> : undefined} />} />
+      </TabPanel>
+
+      <TabPanel idPrefix="cat" id="categories" active={activeTab === "categories"}>
+        {loading ? <p className="cat-muted">{t("Loading", "جارٍ التحميل")}</p> : loadError ? <EmptyState variant="error" title={loadError} action={<button type="button" className="btn" onClick={load}>{t("Retry", "إعادة المحاولة")}</button>} />
+          : categories.length === 0 ? <EmptyState title={t("No categories yet", "لا توجد فئات بعد")} action={canManage ? <button type="button" className="btn btn-primary" onClick={() => setCategoryOpen(true)}>{t("Add category", "إضافة فئة")}</button> : undefined} />
+          : <ul className="cat-list">{categories.map((c) => <li key={c.id}><strong>{c.name[lang]}</strong><span className="cat-muted">{c.name[lang === "ar" ? "en" : "ar"]}</span></li>)}</ul>}
+        {canManage && categories.length > 0 && <Collapsible title={t("Classify a vehicle", "تصنيف مركبة")}>
+          <form onSubmit={(e) => void saveClassification(e)}>
+            <FormSection title={t("Vehicle category", "فئة المركبة")}>
+              <Field label={t("Vehicle", "المركبة")} required>
+                <select className="field-select" value={classify.vehicleId} onChange={(e) => setClassify({ ...classify, vehicleId: e.target.value })}>
+                  <option value="">{t("Choose a vehicle", "اختر مركبة")}</option>
+                  {vehicles.map((v) => <option key={v.id} value={v.id}>{v.plate} · {v.makeModel} · {v.customerName}</option>)}
+                </select>
+              </Field>
+              <Field label={t("Category", "الفئة")} required>
+                <select className="field-select" value={classify.categoryId} onChange={(e) => setClassify({ ...classify, categoryId: e.target.value })}>
+                  <option value="">{t("Choose a category", "اختر فئة")}</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name[lang]}</option>)}
+                </select>
+              </Field>
+            </FormSection>
+            <button type="submit" className="btn btn-primary" disabled={busy || !classify.vehicleId || !classify.categoryId}>{t("Save", "حفظ")}</button>
+          </form>
+        </Collapsible>}
+      </TabPanel>
+    </>}
+
+    <DetailDrawer open={Boolean(current) && !packageDraft} onClose={() => setOpenId("")} lang={lang} wide title={current?.name[lang] ?? ""}
+      subtitle={current ? `${t("Version", "الإصدار")} ${current.ref.version}` : undefined} footer={detailFooter || undefined}>
+      {current && <>
+        <dl className="cat-kv">
+          <dt>{t("State", "الحالة")}</dt><dd><StatusBadge status={current.state} domain="policy" lang={lang} /></dd>
+          <dt>{t("Price", "السعر")}</dt><dd>{priceCell(current)} {priceBadge(current)}{isExampleData(current) && <span className="tag" title={t("Example data, not approved policy", "بيانات مثال وليست سياسة معتمدة")}>{t("Example data, not approved policy", "بيانات مثال وليست سياسة معتمدة")}</span>}</dd>
+          {current.priceChange && <><dt>{t("Pending price", "السعر المقترح")}</dt><dd><Money minor={current.priceChange.price.minor} currency={current.priceChange.price.currency} lang={lang} /> · {t("effective", "سارٍ")} {current.priceChange.effectiveFrom}</dd></>}
+          <dt>{t("Tax", "الضريبة")}</dt><dd>{current.tax.state === "approved" ? (current.tax.value.amount ? <Money minor={current.tax.value.amount.minor} currency={current.tax.value.amount.currency} lang={lang} /> : t("Rule applied", "قاعدة مطبقة")) : <span className="cat-muted">{t("Not set", "غير محدد")}</span>}</dd>
+          <dt>{t("Vehicles", "المركبات")}</dt><dd>{current.vehicleCategoryIds.map(categoryName).join(", ") || "—"}</dd>
+          <dt>{t("Branches", "الفروع")}</dt><dd>{current.branchIds.map(branchName).join(", ") || "—"}</dd>
+          <dt>{t("Roof", "السقف")}</dt><dd>{roofLabel(roofState(current.scope))}</dd>
+          <dt>{t("Valid", "الصلاحية")}</dt><dd>{current.effectiveFrom ?? t("Now", "الآن")} – {current.effectiveThrough ?? t("No end date", "بلا نهاية")}</dd>
+          {current.provenance && <><dt>{t("Source", "المصدر")}</dt><dd>{current.provenance}</dd></>}
+        </dl>
+        <Collapsible title={t("Included work", "العمل المشمول")} count={current.scope.length} defaultOpen>
+          <ul className="cat-list">{current.scope.map((item) => <li key={item.id}>
+            <strong>{serviceName(item.serviceId)}</strong>
+            {item.quantity > 1 && <span className="tag">×{item.quantity}</span>}
+            {item.gradeVersion && <span className="tag">{gradeNameOf(item.gradeVersion)}</span>}
+            {item.addOnIds.map((id) => <span className="tag" key={id}>+ {serviceName(id)}</span>)}
+            {item.areas.length > 0 && <span className="cat-muted">{item.areas.join(", ")}</span>}
+            {item.exclusions.length > 0 && <span className="cat-muted">{t("Excludes", "يستثني")}: {item.exclusions.join(", ")}</span>}
+          </li>)}</ul>
+        </Collapsible>
+        {canManage && <PriceHistory lang={lang} packageId={current.ref.id} version={current.ref.version} />}
+        <Collapsible title={t("Versions", "الإصدارات")} count={historyOf(versions, current.ref.id).length}>
+          <ul className="cat-list">{historyOf(versions, current.ref.id).map((v) => <li key={v.ref.version}>
+            <strong>{t("Version", "الإصدار")} {v.ref.version}</strong>
+            <StatusBadge status={v.state} domain="policy" lang={lang} />
+            {v.approval && <span className="cat-muted">{new Date(v.approval.approvedAt).toLocaleDateString(lang === "ar" ? "ar-EG-u-nu-latn" : "en-GB")} · {v.approval.reason}</span>}
+          </li>)}</ul>
+        </Collapsible>
+      </>}
+    </DetailDrawer>
+
+    {priceTarget && priceForm && <PriceEditor lang={lang} pkg={priceTarget} form={priceForm} onChange={setPriceForm} allPackages={versions} errors={priceErrors} busy={busy}
+      example={isExampleData(priceTarget)} onSubmit={() => void savePrice()} onClose={() => { setPriceTarget(null); setPriceForm(null); }} />}
+
+    {packageDraft && <PackageForm lang={lang} draft={packageDraft} isNew={draftIsNew} onChange={setPackageDraft} categories={categories} branches={branches} services={services}
+      grades={grades} occupancy={occupancy} errors={draftErrors} busy={busy} onSubmit={() => void savePackage()} onClose={() => setPackageDraft(null)} />}
+
+    <DetailDrawer open={gradeOpen} onClose={() => setGradeOpen(false)} lang={lang} title={t("Add grade", "إضافة درجة")}
+      footer={<><button type="button" className="btn" onClick={() => setGradeOpen(false)}>{t("Cancel", "إلغاء")}</button><button type="submit" form="grade-form" className="btn btn-primary" disabled={busy}>{t("Save draft", "حفظ المسودة")}</button></>}>
+      <form id="grade-form" onSubmit={(e) => void saveGrade(e)}>
+        <RequiredNote text={t("* Required", "* مطلوب")} />
+        <FormSection title={t("Grade", "الدرجة")}>
+          <Field label={t("Name (English)", "الاسم (إنجليزي)")} required><input className="field-input" value={gradeDraft.en} onChange={(e) => setGradeDraft({ ...gradeDraft, en: e.target.value })} /></Field>
+          <Field label={t("Name (Arabic)", "الاسم (عربي)")} required><input className="field-input" dir="rtl" value={gradeDraft.ar} onChange={(e) => setGradeDraft({ ...gradeDraft, ar: e.target.value })} /></Field>
+          <Field label={t("Thickness (μm)", "السُمك (ميكرومتر)")} hint={t("Leave empty until confirmed.", "اتركه فارغاً حتى التأكيد.")}><input className="field-input" type="number" min={1} step={1} value={gradeDraft.thickness} onChange={(e) => setGradeDraft({ ...gradeDraft, thickness: e.target.value })} /></Field>
+          <Field label={t("Source note", "ملاحظة المصدر")}><input className="field-input" value={gradeDraft.provenance} onChange={(e) => setGradeDraft({ ...gradeDraft, provenance: e.target.value })} /></Field>
+        </FormSection>
       </form>
-    </section>
+    </DetailDrawer>
 
-    <section className="panel section-gap">
-      <h2>{t("Vehicle categories", "فئات المركبات")}</h2>
-      <p>{t("Assign a category only after review. Existing vehicles remain unclassified until then.", "حدد الفئة بعد المراجعة فقط. تظل المركبات الحالية بلا تصنيف حتى ذلك الحين.")}</p>
-      <div className="catalogue-record-list">{categories.map((category) => <p key={category.id}>{category.name[lang]}</p>)}</div>
-      <form className="form-grid" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await post("categories", { id: `category-${crypto.randomUUID()}`, name: { en: categoryEn, ar: categoryAr } })) { setCategoryEn(""); setCategoryAr(""); } })(); }}>
-        <label className="form-field">{t("Name in English", "الاسم بالإنجليزية")}<input className="field-input" required value={categoryEn} onChange={(event) => setCategoryEn(event.target.value)} /></label>
-        <label className="form-field">{t("Name in Arabic", "الاسم بالعربية")}<input className="field-input" required value={categoryAr} onChange={(event) => setCategoryAr(event.target.value)} /></label>
-        <button className="btn" type="submit" disabled={busy}>{t("Add category", "إضافة فئة")}</button>
+    <DetailDrawer open={categoryOpen} onClose={() => setCategoryOpen(false)} lang={lang} title={t("Add category", "إضافة فئة")}
+      footer={<><button type="button" className="btn" onClick={() => setCategoryOpen(false)}>{t("Cancel", "إلغاء")}</button><button type="submit" form="category-form" className="btn btn-primary" disabled={busy}>{t("Save", "حفظ")}</button></>}>
+      <form id="category-form" onSubmit={(e) => void saveCategory(e)}>
+        <RequiredNote text={t("* Required", "* مطلوب")} />
+        <FormSection title={t("Category", "الفئة")}>
+          <Field label={t("Name (English)", "الاسم (إنجليزي)")} required><input className="field-input" value={categoryDraft.en} onChange={(e) => setCategoryDraft({ ...categoryDraft, en: e.target.value })} /></Field>
+          <Field label={t("Name (Arabic)", "الاسم (عربي)")} required><input className="field-input" dir="rtl" value={categoryDraft.ar} onChange={(e) => setCategoryDraft({ ...categoryDraft, ar: e.target.value })} /></Field>
+        </FormSection>
       </form>
-      <form className="form-grid section-gap" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await post("vehicle-classifications", { vehicleId, categoryId: vehicleCategoryId })) { setVehicleId(""); setVehicleCategoryId(""); } })(); }}>
-        <label className="form-field">{t("Vehicle","المركبة")}<select className="field-select" required value={vehicleId} onChange={(event) => setVehicleId(event.target.value)}><option value="">{t("Choose a vehicle","اختر مركبة")}</option>{vehicles.map(vehicle=><option key={vehicle.id} value={vehicle.id}>{vehicle.plate} · {vehicle.makeModel} · {vehicle.customerName}</option>)}</select></label>
-        <label className="form-field">{t("Reviewed category", "الفئة التي تمت مراجعتها")}<select className="field-select" required value={vehicleCategoryId} onChange={(event) => setVehicleCategoryId(event.target.value)}><option value="">{t("Choose a category", "اختر فئة")}</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name[lang]}</option>)}</select></label>
-        <button className="btn" type="submit" disabled={busy}>{t("Save vehicle category", "حفظ فئة المركبة")}</button>
-      </form>
-    </section>
+    </DetailDrawer>
 
-    <section className="panel section-gap">
-      <h2>{t("Approval details", "تفاصيل الموافقة")}</h2>
-      <p className="panel-desc">{t("These details are required when publishing or retiring a record.", "هذه البيانات مطلوبة عند نشر سجل أو إيقافه.")}</p>
-      <div className="form-grid">
-        <label className="form-field">{t("Protected evidence reference", "مرجع الدليل المحمي")}<input className="field-input" value={evidenceRef} onChange={(event) => setEvidenceRef(event.target.value)} placeholder="private:..." /></label>
-        <label className="form-field">{t("Reason", "السبب")}<input className="field-input" value={reason} onChange={(event) => setReason(event.target.value)} /></label>
-      </div>
-    </section>
+    <ConfirmDialog
+      open={Boolean(action)} lang={lang} danger={action?.kind !== "publish"} busy={busy}
+      title={actionCopy?.title ?? ""} body={action?.name} confirmLabel={actionCopy?.confirm}
+      confirmDisabled={actionGap !== null}
+      disabledReason={actionGap === "evidence" ? t("Enter a protected reference starting with private:", "أدخل مرجعاً محمياً يبدأ بـ private:") : actionGap === "reason" ? t("Enter a reason", "أدخل السبب") : undefined}
+      onCancel={() => setAction(null)} onConfirm={() => void runAction()}
+    >
+      {diff && publishing?.priceChange && <dl className="cat-kv cat-diff-summary">
+        <dt>{t("Price", "السعر")}</dt>
+        <dd>{diff.before ? <><Money minor={diff.before.minor} currency={diff.before.currency} lang={lang} /> <span aria-hidden="true">{lang === "ar" ? "←" : "→"}</span><span className="sr-only">{t("to", "إلى")}</span> </> : <span className="cat-muted">{t("No approved price", "بدون سعر معتمد")} </span>}<Money minor={diff.after.minor} currency={diff.after.currency} lang={lang} /></dd>
+        {diff.delta !== null && <><dt>{t("Change", "الفرق")}</dt><dd>{diff.delta > 0 ? "+" : ""}{formatMoney(diff.delta, diff.after.currency, lang)}</dd></>}
+        {!diff.sameCurrency && <><dt>{t("Currency", "العملة")}</dt><dd>{t("Currency changes. Prices are not compared.", "تتغير العملة. لا تتم مقارنة الأسعار.")}</dd></>}
+        <dt>{t("Tax", "الضريبة")}</dt><dd><Money minor={publishing.priceChange.tax.minor} currency={publishing.priceChange.tax.currency} lang={lang} /></dd>
+        <dt>{t("Effective", "ساري من")}</dt><dd>{publishing.priceChange.effectiveFrom}</dd>
+        <dt>{t("Reason", "السبب")}</dt><dd>{publishing.priceChange.reason}</dd>
+      </dl>}
+      {needsEvidence && <Field label={t("Approval evidence", "دليل الموافقة")} required><input className="field-input" dir="ltr" placeholder="private:..." value={evidenceRef} onChange={(e) => setEvidenceRef(e.target.value)} /></Field>}
+      <Field label={t("Reason", "السبب")} required><input className="field-input" value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
+    </ConfirmDialog>
   </div>;
 }

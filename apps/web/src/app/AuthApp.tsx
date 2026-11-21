@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
-import { useAuth, ClerkProvider, SignIn, SignUp } from "@clerk/react";
+import { useAuth, useClerk, ClerkProvider, AuthenticateWithRedirectCallback } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { shadcn } from "@clerk/themes";
 import { arSA } from "@clerk/localizations";
-import { Redirect, Route, Router, Switch, Link, useLocation } from "wouter";
+import { Redirect, Route, Router, Switch, useLocation } from "wouter";
 import { App } from "./App";
 import { RouteChunk } from "./RouteChunk";
 import { GarageStoreProvider } from "../shared/store";
 import { DemoAccountPanel } from "../features/demo-auth/DemoAccountPanel";
-import { ArrowUpLeft, ShieldCheck, Wrench } from "lucide-react";
+import { LoaderCircle, ShieldCheck, Wrench } from "lucide-react";
 import { useSavedLocale } from "../shared/locale";
+import "./login.css";
 
 const publicWarrantyPage = () => import("../features/warranty/PublicWarrantyVerificationPage").then((m) => ({ default: m.PublicWarrantyVerificationPage }));
 const publicWhatsAppDemoPage = () => import("../features/whatsapp/demo/PublicWhatsAppDemoPage").then((m) => ({ default: m.PublicWhatsAppDemoPage }));
@@ -39,14 +40,6 @@ const clerkLocalization = {
       ...arSA.signIn?.start,
       title: "أهلاً بيك تاني",
       subtitle: "سجّل دخولك لمساحة شغلك",
-    },
-  },
-  signUp: {
-    ...arSA.signUp,
-    start: {
-      ...arSA.signUp?.start,
-      title: "إنشاء حساب للفريق",
-      subtitle: "استخدم البريد اللي وصلته الدعوة",
     },
   },
 };
@@ -105,113 +98,87 @@ const clerkAppearance = {
 
 function LoadingScreen() {
   const { locale } = useSavedLocale();
-  return <div className="auth-loading" role="status" dir={locale === "ar" ? "rtl" : "ltr"}><div className="brand-mark"><Wrench size={20} /></div><span>{locale === "ar" ? "بنحمّل Garage OS..." : "Loading Garage OS..."}</span><div className="loading-line" /></div>;
+  return <div className="auth-loading" role="status" dir={locale === "ar" ? "rtl" : "ltr"}><div className="brand-mark"><Wrench size={20} /></div><span>{locale === "ar" ? "جارٍ التحميل Garage OS..." : "Loading Garage OS..."}</span><div className="loading-line" /></div>;
 }
 
-function LandingPage() {
+function GoogleMark() {
+  return <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.9 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>;
+}
+
+function LoginPage() {
   const [, setLocation] = useLocation();
   const { locale, setLocale } = useSavedLocale();
+  const clerk = useClerk();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
   const t = (en: string, ar: string) => locale === "ar" ? ar : en;
-  return <main className="landing-shell" dir={locale === "ar" ? "rtl" : "ltr"}>
-    <header className="landing-header">
+  const signInWithGoogle = async () => {
+    if (pending) return;
+    setPending(true);
+    setError("");
+    try {
+      await clerk.client?.signIn.authenticateWithRedirect({
+        strategy: "oauth_google",
+        redirectUrl: `${basePath}/sign-in/sso-callback`,
+        redirectUrlComplete: `${basePath}/workspace/overview`,
+      });
+    } catch {
+      setError(t("Google sign-in could not start. Please try again.", "تعذر بدء تسجيل الدخول بجوجل. حاول مرة أخرى."));
+      setPending(false);
+    }
+  };
+  return <main className="login-shell" dir={locale === "ar" ? "rtl" : "ltr"}>
+    <header className="login-header">
       <a className="brand brand-link" href="/" aria-label="Garage OS home">
         <span className="brand-mark"><Wrench size={19} /></span>
         <span><strong className="brand-name">Garage OS</strong><small className="brand-sub">GO STORES · EGYPT</small></span>
       </a>
-      <div className="landing-header-actions"><button type="button" className="btn" onClick={() => setLocale(locale === "ar" ? "en" : "ar")}>{locale === "ar" ? "English" : "العربية"}</button><Link className="btn btn-primary landing-sign-in" href="/sign-in">{t("Team sign in", "دخول الفريق")} <ArrowUpLeft size={15} /></Link></div>
+      <button type="button" className="btn" onClick={() => setLocale(locale === "ar" ? "en" : "ar")}>{locale === "ar" ? "English" : "العربية"}</button>
     </header>
-    <section className="landing-hero">
-      <div className="landing-copy">
-        <div className="landing-kicker"><ShieldCheck size={15} /> {t("Team operations workspace", "مساحة تشغيل للفريق")}</div>
-        <h1>{t("Every vehicle in its place.", "كل عربية في مكانها.")}<br />{t("Everyone knows their role.", "وكل واحد عارف دوره.")}</h1>
-        <p>{t("One workspace for bookings and vehicle progress across Go Stores branches, with clear operating settings and access for each role.", "مساحة واحدة لتنظيم الحجوزات ومتابعة العربيات بين فرعي Go Stores، بإعدادات تشغيل واضحة وصلاحيات مناسبة لكل دور.")}</p>
-        <div className="landing-actions">
-          <Link className="btn btn-primary" href="/sign-in">{t("Open workspace", "ادخل مساحة الشغل")} <ArrowUpLeft size={16} /></Link>
-          <span>{t("Each team member has an individual invitation", "كل فرد في الفريق له دعوة خاصة")}</span>
-        </div>
-        {import.meta.env.DEV && <DemoAccountPanel lang={locale} onSignedIn={() => setLocation("/workspace/overview")} onOpenDemo={() => setLocation("/demo")} />}
-      </div>
-      <div className="landing-preview" aria-hidden="true">
-        <div className="preview-top"><span className="preview-dot" /><span>GARAGE OS · ACCESS MODEL</span><span className="preview-date">ROLE-BASED WORKSPACE</span></div>
-        <div className="preview-title">{t("Clear responsibilities for each account", "كل حساب له مسؤوليات واضحة")}</div>
-        <div className="role-preview-list">
-          <div><strong>{t("Owner", "المالك")}</strong><span>{t("Overview and operating settings", "نظرة عامة وإعدادات التشغيل")}</span></div>
-          <div><strong>{t("Branch manager", "مدير الفرع")}</strong><span>{t("Team, bookings and workshop", "الفريق والحجوزات ومتابعة الشغل")}</span></div>
-          <div><strong>{t("Reception", "الاستقبال")}</strong><span>{t("Customers and branch appointments", "العملاء ومواعيد الفرع")}</span></div>
-          <div><strong>{t("Technician", "الفني")}</strong><span>{t("Assigned jobs", "العربيات وأوامر الشغل المسندة")}</span></div>
-        </div>
-        <div className="preview-footer"><span>{t("Access is checked by the system", "الصلاحيات بيتأكد منها النظام")}</span><span>{t("Individual invitations · branch access", "دعوة لكل فرد · صلاحيات واضحة لكل فرع")}</span></div>
-      </div>
-    </section>
-    <section className="landing-footer">
-      <span>GO STORES · INTERNAL OPERATIONS</span>
-      <span>{t("Owner · Branch manager · Reception · Technician", "المالك · مدير الفرع · الاستقبال · الفني")}</span>
-    </section>
+    <div className="login-grid">
+      <section className="login-card" aria-labelledby="login-title">
+        <div className="landing-kicker"><ShieldCheck size={15} /> {t("Team access", "دخول الفريق")}</div>
+        <h1 id="login-title">{t("Sign in to Garage OS", "سجّل دخولك لـ Garage OS")}</h1>
+        <p className="login-lead">{t("Use the Google account your owner approved.", "استخدم حساب جوجل الذي وافق عليه المالك.")}</p>
+        <button type="button" className="login-google" onClick={() => void signInWithGoogle()} disabled={pending}>
+          {pending ? <LoaderCircle size={20} className="demo-spinner" aria-hidden="true" /> : <GoogleMark />}
+          <span>{t("Sign in with Google", "الدخول بحساب جوجل")}</span>
+        </button>
+        <button type="button" className="login-apple" disabled aria-disabled="true">
+          <span>{t("Apple — coming soon", "Apple — قريبًا")}</span>
+        </button>
+        {error && <p className="demo-inline-error" role="alert">{error}</p>}
+        <ul className="login-points">
+          <li>{t("Invite-only: no sign-up.", "بالدعوة فقط: لا يوجد تسجيل جديد.")}</li>
+          <li>{t("Role and branch access is checked on every request.", "الصلاحيات حسب الدور والفرع بتتراجع مع كل طلب.")}</li>
+        </ul>
+      </section>
+      <DemoAccountPanel lang={locale} onSignedIn={() => setLocation("/workspace/overview")} onOpenDemo={() => setLocation("/demo")} />
+    </div>
   </main>;
 }
 
 function HomeRoute() {
   const { isLoaded, isSignedIn } = useAuth();
   if (!isLoaded) return <LoadingScreen />;
-  return isSignedIn ? <Redirect to="/workspace/overview" /> : <LandingPage />;
+  return isSignedIn ? <Redirect to="/workspace/overview" /> : <LoginPage />;
 }
 
-function SignInRoute() {
-  const { isLoaded, isSignedIn } = useAuth();
-  const [, setLocation] = useLocation();
-  const { locale, setLocale } = useSavedLocale();
-  const t = (en: string, ar: string) => locale === "ar" ? ar : en;
-  if (!isLoaded) return <LoadingScreen />;
-  if (isSignedIn) return <Redirect to="/workspace/overview" />;
-  return <div className="auth-layout" dir={locale === "ar" ? "rtl" : "ltr"}>
-    <div className="auth-story">
-      <a className="brand brand-link" href="/"><span className="brand-mark"><Wrench size={19} /></span><span><strong className="brand-name">Garage OS</strong><small className="brand-sub">GO STORES · EGYPT</small></span></a>
-      <div className="auth-story-copy"><div className="landing-kicker"><ShieldCheck size={15} /> {t("Team sign in", "دخول الفريق")}</div><h1>{t("Each account sees its own work.", "كل حساب بيشوف شغله بس.")}</h1><p>{t("The owner controls access. Role and branch permissions apply to data and actions.", "المالك هو اللي بيحدد الوصول، والصلاحيات بتتطبق حسب الدور والفرع على البيانات والإجراءات.")}</p></div>
-      <div className="auth-story-footer"><span>{t("Individual invitation", "دعوة خاصة لكل فرد")}</span><span>{t("Role and branch access", "الصلاحيات حسب الدور والفرع")}</span></div>
-    </div>
-    <div className="auth-card-area">
-      <div className="auth-card-top"><Link href="/">{t("Back to Garage OS", "ارجع لـ Garage OS")}</Link><button type="button" className="btn" onClick={() => setLocale(locale === "ar" ? "en" : "ar")}>{locale === "ar" ? "English" : "العربية"}</button><span>{t("Secure sign in", "تسجيل دخول آمن")}</span></div>
-      <SignIn
-        routing="path"
-        path={`${basePath}/sign-in`}
-        signUpUrl={`${basePath}/sign-up`}
-        forceRedirectUrl={`${basePath}/workspace/overview`}
-        appearance={clerkAppearance}
-      />
-      {import.meta.env.DEV && <DemoAccountPanel lang={locale} onSignedIn={() => setLocation("/workspace/overview")} onOpenDemo={() => setLocation("/demo")} />}
-    </div>
-  </div>;
-}
-
-function SignUpRoute() {
-  const { isLoaded, isSignedIn } = useAuth();
-  if (!isLoaded) return <LoadingScreen />;
-  if (isSignedIn) return <Redirect to="/workspace/overview" />;
-  return <div className="auth-layout" dir="rtl">
-    <div className="auth-story">
-      <a className="brand brand-link" href="/"><span className="brand-mark"><Wrench size={19} /></span><span><strong className="brand-name">Garage OS</strong><small className="brand-sub">GO STORES · EGYPT</small></span></a>
-      <div className="auth-story-copy"><div className="landing-kicker"><ShieldCheck size={15} /> حساب للفريق</div><h1>لكل شخص حسابه وصلاحيته.</h1><p>بعد إنشاء الحساب، لازم البريد يكون هو نفس البريد اللي المالك بعت له دعوة قبل ما تظهر أي بيانات تشغيل.</p></div>
-      <div className="auth-story-footer"><span>إنشاء الحساب لوحده مش بيدي صلاحية</span><span>النظام بيتأكد من الصلاحية مع كل إجراء</span></div>
-    </div>
-    <div className="auth-card-area">
-      <div className="auth-card-top"><Link href="/">ارجع لـ Garage OS</Link><span>إنشاء حساب للفريق</span></div>
-      <SignUp
-        routing="path"
-        path={`${basePath}/sign-up`}
-        signInUrl={`${basePath}/sign-in`}
-        forceRedirectUrl={`${basePath}/workspace/overview`}
-        appearance={clerkAppearance}
-      />
-    </div>
-  </div>;
+function SsoCallbackRoute() {
+  return <AuthenticateWithRedirectCallback
+    signInUrl={`${basePath}/sign-in`}
+    signUpUrl={`${basePath}/sign-in`}
+    signInFallbackRedirectUrl={`${basePath}/workspace/overview`}
+    signUpFallbackRedirectUrl={`${basePath}/workspace/overview`}
+  />;
 }
 
 function ProtectedWorkspace() {
   const { isLoaded, isSignedIn } = useAuth();
-  const [demoChecked, setDemoChecked] = useState(!import.meta.env.DEV);
+  const [demoChecked, setDemoChecked] = useState(false);
   const [demoSignedIn, setDemoSignedIn] = useState(false);
   useEffect(() => {
-    if (!import.meta.env.DEV || isSignedIn) {
+    if (isSignedIn) {
       setDemoChecked(true);
       setDemoSignedIn(false);
       return;
@@ -237,7 +204,7 @@ function ProtectedWorkspace() {
     return () => controller.abort();
   }, [isLoaded, isSignedIn]);
   if (!isLoaded) return <LoadingScreen />;
-  if (import.meta.env.DEV && !isSignedIn && !demoChecked) return <LoadingScreen />;
+  if (!isSignedIn && !demoChecked) return <LoadingScreen />;
   if (!isSignedIn && !demoSignedIn) return <Redirect to="/" />;
   return <GarageStoreProvider><App /></GarageStoreProvider>;
 }
@@ -251,7 +218,7 @@ function ClerkRoutes() {
     appearance={clerkAppearance}
     localization={locale === "ar" ? clerkLocalization : undefined}
     signInUrl={`${basePath}/sign-in`}
-    signUpUrl={`${basePath}/sign-up`}
+    signUpUrl={`${basePath}/sign-in`}
     routerPush={(to) => setLocation(stripBase(to))}
     routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
   >
@@ -259,8 +226,9 @@ function ClerkRoutes() {
       <Route path="/warranty/verify/:token" component={PublicWarrantyRoute} />
       <Route path="/demo" component={PublicWhatsAppDemoRoute} />
       <Route path="/" component={HomeRoute} />
-      <Route path="/sign-in/*?" component={SignInRoute} />
-      <Route path="/sign-up/*?" component={SignUpRoute} />
+      <Route path="/sign-in/sso-callback" component={SsoCallbackRoute} />
+      <Route path="/sign-in/*?" component={() => <Redirect to="/" />} />
+      <Route path="/sign-up/*?" component={() => <Redirect to="/" />} />
       <Route path="/workspace" component={() => <Redirect to="/workspace/overview" />} />
       <Route path="/decisions" component={() => <Redirect to="/workspace/settings" />} />
       <Route path="/workspace/:page" component={ProtectedWorkspace} />

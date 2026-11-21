@@ -1,154 +1,215 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import type { FinancialMetricId, FinancialReport, GarageState, Job, MetricValue, QueueItem } from "@garage/domain";
 import { configuredNumber } from "@garage/domain";
-import type { FinancialMetricId, FinancialReport, FinancialSourceRow, Job, QueueItem, ReportFilter, SignedMoney } from "@garage/domain";
+import { ArrowUpRight } from "lucide-react";
 import { financeApi, useGarageStore, workQueueApi } from "../../shared/store";
-import { dateLabel, EmptyState, PageHeading, pageBranchMatches, SectionTitle, serviceDisplay, stageNames, Status, type BranchPageProps } from "../../shared/ui";
+import { dateLabel, pageBranchMatches, serviceDisplay, customerDisplay, type BranchPageProps } from "../../shared/ui";
+import { Collapsible, DataTable, EmptyState, FilterBar, Money, PageHeader, RecordRef, StatusBadge, type Column } from "../../shared/components";
+import type { RecordType } from "../../shared/record-types";
+import { isActiveJob, localIsoDate, monthStart, nextActionLabels, queueKinds, queueLabels, queueRecordType, queueTarget, sortQueue, summariseBranches, todayBookings, type BranchSummary } from "./overview-logic";
+import "./overview.css";
 
 interface OverviewPageProps extends BranchPageProps {
   navigate: (path: string) => void;
 }
 
-const metricIds: FinancialMetricId[] = ["quoted-value", "draft-value", "collections", "outstanding", "direct-cost", "recognized-revenue", "gross-profit", "net-profit"];
-const queueKinds = ["booking-review", "unassigned-job", "quality-check", "ready-pickup", "quote-followup", "pickup-commitment", "benefit-fulfillment", "transport", "warranty-claim"];
-const metricLabels: Record<FinancialMetricId, { en: string; ar: string }> = {
-  "quoted-value": { en: "Quoted value", ar: "قيمة عروض الأسعار" },
-  "draft-value": { en: "Draft quote value", ar: "قيمة مسودات العروض" },
-  collections: { en: "Collections", ar: "المبالغ المحصلة" },
-  outstanding: { en: "Outstanding balance", ar: "الرصيد المستحق" },
-  "direct-cost": { en: "Direct costs", ar: "التكاليف المباشرة" },
-  "recognized-revenue": { en: "Recognized revenue", ar: "الإيراد المعترف به" },
-  "gross-profit": { en: "Gross profit", ar: "مجمل الربح" },
-  "net-profit": { en: "Net profit", ar: "صافي الربح" },
-};
-const queueLabels: Record<string, { en: string; ar: string }> = {
-  "booking-review": { en: "Booking review", ar: "مراجعة الحجز" },
-  "unassigned-job": { en: "Unassigned job", ar: "أمر شغل غير مسند" },
-  "quality-check": { en: "Quality check", ar: "فحص الجودة" },
-  "ready-pickup": { en: "Ready for pickup", ar: "جاهز للتسليم" },
-  "quote-followup": { en: "Quote follow-up", ar: "متابعة عرض السعر" },
-  "pickup-commitment": { en: "Pickup commitment", ar: "موعد التسليم المتفق عليه" },
-  "benefit-fulfillment": { en: "Benefit to fulfill", ar: "منفعة تحتاج تنفيذ" },
-  transport: { en: "Transport", ar: "النقل" },
-  "warranty-claim": { en: "Warranty claim", ar: "مطالبة ضمان" },
-};
+const financeTiles: Array<{ id: FinancialMetricId; en: string; ar: string }> = [
+  { id: "collections", en: "Collections this month", ar: "المحصّل هذا الشهر" },
+  { id: "outstanding", en: "Outstanding balance", ar: "الرصيد المستحق" },
+  { id: "gross-profit", en: "Gross profit this month", ar: "مجمل ربح الشهر" },
+];
 
-function isoDate(date: Date) { return date.toISOString().slice(0, 10); }
-function monthStart() { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`; }
-function yearStart() { return `${new Date().getFullYear()}-01-01`; }
-function money(value: SignedMoney, lang: "ar" | "en") {
-  return new Intl.NumberFormat(lang === "ar" ? "ar-EG" : "en-EG", { style: "currency", currency: value.currency, minimumFractionDigits: value.minorUnitExponent, maximumFractionDigits: value.minorUnitExponent }).format(value.minor / (10 ** value.minorUnitExponent));
+function errorMessage(error: unknown) { return error instanceof Error ? error.message : String(error); }
+
+function Tile({ label, value, foot, onOpen, tone }: { label: string; value: ReactNode; foot?: string; onOpen: () => void; tone?: "warning" }) {
+  return <button type="button" className="ov-tile" data-tone={tone} onClick={onOpen}>
+    <span className="ov-tile-label">{label}<ArrowUpRight size={14} aria-hidden="true" /></span>
+    <span className="ov-tile-value">{value}</span>
+    {foot && <span className="ov-tile-foot">{foot}</span>}
+  </button>;
 }
 
 export function OverviewPage({ lang, t, state, navigate, branchName }: OverviewPageProps) {
   const { actor } = useGarageStore();
-  const isOwner = actor?.role === "owner";
-  const jobs = state.jobs.filter((job) => pageBranchMatches(state, job.branchId));
-  const bookings = state.bookings.filter((booking) => pageBranchMatches(state, booking.branchId));
+  const role = actor?.role;
+  const isOwner = role === "owner";
+  const isManager = role === "branch-manager";
+  const isReception = role === "receptionist";
+  const canSeeFinance = isOwner;
+
+  const [branchFilter, setBranchFilter] = useState<string>(state.currentBranch);
+  useEffect(() => { setBranchFilter(state.currentBranch); }, [state.currentBranch]);
+  const inScope = (branchId: string) => branchFilter === "all" || branchFilter === branchId;
+
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [queueError, setQueueError] = useState("");
-  const [kind, setKind] = useState("all");
+  const [queueLoading, setQueueLoading] = useState(true);
   const [queueRetry, setQueueRetry] = useState(0);
-  const [queueLoading, setQueueLoading] = useState(false);
-  const [period, setPeriod] = useState<"month" | "ytd" | "custom">("month");
-  const [from, setFrom] = useState(monthStart());
-  const [to, setTo] = useState(isoDate(new Date()));
-  const [groupBy, setGroupBy] = useState<ReportFilter["groupBy"]>("month");
-  const [reportBranch, setReportBranch] = useState<string>(state.currentBranch);
-  const [report, setReport] = useState<FinancialReport | null>(null);
-  const [reportError, setReportError] = useState("");
-  const [reportLoading, setReportLoading] = useState(false);
-  const [drilldown, setDrilldown] = useState<{ metric: FinancialMetricId; rows: FinancialSourceRow[] } | null>(null);
+  const [kind, setKind] = useState("all");
 
-  const queueBranch = state.currentBranch;
   useEffect(() => {
     let current = true;
     setQueueLoading(true);
     setQueueError("");
-    void workQueueApi.list({ branchId: queueBranch, kinds: kind === "all" ? undefined : [kind] })
+    void workQueueApi.list({ branchId: branchFilter })
       .then((items) => { if (current) setQueue(items); })
-      .catch((error) => { if (current) setQueueError(error instanceof Error ? error.message : String(error)); })
+      .catch((error) => { if (current) { setQueue([]); setQueueError(errorMessage(error)); } })
       .finally(() => { if (current) setQueueLoading(false); });
     return () => { current = false; };
-  }, [queueBranch, kind, queueRetry]);
+  }, [branchFilter, queueRetry]);
 
-  useEffect(() => { setReportBranch(state.currentBranch); }, [state.currentBranch]);
-  const filter = useMemo<ReportFilter>(() => ({ branchId: reportBranch, from, to, groupBy }), [reportBranch, from, to, groupBy]);
-  const loadReport = useCallback(async () => {
-    setReportLoading(true); setReportError(""); setDrilldown(null);
-    try { setReport(await financeApi.report(filter)); }
-    catch (error) { setReport(null); setReportError(error instanceof Error ? error.message : String(error)); }
-    finally { setReportLoading(false); }
-  }, [filter]);
-  function choosePeriod(next: "month" | "ytd" | "custom") {
-    setPeriod(next);
-    if (next === "month") { setFrom(monthStart()); setTo(isoDate(new Date())); setGroupBy("day"); }
-    if (next === "ytd") { setFrom(yearStart()); setTo(isoDate(new Date())); setGroupBy("month"); }
-  }
-  async function openDrilldown(metric: FinancialMetricId) {
-    setReportError("");
-    try { const result = await financeApi.drilldown(filter, metric); setDrilldown({ metric, rows: result.rows }); }
-    catch (error) { setReportError(error instanceof Error ? error.message : String(error)); }
-  }
-  function queuePath(item: QueueItem) {
-    if (["booking-review", "pickup-commitment"].includes(item.kind)) return "/workspace/bookings";
-    if (["unassigned-job", "quality-check", "ready-pickup"].includes(item.kind)) return "/workspace/workshop";
-    if (item.kind === "quote-followup") return "/workspace/quotes";
-    if (item.kind === "benefit-fulfillment") return "/workspace/benefits";
-    if (item.kind === "transport") return "/workspace/transport";
-    return "/workspace/warranties";
-  }
+  const [report, setReport] = useState<FinancialReport | null>(null);
+  const [reportState, setReportState] = useState<"idle" | "loading" | "error">("idle");
+  useEffect(() => {
+    if (!canSeeFinance) return;
+    let current = true;
+    setReportState("loading");
+    void financeApi.report({ branchId: branchFilter, from: monthStart(), to: localIsoDate(), groupBy: "month" })
+      .then((result) => { if (current) { setReport(result); setReportState("idle"); } })
+      .catch(() => { if (current) { setReport(null); setReportState("error"); } });
+    return () => { current = false; };
+  }, [canSeeFinance, branchFilter]);
+
+  const today = localIsoDate();
+  const jobs = useMemo(() => state.jobs.filter((job) => inScope(job.branchId)), [state.jobs, branchFilter]);
+  const bookings = useMemo(() => state.bookings.filter((booking) => inScope(booking.branchId)), [state.bookings, branchFilter]);
+  const day = useMemo(() => todayBookings(bookings, today), [bookings, today]);
+  const activeJobs = jobs.filter(isActiveJob);
+  const readyCount = queue.filter((item) => item.kind === "ready-pickup").length;
+  const sortedQueue = useMemo(() => sortQueue(queue).filter((item) => kind === "all" || item.kind === kind), [queue, kind]);
+
+  const visibleBranches = state.branches.filter((branch) => pageBranchMatches({ ...state, currentBranch: "all" } as GarageState, branch.id));
+  const summaries = useMemo(() => summariseBranches(visibleBranches.map((branch) => branch.id), state.jobs, state.bookings, queue, today), [visibleBranches.length, state.jobs, state.bookings, queue, today]);
+  const showComparison = (isOwner || isManager) && visibleBranches.length > 1;
+  const canPickBranch = visibleBranches.length > 1;
+
+  const customerOf = (customerId: string) => state.customers.find((customer) => customer.id === customerId);
+  const personLabel = (customerId: string) => { const name = customerOf(customerId)?.name; return name ? customerDisplay(name, lang) : ""; };
+  const plateOf = (customerId: string, vehicleId: string) => customerOf(customerId)?.vehicles.find((vehicle) => vehicle.id === vehicleId)?.plate ?? "";
+  const bookingLabel = (id: string) => { const b = state.bookings.find((x) => x.id === id); return b ? [personLabel(b.customerId), plateOf(b.customerId, b.vehicleId)].filter(Boolean).join(" · ") : undefined; };
+  const jobLabel = (id: string) => { const j = state.jobs.find((x) => x.id === id); return j ? [plateOf(j.customerId, j.vehicleId), personLabel(j.customerId)].filter(Boolean).join(" · ") : undefined; };
+  const recordLabel = (type: RecordType, id: string) => type === "booking" ? bookingLabel(id) : type === "job" ? jobLabel(id) : undefined;
+  const stageText = (stage: string) => <StatusBadge status={stage} lang={lang} />;
+  const actionText = (item: QueueItem) => {
+    const known = item.nextAction ? nextActionLabels[item.nextAction] : undefined;
+    if (known) return t(known.en, known.ar);
+    if (item.waitingReason) return t("Waiting on setup", "في انتظار الإعداد");
+    return t("Open to review", "افتح للمراجعة");
+  };
+
+  const kindOptions = [{ value: "all", label: t("All types", "كل الأنواع") }, ...queueKinds.map((value) => ({ value, label: t(queueLabels[value].en, queueLabels[value].ar) }))];
+
+  const attentionColumns: Column<QueueItem>[] = [
+    { key: "kind", header: t("Type", "النوع"), primary: true, render: (item) => { const label = queueLabels[item.kind]; return label ? t(label.en, label.ar) : item.kind; } },
+    { key: "record", header: t("Record", "السجل"), hideOnCard: false, render: (item) => { const type = queueRecordType(item.kind); return type ? <RecordRef type={type} id={item.recordId} label={recordLabel(type, item.recordId)} /> : <span className="ov-muted">—</span>; } },
+    ...(branchFilter === "all" ? [{ key: "branch", header: t("Branch", "الفرع"), render: (item: QueueItem) => branchName(item.branchId) } as Column<QueueItem>] : []),
+    { key: "stage", header: t("Stage", "المرحلة"), render: (item) => stageText(item.stage) },
+    { key: "next", header: t("Next step", "الخطوة التالية"), render: actionText },
+  ];
+
+  const branchColumns: Column<BranchSummary>[] = [
+    { key: "branch", header: t("Branch", "الفرع"), primary: true, sortable: true, sortValue: (row) => branchName(row.branchId), render: (row) => branchName(row.branchId) },
+    { key: "active", header: t("Active jobs", "أوامر نشطة"), numeric: true, sortable: true, sortValue: (row) => row.activeJobs, render: (row) => row.activeJobs },
+    { key: "today", header: t("Today’s drop-offs", "تسليمات اليوم للورشة"), numeric: true, sortable: true, sortValue: (row) => row.todayDropoffs, render: (row) => row.todayDropoffs },
+    { key: "confirmed", header: t("Confirmed bookings", "حجوزات مؤكدة"), numeric: true, sortable: true, sortValue: (row) => row.confirmedBookings, render: (row) => row.confirmedBookings },
+    { key: "attention", header: t("Needs attention", "يحتاج متابعة"), numeric: true, sortable: true, sortValue: (row) => row.attention, render: (row) => row.attention },
+    { key: "capacity", header: t("Bays", "البايات"), numeric: true, hideOnCard: true, render: (row) => {
+      const branch = state.branches.find((item) => item.id === row.branchId);
+      if (!branch) return "—";
+      return configuredNumber(state.decisions, "clean-bays", branch.id, branch.cleanBays) + configuredNumber(state.decisions, "general-bays", branch.id, branch.generalBays);
+    } },
+  ];
+
+  const jobColumns: Column<Job>[] = [
+    { key: "vehicle", header: t("Vehicle", "المركبة"), primary: true, render: (job) => <RecordRef type="job" id={job.id} label={jobLabel(job.id)} /> },
+    { key: "service", header: t("Service", "الخدمة"), render: (job) => { const service = state.services.find((item) => item.id === job.serviceId); return service ? serviceDisplay(service.name, lang) : "—"; } },
+    { key: "branch", header: t("Branch", "الفرع"), render: (job) => branchName(job.branchId) },
+    { key: "stage", header: t("Stage", "المرحلة"), render: (job) => stageText(job.stage) },
+    { key: "updated", header: t("Updated", "آخر تحديث"), sortable: true, sortValue: (job) => job.updatedAt, render: (job) => dateLabel(job.updatedAt, lang) },
+  ];
+
+  type DayRow = (typeof day.dropoffs)[number];
+  const dayColumns = (timeHeader: string, timeOf: (row: DayRow) => string): Column<DayRow>[] => [
+    { key: "time", header: timeHeader, primary: true, mono: true, render: timeOf },
+    { key: "booking", header: t("Booking", "الحجز"), render: (row) => <RecordRef type="booking" id={row.id} label={bookingLabel(row.id)} /> },
+    { key: "customer", header: t("Customer", "العميل"), render: (row) => <RecordRef type="customer" id={row.customerId} label={personLabel(row.customerId) || undefined} /> },
+    { key: "status", header: t("Status", "الحالة"), render: (row) => <StatusBadge status={row.status} lang={lang} domain="booking" /> },
+  ];
+  const dropoffTable = <DataTable<DayRow> lang={lang} caption={t("Today’s drop-offs", "تسليمات اليوم للورشة")} rows={day.dropoffs} rowKey={(row) => row.id} columns={dayColumns(t("Time", "الوقت"), (row) => row.dropoffTime)} onRowClick={(row) => navigate(`/workspace/bookings?record=${encodeURIComponent(row.id)}`)} empty={<EmptyState title={t("No drop-offs today", "لا توجد تسليمات اليوم")} />} />;
+  const pickupTable = <DataTable<DayRow> lang={lang} caption={t("Today’s pickups", "تسليمات اليوم للعملاء")} rows={day.pickups} rowKey={(row) => row.id} columns={dayColumns(t("Date", "التاريخ"), (row) => dateLabel(row.expectedPickup, lang))} onRowClick={(row) => navigate(`/workspace/bookings?record=${encodeURIComponent(row.id)}`)} empty={<EmptyState title={t("No pickups today", "لا توجد تسليمات للعملاء اليوم")} />} />;
+
+  const todaySection = <section className="ov-section" aria-label={t("Today", "اليوم")}>
+    <div className="ov-section-head"><h2>{t("Today", "اليوم")}</h2></div>
+    <div className="ov-split">
+      <div><h3 className="ov-muted">{t("Drop-offs", "وصول السيارات")}</h3>{dropoffTable}</div>
+      <div><h3 className="ov-muted">{t("Pickups", "تسليم السيارات")}</h3>{pickupTable}</div>
+    </div>
+  </section>;
+
+  const metricValue = (id: FinancialMetricId): ReactNode => {
+    if (reportState === "loading") return "…";
+    const value: MetricValue | undefined = report?.metrics[id];
+    if (!value || value.state === "unavailable") return "—";
+    return <Money minor={value.amount.minor} currency={value.amount.currency} lang={lang} />;
+  };
+  const metricFoot = (id: FinancialMetricId) => {
+    const value = report?.metrics[id];
+    if (reportState === "error") return t("Unavailable", "غير متاح");
+    if (value?.state === "incomplete") return t("Incomplete data", "بيانات غير مكتملة");
+    if (value?.state === "unavailable") return t("Not configured", "غير مُعدّ");
+    return t("Open Finance", "فتح المالية");
+  };
+
+  const title = isOwner ? t("Overview", "نظرة عامة") : isReception ? t("Today", "اليوم") : t("Branch overview", "نظرة على الفرع");
+  const branchSelect = canPickBranch
+    ? <label><span className="sr-only">{t("Branch", "الفرع")}</span><select className="filter-select ov-branch-select" value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)}>
+      <option value="all">{t("All branches", "كل الفروع")}</option>
+      {visibleBranches.map((branch) => <option key={branch.id} value={branch.id}>{branchName(branch.id)}</option>)}
+    </select></label>
+    : undefined;
+
+  const attentionSection = <section className="ov-section" aria-label={t("Needs attention", "يحتاج متابعة")}>
+    <div className="ov-section-head"><h2>{t("Needs attention", "يحتاج متابعة")}</h2></div>
+    <FilterBar lang={lang} filters={[{ key: "kind", label: t("Type", "النوع"), value: kind, options: kindOptions, onChange: setKind }]} onClear={() => setKind("all")} resultCount={queueLoading || queueError ? undefined : sortedQueue.length} />
+    <DataTable<QueueItem>
+      lang={lang}
+      caption={t("Needs attention", "يحتاج متابعة")}
+      columns={attentionColumns}
+      rows={sortedQueue}
+      rowKey={(item) => `${item.kind}:${item.recordId}`}
+      loading={queueLoading}
+      error={queueError || undefined}
+      onRetry={() => setQueueRetry((value) => value + 1)}
+      onRowClick={(item) => navigate(queueTarget(item))}
+      empty={kind !== "all"
+        ? <EmptyState variant="no-results" title={t("Nothing of this type", "لا توجد بنود من هذا النوع")} action={<button type="button" className="btn btn-sm" onClick={() => setKind("all")}>{t("Clear filters", "مسح التصفية")}</button>} />
+        : <EmptyState title={t("All clear", "لا شيء يحتاج متابعة")} />}
+    />
+  </section>;
 
   return <>
-    <PageHeading
-      eyebrow={t("Go Stores · Operations", "جو ستورز · العمليات")}
-      title={isOwner ? t("Business overview", "ملخص النشاط") : t("Branch operations", "تشغيل الفرع")}
-      subtitle={isOwner
-        ? t("Review work and exceptions across branches, then open the source page to act.", "راجع الشغل والاستثناءات في الفروع، ثم افتح صفحة السجل لاتخاذ الإجراء.")
-        : t("Review this branch’s current work and follow each item to its next action.", "راجع الشغل الحالي في الفرع وتابع الإجراء التالي لكل بند.")}
-    />
-    <section className="panel section-gap">
-      <div className="toolbar"><SectionTitle title={t("Needs attention", "يحتاج متابعة")} description={t("Current exceptions first. Open the source record to complete the next safe action.", "الاستثناءات الحالية أولاً. افتح السجل الأصلي لتنفيذ الإجراء الآمن التالي.")} /><label className="form-field"><span className="field-label">{t("Show","عرض")}</span><select className="field-select" value={kind} onChange={(event) => setKind(event.target.value)}><option value="all">{t("All actions", "كل الإجراءات")}</option>{queueKinds.map((value) => <option key={value} value={value}>{t(queueLabels[value].en, queueLabels[value].ar)}</option>)}</select></label></div>
-      {queueError && <div role="alert" className="form-error">{queueError}<button className="btn btn-sm" type="button" onClick={()=>setQueueRetry(value=>value+1)}> {t("Retry","إعادة المحاولة")}</button></div>}
-      {queueLoading&&<div className="table-wrap" role="status"><div className="empty-state"><strong>{t("Loading current actions…","جارٍ تحميل الإجراءات الحالية…")}</strong></div></div>}
-      {!queueLoading&&!queueError&&<div className="table-wrap"><table><thead><tr><th>{t("Action type", "نوع الإجراء")}</th><th>{t("Branch", "الفرع")}</th><th>{t("Current stage", "المرحلة الحالية")}</th><th>{t("Next step / blocker", "الخطوة التالية / العائق")}</th><th>{t("Open", "فتح")}</th></tr></thead><tbody>
-        {[...queue].sort((a,b)=>queueKinds.indexOf(a.kind)-queueKinds.indexOf(b.kind)).map((item) => {
-          const stage = stageNames[item.stage as keyof typeof stageNames];
-          return <tr key={`${item.kind}:${item.recordId}`}><td>{t(queueLabels[item.kind]?.en ?? item.kind.replaceAll("-", " "), queueLabels[item.kind]?.ar ?? item.kind.replaceAll("-", " "))}</td><td>{branchName(item.branchId)}</td><td>{stage ? (lang === "ar" ? stage.ar : stage.en) : item.stage.replaceAll("-", " ")}</td><td>{item.nextAction ?? item.waitingReason ?? t("No action recorded", "لا يوجد إجراء مسجل")}</td><td><button className="text-link" type="button" onClick={() => navigate(queuePath(item))}>{t("Open", "فتح")}</button></td></tr>;
-        })}
-        {!queue.length && <tr><td colSpan={5}><EmptyState title={t("Nothing needs attention", "لا توجد بنود تحتاج متابعة")} text={t("When an exception needs a decision, it will appear here with its next step.", "عند الحاجة لقرار بشأن استثناء، سيظهر هنا مع الخطوة التالية.")} /></td></tr>}
-      </tbody></table></div>}
-    </section>
+    <PageHeader title={title} subtitle={branchFilter === "all" ? t("All branches", "كل الفروع") : branchName(branchFilter)} actions={branchSelect} />
 
-    {actor?.role === "owner" && <details className="section-gap" onToggle={(event)=>{if(event.currentTarget.open&&!report&&!reportLoading)void loadReport();}}>
-      <summary>{t("Operational reports","التقارير التشغيلية")}</summary>
-      <section className="panel">
-      <SectionTitle title={t("Reconciled financial view", "العرض المالي المتصالح")} description={t("Operational-source reporting. Unavailable or incomplete inputs are shown explicitly.", "تقارير من المصادر التشغيلية. المدخلات غير المتاحة أو غير المكتملة ظاهرة بوضوح.")} />
-      <div className="form-grid">
-        <label>{t("Period", "الفترة")}<select value={period} onChange={(event) => choosePeriod(event.target.value as typeof period)}><option value="month">{t("Current month", "الشهر الحالي")}</option><option value="ytd">{t("Year to date", "من بداية السنة")}</option><option value="custom">{t("Custom", "مخصص")}</option></select></label>
-        <label>{t("From", "من")}<input type="date" value={from} onChange={(event) => { setPeriod("custom"); setFrom(event.target.value); }} /></label>
-        <label>{t("To", "إلى")}<input type="date" value={to} onChange={(event) => { setPeriod("custom"); setTo(event.target.value); }} /></label>
-        <label>{t("Branch", "الفرع")}<select value={reportBranch} onChange={(event) => setReportBranch(event.target.value)}><option value="all">{t("All branches", "كل الفروع")}</option>{state.branches.map((branch) => <option key={branch.id} value={branch.id}>{branchName(branch.id)}</option>)}</select></label>
-        <label>{t("Group by", "التجميع")}<select value={groupBy} onChange={(event) => setGroupBy(event.target.value as ReportFilter["groupBy"])}><option value="day">{t("Day", "يوم")}</option><option value="week">{t("Week", "أسبوع")}</option><option value="month">{t("Month", "شهر")}</option></select></label>
-        <button className="btn btn-primary" type="button" disabled={reportLoading} onClick={() => void loadReport()}>{reportLoading ? t("Loading…", "جاري التحميل…") : t("Refresh report", "تحديث التقرير")}</button>
-      </div>
-      {reportError && <p role="alert">{reportError}</p>}
-      {report && <>
-        <div className="table-wrap"><table><thead><tr><th>{t("Metric", "المؤشر")}</th><th>{t("Value / state", "القيمة / الحالة")}</th><th>{t("Previous-period comparison", "مقارنة الفترة السابقة")}</th><th>{t("Sources", "المصادر")}</th></tr></thead><tbody>
-          {metricIds.map((id) => { const value = report.metrics[id]; const comparison = report.comparisons[id]; return <tr key={id}><td>{t(metricLabels[id].en, metricLabels[id].ar)}</td><td>{value.state === "unavailable" ? `${t("Unavailable", "غير متاح")}: ${value.reasons.join(", ")}` : <>{money(value.amount, lang)}{value.state === "incomplete" && <small> · {t("Incomplete", "غير مكتمل")}: {value.reasons.join(", ")}</small>}</>}</td><td>{comparison.state === "unavailable" ? t("Unavailable", "غير متاح") : comparison.percent === null ? t("Comparison unavailable (zero previous base)", "المقارنة غير متاحة (الفترة السابقة صفر)") : `${comparison.percent.toFixed(1)}%`}</td><td><button className="text-link" type="button" disabled={value.state === "unavailable"} onClick={() => void openDrilldown(id)}>{t("Drill down", "عرض المصادر")}</button></td></tr>; })}
-        </tbody></table></div>
-        <h3>{t("Trend table", "جدول الاتجاه")}</h3>
-        <div className="table-wrap"><table><thead><tr><th>{t("Bucket", "الفترة")}</th>{metricIds.map((id) => <th key={id}>{t(metricLabels[id].en, metricLabels[id].ar)}</th>)}</tr></thead><tbody>{report.trends.map((trend) => <tr key={trend.bucket}><td>{trend.bucket}</td>{metricIds.map((id) => { const value = trend.metrics[id]; return <td key={id}>{!value ? "—" : value.state === "unavailable" ? t("Unavailable", "غير متاح") : money(value.amount, lang)}</td>; })}</tr>)}</tbody></table></div>
-      </>}
-      {drilldown && <div className="section-gap"><h3>{t("Source records", "سجلات المصدر")} · {drilldown.metric}</h3><div className="table-wrap"><table><thead><tr><th>{t("Source", "المصدر")}</th><th>{t("Effective date", "تاريخ السريان")}</th><th>{t("Branch", "الفرع")}</th><th>{t("Amount", "القيمة")}</th><th>{t("Provenance", "المنشأ")}</th></tr></thead><tbody>{drilldown.rows.map((row) => <tr key={row.id}><td>{row.sourceKind} · <span className="mono">{row.sourceId}</span></td><td>{dateLabel(row.effectiveAt, lang)}</td><td>{branchName(row.branchId)}</td><td>{money(row.amount, lang)}</td><td>{row.provenance}</td></tr>)}</tbody></table></div></div>}
-      </section>
-    </details>}
+    <div className="ov-tiles">
+      <Tile label={t("Needs attention", "يحتاج متابعة")} value={queueLoading ? "…" : queue.length} tone={queue.length > 0 ? "warning" : undefined} onOpen={() => document.getElementById("ov-attention")?.scrollIntoView({ behavior: "smooth" })} />
+      <Tile label={t("Active jobs", "أوامر نشطة")} value={activeJobs.length} onOpen={() => navigate("/workspace/workshop")} />
+      <Tile label={t("Drop-offs today", "وصول اليوم")} value={day.dropoffs.length} onOpen={() => navigate("/workspace/bookings")} />
+      <Tile label={t("Ready for pickup", "جاهز للتسليم")} value={queueLoading ? "…" : readyCount} onOpen={() => navigate("/workspace/workshop")} />
+      {canSeeFinance && financeTiles.map((tile) => <Tile key={tile.id} label={t(tile.en, tile.ar)} value={metricValue(tile.id)} foot={metricFoot(tile.id)} onOpen={() => navigate("/workspace/finance")} />)}
+    </div>
 
-    <details className="section-gap">
-      <summary>{t("Branch capacity and workload details","تفاصيل سعة الفروع وحجم العمل")}</summary>
-      <section className="panel"><SectionTitle title={t("Branch operations", "شغل الفروع")} description={t("Current workload and configured capacity", "الشغل الحالي والسعة المحددة")} />{state.branches.filter((branch) => pageBranchMatches(state, branch.id)).map((branch, index) => { const branchJobs = jobs.filter((job) => job.branchId === branch.id); const active = branchJobs.filter((job) => !["delivered", "cancelled", "no-show"].includes(job.stage)).length; const confirmed = bookings.filter((booking) => booking.branchId === branch.id && booking.status === "confirmed").length; const cleanBays = configuredNumber(state.decisions, "clean-bays", branch.id, branch.cleanBays); const generalBays = configuredNumber(state.decisions, "general-bays", branch.id, branch.generalBays); const workingHours = configuredNumber(state.decisions, "branch-working-hours", branch.id, branch.workingHours); return <div className="branch-row" key={branch.id}><div className="branch-info"><span className={`branch-dot ${index ? "alt" : ""}`} /><div><div className="branch-title">{branchName(branch.id)}</div><div className="branch-meta">{cleanBays} {t("clean bays", "بايات تنظيف")} · {generalBays} {t("general bays", "بايات عادية")} · {workingHours} {t("operating hours", "ساعة تشغيل")}</div></div></div><div className="branch-count">{active}<small>{t("active ·", "شغالة ·")} {confirmed} {t("confirmed bookings", "حجز متأكد")}</small></div></div>; })}</section>
-    </details>
+    {isReception && todaySection}
+    <div id="ov-attention">{attentionSection}</div>
 
-    <details className="section-gap"><summary>{t("View workshop vehicles","عرض مركبات الورشة")}</summary><section className="panel"><SectionTitle title={t("Workshop status", "حالة الورشة")} description={t("Current vehicles moving through service", "المركبات التي تمر بمراحل الخدمة حالياً")} action={<button className="text-link" onClick={() => navigate("/workspace/workshop")}>{t("Open workshop", "فتح الورشة")} <ArrowLeft size={13} /></button>} /><div className="table-wrap"><table><thead><tr><th>{t("Vehicle", "المركبة")}</th><th>{t("Service", "الخدمة")}</th><th>{t("Branch", "الفرع")}</th><th>{t("Stage", "المرحلة")}</th><th>{t("Updated", "آخر تحديث")}</th></tr></thead><tbody>{jobs.slice(0, 5).map((job: Job) => { const vehicle = state.customers.find((customer) => customer.id === job.customerId)?.vehicles.find((item) => item.id === job.vehicleId); const service = state.services.find((item) => item.id === job.serviceId); return <tr key={job.id}><td><div className="primary-cell mono">{vehicle?.plate ?? "—"}</div><div className="secondary-cell">{vehicle?.makeModel}</div></td><td>{service ? serviceDisplay(service.name, lang) : "—"}</td><td>{branchName(job.branchId)}</td><td><Status status={job.stage} lang={lang} /></td><td>{dateLabel(job.updatedAt, lang)}</td></tr>; })}{!jobs.length && <tr><td colSpan={5}><EmptyState title={t("No jobs in this branch", "لا توجد أوامر عمل في هذا الفرع")} text={t("Newly confirmed bookings will appear in the workshop.", "ستظهر الحجوزات المؤكدة في الورشة.")} /></td></tr>}</tbody></table></div></section></details>
+    {showComparison && <section className="ov-section" aria-label={t("Branch comparison", "مقارنة الفروع")}>
+      <div className="ov-section-head"><h2>{t("Branches", "الفروع")}</h2></div>
+      <DataTable<BranchSummary> lang={lang} caption={t("Branch comparison", "مقارنة الفروع")} columns={branchColumns} rows={summaries} rowKey={(row) => row.branchId} selectedKey={branchFilter} onRowClick={(row) => setBranchFilter(row.branchId)} empty={<EmptyState title={t("No branches", "لا توجد فروع")} />} />
+    </section>}
+
+    {!isReception && <Collapsible title={t("Today", "اليوم")} count={day.dropoffs.length + day.pickups.length}>{todaySection}</Collapsible>}
+    <Collapsible title={t("Vehicles in the workshop", "المركبات في الورشة")} count={activeJobs.length}>
+      <DataTable<Job> lang={lang} caption={t("Vehicles in the workshop", "المركبات في الورشة")} columns={jobColumns} rows={activeJobs.slice(0, 8)} rowKey={(job) => job.id} onRowClick={(job) => navigate(`/workspace/workshop?record=${encodeURIComponent(job.id)}`)} empty={<EmptyState title={t("No active jobs", "لا توجد أوامر نشطة")} />} />
+      {activeJobs.length > 8 && <p><button type="button" className="text-link" onClick={() => navigate("/workspace/workshop")}>{t("Open workshop", "فتح الورشة")}</button></p>}
+    </Collapsible>
   </>;
 }

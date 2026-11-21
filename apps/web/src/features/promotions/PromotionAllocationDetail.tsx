@@ -1,12 +1,63 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import type { Locale } from "@garage/domain";
 import { promotionApi } from "../../shared/store";
+import { ConfirmDialog, EmptyState, Field, Money, Skeleton, StatusBadge } from "../../shared/components";
+import { commercialError } from "../quotes/commercial-errors";
+import { useLoader } from "../quotes/commercial-data";
+import { tr } from "../quotes/lookups";
+import { isProtectedRef } from "../quotes/quote-logic";
 
-export function PromotionAllocationDetail({lang,id}:{lang:"ar"|"en";id:string}){
-  const t=(en:string,ar:string)=>lang==="ar"?ar:en;
-  const [detail,setDetail]=useState<Awaited<ReturnType<typeof promotionApi.detail>>|null>(null);const [message,setMessage]=useState("");
-  const [reason,setReason]=useState("");const [evidenceRef,setEvidenceRef]=useState("");
-  async function refresh(){setDetail(await promotionApi.detail(id));}
-  useEffect(()=>{void refresh().catch(e=>setMessage(String(e)));},[id]);
-  async function reverse(){try{await promotionApi.reverse({allocationId:id,reason,evidenceRef,idempotencyKey:crypto.randomUUID()});await refresh();setMessage(t("Correction recorded.","تم تسجيل التصحيح."));}catch(e){setMessage(e instanceof Error?e.message:String(e));}}
-  return <section className="panel section-gap" dir={lang==="ar"?"rtl":"ltr"}><h2>{t("Allocation detail","تفاصيل التخصيص")}</h2>{detail&&<><p>{t("Status","الحالة")}: {detail.allocation.status}</p><p>{t("Discount","الخصم")}: {detail.allocation.discount?.minor} {detail.allocation.discount?.currency}</p><p>{t("Reserved units","الوحدات المحجوزة")}: {detail.pool.reservedUnits} · {t("Consumed units","الوحدات المستخدمة")}: {detail.pool.consumedUnits} / {detail.pool.maximumUnits}</p><h3>{t("Correction history","سجل التصحيحات")}</h3><ul>{detail.history.map((e,i)=><li key={i}>{e.action} · {e.at}</li>)}</ul>{detail.allocation.status==="reserved"&&<><label>{t("Correction reason","سبب التصحيح")}<input value={reason} onChange={e=>setReason(e.target.value)}/></label><label>{t("Protected evidence reference","مرجع الدليل المحمي")}<input value={evidenceRef} onChange={e=>setEvidenceRef(e.target.value)}/></label><button className="btn" onClick={()=>void reverse()}>{t("Reverse allocation","عكس التخصيص")}</button></>}</>}{message&&<p role="status">{message}</p>}</section>;
+const actionLabels: Record<string, { en: string; ar: string }> = {
+  reserved: { en: "Reserved", ar: "تم الحجز" },
+  consumed: { en: "Used", ar: "تم الاستخدام" },
+  reversed: { en: "Reversed", ar: "تم العكس" },
+  allocated: { en: "Allocated", ar: "تم التخصيص" },
+};
+
+/** Promotion allocation: status, discount, pool usage, history, and an authorised reversal. */
+export function PromotionAllocationDetail({ lang, id, onChanged }: { lang: Locale; id: string; onChanged?: () => void }) {
+  const t = tr(lang);
+  const state = useLoader(() => promotionApi.detail(id), null as Awaited<ReturnType<typeof promotionApi.detail>> | null, (error) => commercialError(error, lang));
+  const [reversing, setReversing] = useState(false);
+  const [reason, setReason] = useState("");
+  const [evidence, setEvidence] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const detail = state.data;
+  async function reverse() {
+    setBusy(true);
+    try {
+      await promotionApi.reverse({ allocationId: id, reason: reason.trim(), evidenceRef: evidence.trim(), idempotencyKey: crypto.randomUUID() });
+      setReversing(false); setReason(""); setEvidence("");
+      setMessage(t("Promotion reversed. History is kept.", "تم عكس العرض. يبقى السجل محفوظاً."));
+      state.reload();
+      onChanged?.();
+    } catch (error) {
+      setMessage(commercialError(error, lang));
+    } finally { setBusy(false); }
+  }
+  if (state.loading && !detail) return <Skeleton rows={3} label={t("Loading", "جارٍ التحميل")} />;
+  if (state.error && !detail) return <EmptyState variant="error" title={t("Could not load the promotion", "تعذر تحميل العرض")} text={state.error} action={<button type="button" className="btn" onClick={state.reload}>{t("Retry", "إعادة المحاولة")}</button>} />;
+  if (!detail) return null;
+  const { allocation, pool, history } = detail;
+  const used = pool.consumedUnits + pool.reservedUnits;
+  return <div className="qo-inline-result">
+    <div className="qo-row between">
+      <strong>{t("Promotion allocation", "تخصيص العرض الترويجي")}</strong>
+      <StatusBadge status={allocation.status} lang={lang} domain="reservation" label={actionLabels[allocation.status]?.[lang]} />
+    </div>
+    <dl className="qo-kv">
+      <dt>{t("Discount", "الخصم")}</dt><dd>{allocation.discount ? <Money minor={allocation.discount.minor} currency={allocation.discount.currency} lang={lang} /> : "—"}</dd>
+      <dt>{t("Units used", "الوحدات المستخدمة")}</dt><dd>{used} / {pool.maximumUnits}</dd>
+    </dl>
+    {history.length > 0 && <ul className="qo-history">{history.map((entry, index) => <li key={index}><strong>{actionLabels[entry.action]?.[lang] ?? entry.action.replace(/[-_]+/g, " ")}</strong><span className="qo-muted">{new Date(entry.at).toLocaleString(lang === "ar" ? "ar-EG-u-nu-latn" : "en-GB")}</span></li>)}</ul>}
+    {allocation.status === "reserved" && <div><button type="button" className="btn btn-danger btn-sm" onClick={() => setReversing(true)}>{t("Reverse promotion", "عكس العرض")}</button></div>}
+    {message && <p role="status" className="qo-muted">{message}</p>}
+    <ConfirmDialog open={reversing} danger lang={lang} title={t("Reverse this promotion?", "عكس هذا العرض؟")} body={t("The units return to the pool. The history stays.", "تعود الوحدات إلى المخزون ويبقى السجل.")}
+      confirmLabel={t("Reverse", "عكس")} onCancel={() => setReversing(false)} onConfirm={() => void reverse()} busy={busy}
+      confirmDisabled={!reason.trim() || !isProtectedRef(evidence)} disabledReason={t("Add a reason and a proof reference starting with private:", "أضف السبب ومرجع إثبات يبدأ بـ private:")}>
+      <Field label={t("Reason", "السبب")} required><input className="field-input" value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
+      <Field label={t("Proof reference", "مرجع الإثبات")} required hint="private:…"><input className="field-input" value={evidence} onChange={(event) => setEvidence(event.target.value)} /></Field>
+    </ConfirmDialog>
+  </div>;
 }

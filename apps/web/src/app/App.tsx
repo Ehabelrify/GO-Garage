@@ -1,29 +1,29 @@
-﻿import { useEffect, useState } from "react";
-import {
-  Activity, CheckCircle2, ChevronDown, CircleDollarSign, ClipboardList, MessageCircle,
-  MoreHorizontal, Package, ShieldAlert, Wrench, X,
-} from "lucide-react";
+﻿import { useEffect, useMemo, useState } from "react";
+import { Activity, CheckCircle2, ChevronDown, ClipboardList, MoreHorizontal, ShieldAlert, Wrench, X } from "lucide-react";
 import { useClerk, useUser } from "@clerk/react";
 import { Link, useLocation } from "wouter";
 import { useGarageStore, type GarageActor } from "../shared/store";
 import { RouteChunk } from "./RouteChunk";
-import type { GarageRole, PageId } from "@garage/domain";
+import type { GarageRole } from "@garage/domain";
 import { branchDisplay, customerDisplay, serviceDisplay, type Lang, type ModalConfig } from "../shared/ui";
-import { groupedNavigationForRole, navigationForRole, primaryNavigationForRole } from "./navigation";
+import { ConfirmDialog } from "../shared/components/ConfirmDialog";
+import { GlobalSearch } from "../shared/components/GlobalSearch";
+import { RecordProvider } from "../shared/components/RecordRef";
+import { hasCapability } from "../shared/capabilities";
+import { buildRecordRegistry } from "./record-registry";
+import {
+  defaultPageForRole, navigationForRole, overflowNavigationForRole, primaryNavigationForRole,
+  resolveWorkspacePage, sectionPagesFor,
+} from "./navigation";
 const overviewPage = () => import("../features/overview/OverviewPage").then((m) => ({ default: m.OverviewPage }));
 const settingsPage = () => import("../features/settings/SettingsPage").then((m) => ({ default: m.SettingsPage }));
-const bookingsPage = () => import("../features/bookings/BookingsPage").then((m) => ({ default: m.BookingsPage }));
+const bookingsPage = () => import("../features/bookings/BookingsAndTransport").then((m) => ({ default: m.BookingsAndTransport }));
 const workshopPage = () => import("../features/workshop/WorkshopPage").then((m) => ({ default: m.WorkshopPage }));
 const customersPage = () => import("../features/customers/CustomersPage").then((m) => ({ default: m.CustomersPage }));
-const staffPage = () => import("../features/staff/StaffPage").then((m) => ({ default: m.StaffPage }));
 const warrantiesPage = () => import("../features/warranty/WarrantiesPage").then((m) => ({ default: m.WarrantiesPage }));
-  const whatsappPage = () => import("../features/whatsapp/MessagingWorkspacePage").then((m) => ({ default: m.MessagingWorkspacePage }));
+const whatsappPage = () => import("../features/whatsapp/MessagingWorkspacePage").then((m) => ({ default: m.MessagingWorkspacePage }));
 const cataloguePage = () => import("../features/catalogue/CataloguePage").then((m) => ({ default: m.CataloguePage }));
-const quotesPage = () => import("../features/quotes/QuoteWorkspace").then((m) => ({ default: m.QuoteWorkspace }));
-const promotionsPage = () => import("../features/promotions/QualificationForm").then((m) => ({ default: m.QualificationForm }));
-const reservationsPage = () => import("../features/reservations/ReservationsPage").then((m) => ({ default: m.ReservationsPage }));
-const benefitsPage = () => import("../features/benefits/BenefitsPage").then((m) => ({ default: m.BenefitsPage }));
-const transportPage = () => import("../features/transport/TransportPage").then((m) => ({ default: m.TransportPage }));
+const quotesPage = () => import("../features/quotes/QuoteWorkspace").then((m) => ({ default: m.QuotesAndOffers }));
 const financePage = () => import("../features/finance/FinancePage").then((m) => ({ default: m.FinancePage }));
 
 const roleLabels: Record<GarageRole, { en: string; ar: string }> = {
@@ -33,23 +33,17 @@ const roleLabels: Record<GarageRole, { en: string; ar: string }> = {
   technician: { en: "Technician", ar: "الفني" },
 };
 
-const holdItems = [
-  { en: "WhatsApp connection", ar: "ربط واتساب", icon: MessageCircle },
-  { en: "Inventory", ar: "المخزون", icon: Package },
-  { en: "Payments", ar: "المدفوعات", icon: CircleDollarSign },
-];
-
 function LoadingWorkspace({ lang }: { lang: Lang }) {
-  return <div className="workspace-state" role="status" dir={lang === "ar" ? "rtl" : "ltr"}><div className="brand-mark"><Wrench size={19} /></div><strong>Garage OS</strong><span>{lang === "ar" ? "بنحمّل مساحة العمل..." : "Loading your workspace..."}</span><div className="loading-line" /></div>;
+  return <div className="workspace-state" role="status" dir={lang === "ar" ? "rtl" : "ltr"}><div className="brand-mark"><Wrench size={19} /></div><strong>Garage OS</strong><span>{lang === "ar" ? "جارٍ تحميل مساحة العمل..." : "Loading your workspace..."}</span><div className="loading-line" /></div>;
 }
 
 function AccessPending({ onSignOut, lang }: { onSignOut: () => void; lang: Lang }) {
   return <main className="access-state" dir={lang === "ar" ? "rtl" : "ltr"}>
     <div className="access-state-card">
       <div className="access-icon"><ShieldAlert size={24} /></div>
-      <div className="eyebrow">{lang === "ar" ? "الحساب لسه من غير صلاحية" : "ACCOUNT NOT ASSIGNED"}</div>
-      <h1>{lang === "ar" ? "المالك لسه ماحددش صلاحية الحساب ده." : "This account has not been assigned a role yet."}</h1>
-      <p>{lang === "ar" ? "لازم بريدك يكون هو نفس البريد اللي المالك بعت له دعوة. لحد دلوقتي، مافيش أي بيانات تشغيل ظهرت للحساب ده." : "Your email must match an invitation sent by the owner. No operational data has been opened for this account."}</p>
+      <div className="eyebrow">{lang === "ar" ? "الحساب غير مخوّل بعد" : "ACCOUNT NOT ASSIGNED"}</div>
+      <h1>{lang === "ar" ? "حساب جوجل هذا غير معتمد للدخول." : "This Google account is not approved for access."}</h1>
+      <p>{lang === "ar" ? "الدخول بالدعوة فقط. اطلب من المالك إضافة بريد العمل الخاص بك، ثم سجّل الدخول مجددًا بنفس حساب جوجل. لم تُعرض أي بيانات تشغيلية لهذا الحساب." : "Access is invite-only. Ask the owner to add your work email, then sign in again with that Google account. No operational data has been opened for this account."}</p>
       <button className="btn" onClick={onSignOut}>{lang === "ar" ? "تسجيل الخروج" : "Sign out"}</button>
     </div>
   </main>;
@@ -59,9 +53,9 @@ function WorkspaceError({ onRetry, lang }: { onRetry: () => void; lang: Lang }) 
   return <main className="access-state" dir={lang === "ar" ? "rtl" : "ltr"}><div className="access-state-card">
     <div className="access-icon"><ShieldAlert size={24} /></div>
     <div className="eyebrow">GARAGE OS</div>
-    <h1>{lang === "ar" ? "ماقدرناش نحمّل مساحة العمل" : "We could not load your workspace"}</h1>
-    <p>{lang === "ar" ? "بيانات الحساب ما اتحمّلتش. جرّب تاني." : "Your account data could not be loaded. Please try again."}</p>
-    <button className="btn btn-primary" onClick={onRetry}>{lang === "ar" ? "جرّب تاني" : "Try again"}</button>
+    <h1>{lang === "ar" ? "تعذر تحميل مساحة العمل" : "We could not load your workspace"}</h1>
+    <p>{lang === "ar" ? "تعذر تحميل بيانات الحساب. حاول مرة أخرى." : "Your account data could not be loaded. Please try again."}</p>
+    <button className="btn btn-primary" onClick={onRetry}>{lang === "ar" ? "حاول مرة أخرى" : "Try again"}</button>
   </div></main>;
 }
 
@@ -129,16 +123,17 @@ function ReadyWorkspace({
   const lang: Lang = state.locale;
   const rtl = lang === "ar";
   const t = (english: string, arabic: string) => lang === "ar" ? arabic : english;
-  const page = location.split("/").filter(Boolean).at(-1) as PageId | undefined;
-  const navItems = navigationForRole(actor.role);
-  const groupedNavItems = groupedNavigationForRole(actor.role);
-  const mobileNavItems = primaryNavigationForRole(actor.role);
-  const mobileNavIds = new Set(mobileNavItems.map((item) => item.id));
-  const hasMoreNavigation = navItems.some((item) => !mobileNavIds.has(item.id));
-  const selectedPage = navItems.find((item) => item.id === page);
-  const activeGroup = groupedNavItems.find((group) => group.id === selectedPage?.group);
-  const workspaceTabs = selectedPage ? navItems.filter((item) => item.group === selectedPage.group) : [];
-  const defaultPage = actor.role === "receptionist" ? "whatsapp" : actor.role === "technician" ? "workshop" : "overview";
+  const segment = location.split("/").filter(Boolean).at(-1);
+  const has = useMemo(() => (capability: string) => hasCapability(actor, capability as never), [actor]);
+  const resolved = resolveWorkspacePage(actor.role, segment, has);
+  const page = resolved?.page;
+  const menuPage = resolved?.menu;
+  const navItems = navigationForRole(actor.role, has);
+  const mobileNavItems = primaryNavigationForRole(actor.role, has);
+  const overflowItems = overflowNavigationForRole(actor.role, has);
+  const sectionPages = menuPage ? sectionPagesFor(actor.role, menuPage) : [];
+  const recordRegistry = useMemo(() => buildRecordRegistry(state, lang), [state, lang]);
+  const defaultPage = defaultPageForRole(actor.role);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -159,8 +154,9 @@ function ReadyWorkspace({
   }, [mobileMenuOpen]);
 
   useEffect(() => {
-    if (!selectedPage) navigate(`/workspace/${defaultPage}`);
-  }, [selectedPage, defaultPage, navigate]);
+    if (!resolved) navigate(`/workspace/${defaultPage}`);
+    else if (resolved.redirectTo) navigate(resolved.redirectTo);
+  }, [resolved, defaultPage, navigate]);
 
   const branchName = (branchId: string) => {
     const branch = state.branches.find((item) => item.id === branchId);
@@ -184,23 +180,11 @@ function ReadyWorkspace({
         <span className="brand-mark"><Wrench size={19} strokeWidth={1.7} /></span>
         <span><strong className="brand-name">Garage OS</strong><small className="brand-sub">GO STORES · EGYPT</small></span>
       </Link>
-      <div className="nav-label">{t("Your workspace", "مساحة شغلك")}</div>
       <nav className="nav-list" aria-label={t("Main navigation", "التنقل الأساسي")}>
-        {groupedNavItems.map((group) => <details className="nav-group" key={group.id} open={group.id === selectedPage?.group}>
-          <summary className="nav-group-heading"><span>{t(group.en, group.ar)}</span><ChevronDown className="nav-group-chevron" size={14} /></summary>
-          <div className="nav-group-items">
-            {group.items.map(({ id, path, icon: Icon, en, ar }) => <Link key={id} className={`nav-item ${page === id ? "active" : ""}`} href={path} aria-current={page === id ? "page" : undefined}>
-              <Icon size={17} strokeWidth={1.8} /><span>{t(en, ar)}</span>
-            </Link>)}
-          </div>
-        </details>)}
+        {navItems.map(({ id, path, icon: Icon, en, ar }) => <Link key={id} className={`nav-item ${menuPage === id ? "active" : ""}`} href={path} aria-current={menuPage === id ? "page" : undefined}>
+          <Icon size={17} strokeWidth={1.8} /><span>{t(en, ar)}</span>
+        </Link>)}
       </nav>
-      {(actor.role === "owner" || actor.role === "branch-manager") && <div className="hold-nav-block">
-        <div className="nav-label">{t("On hold", "لسه مش متاح")}</div>
-        {holdItems.map(({ en, ar, icon: Icon }) => <div className="nav-item nav-item-disabled" key={en} aria-disabled="true">
-          <Icon size={17} /><span>{t(en, ar)}</span><span className="hold-mini">{t("On hold", "لسه مش متاح")}</span>
-        </div>)}
-      </div>}
       <div className="sidebar-spacer" />
       <div className="sidebar-account">
         <span className="account-avatar">{profileName.slice(0, 1).toUpperCase()}</span>
@@ -221,9 +205,10 @@ function ReadyWorkspace({
           </label>}
           <span className="workspace-role"><Activity size={14} />{t(roleLabels[actor.role].en, roleLabels[actor.role].ar)}</span>
         </div>
+        <div className="topbar-search"><GlobalSearch lang={lang} onNavigate={navigate} /></div>
         <div className="topbar-end">
-          {import.meta.env.DEV && <span className="environment-label"><ClipboardList size={13} />{actor.isDemo ? t("Temporary demo account", "حساب مؤقت للعرض") : t("Development sample data", "بيانات تجريبية للتطوير")}</span>}
-          <div className="lang-switch" aria-label={t("Choose language", "اختار اللغة")}>
+          {actor.isDemo && <span className="environment-label"><ClipboardList size={13} />{t("Role preview account", "حساب معاينة الدور")}</span>}
+          <div className="lang-switch" aria-label={t("Choose language", "اختر اللغة")}>
             <button className={lang === "ar" ? "selected" : ""} onClick={() => store.setLocale("ar")}>عربي</button>
             <button className={lang === "en" ? "selected" : ""} onClick={() => store.setLocale("en")}>EN</button>
           </div>
@@ -231,50 +216,33 @@ function ReadyWorkspace({
           <button className="mobile-signout-button" type="button" onClick={signOut}>{t("Sign out", "تسجيل الخروج")}</button>
         </div>
       </header>
-      {workspaceTabs.length > 1 && <nav className="workspace-tabs" aria-label={t(`${activeGroup?.en ?? "Workspace"} pages`, `صفحات ${activeGroup?.ar ?? "مساحة العمل"}`)}>
-        <div className="workspace-tabs-copy">
-          <span className="workspace-tabs-label">{t(activeGroup?.en ?? "", activeGroup?.ar ?? "")}</span>
-          {activeGroup && <span className="workspace-tabs-description">{t(activeGroup.descriptionEn, activeGroup.descriptionAr)}</span>}
-        </div>
-        <div className="workspace-tabs-list">
-          {workspaceTabs.map(({ id, path, en, ar }) => <Link
-            key={id}
-            className={`workspace-tab ${page === id ? "active" : ""}`}
-            href={path}
-            aria-current={page === id ? "page" : undefined}
-            onClick={() => setMobileMenuOpen(false)}
-          >{t(en, ar)}</Link>)}
-        </div>
+      {sectionPages.length > 1 && <nav className="tabbar page-wrap-tabs" aria-label={t("Sections", "الأقسام")} style={{ paddingInline: "clamp(14px, 3vw, 34px)", background: "var(--paper)", marginBlockEnd: 0 }}>
+        {sectionPages.map(({ id, path, en, ar }) => <Link key={id} className="tab" href={path} aria-current={page === id ? "page" : undefined}>{t(en, ar)}</Link>)}
       </nav>}
-      {store.refreshWarning && <div role="alert" className="refresh-warning" style={{ padding: "12px 20px", background: "#fff3cd", color: "#513d00" }}>
-        {t("Your change may be saved, but the latest workspace data could not be loaded. The information shown may be outdated.", "قد يكون التغيير اتحفظ، لكن ماقدرناش نحمّل أحدث بيانات مساحة العمل. البيانات الظاهرة ممكن تكون قديمة.")}
+      {store.refreshWarning && <div role="alert" className="refresh-warning">
+        {t("Your change may be saved, but the latest workspace data could not be loaded. The information shown may be outdated.", "قد يكون التغيير قد حُفظ، لكن تعذر تحميل أحدث بيانات مساحة العمل. قد تكون البيانات المعروضة قديمة.")}
         {" "}<button className="btn" type="button" onClick={() => void store.refresh()}>{t("Refresh data", "تحديث البيانات")}</button>
       </div>}
-      <main className="page-wrap" key={page}>
+      <RecordProvider lang={lang} registry={recordRegistry}><main className="page-wrap" key={page}>
         {page === "overview" && <RouteChunk loader={overviewPage} lang={lang} pageProps={{ lang, t, state, navigate, branchName, notify }} />}
-        {page === "catalogue" && actor.role === "owner" && <RouteChunk loader={cataloguePage} lang={lang} pageProps={{ lang }} />}
+        {page === "catalogue" && hasCapability(actor, "catalogue.manage") && <RouteChunk loader={cataloguePage} lang={lang} pageProps={{ lang }} />}
         {page === "quotes" && actor.role !== "technician" && <RouteChunk loader={quotesPage} lang={lang} pageProps={{ lang }} />}
-        {page === "promotions" && actor.role !== "technician" && <RouteChunk loader={promotionsPage} lang={lang} pageProps={{ lang, actorId:actor.userId, actorRole:actor.role }} />}
-        {page === "reservations" && actor.role !== "technician" && <RouteChunk loader={reservationsPage} lang={lang} pageProps={{ lang }} />}
-        {page === "benefits" && actor.role !== "technician" && <RouteChunk loader={benefitsPage} lang={lang} pageProps={{ lang }} />}
-        {page === "transport" && actor.role !== "technician" && <RouteChunk loader={transportPage} lang={lang} pageProps={{ lang }} />}
-        {page === "finance" && actor.role === "owner" && <RouteChunk loader={financePage} lang={lang} pageProps={{ lang, branches: state.branches }} />}
+        {page === "finance" && hasCapability(actor, "finance.view") && <RouteChunk loader={financePage} lang={lang} pageProps={{ lang, branches: state.branches }} />}
         {page === "settings" && actor.role === "owner" && <RouteChunk loader={settingsPage} lang={lang} pageProps={{ lang, t, state, notify, branchName }} />}
         {page === "bookings" && <RouteChunk loader={bookingsPage} lang={lang} pageProps={{ lang, t, state, branchName, customerName, serviceName, vehicleFor, notify, confirmModal: setModal }} />}
         {page === "workshop" && <RouteChunk loader={workshopPage} lang={lang} pageProps={{ lang, t, state, branchName, customerName, serviceName, vehicleFor, notify, role: actor.role }} />}
-        {page === "customers" && actor.role !== "technician" && <RouteChunk loader={customersPage} lang={lang} pageProps={{ lang, t, state, notify, branchId: state.currentBranch === "all" ? state.branches[0]?.id : state.currentBranch }} />}
+        {page === "customers" && hasCapability(actor, "customers.read") && <RouteChunk loader={customersPage} lang={lang} pageProps={{ lang, t, state, notify }} />}
         {page === "warranties" && actor.role !== "technician" && <RouteChunk loader={warrantiesPage} lang={lang} pageProps={{ lang, t, state, notify }} />}
-        {page === "staff" && actor.role === "owner" && <RouteChunk loader={staffPage} lang={lang} pageProps={{ lang, t, state, notify, confirmModal: setModal }} />}
-        {page === "whatsapp" && ["owner", "branch-manager", "receptionist"].includes(actor.role) && <RouteChunk loader={whatsappPage} lang={lang} pageProps={{ lang, t, state, notify, branchName, role: actor.role }} />}
-      </main>
+        {page === "whatsapp" && hasCapability(actor, "whatsapp.use") && <RouteChunk loader={whatsappPage} lang={lang} pageProps={{ lang, t, state, notify, branchName, role: actor.role }} />}
+      </main></RecordProvider>
     </div>
 
-    <nav className="mobile-nav" aria-label={t("Quick navigation", "التنقل السريع")} data-count={mobileNavItems.length + Number(hasMoreNavigation)}>
-      {mobileNavItems.map(({ id, path, icon: Icon, en, ar }) => <Link key={id} className={`mobile-nav-item ${page === id ? "active" : ""}`} href={path} aria-current={page === id ? "page" : undefined} onClick={() => setMobileMenuOpen(false)}>
+    <nav className="mobile-nav" aria-label={t("Quick navigation", "التنقل السريع")} data-count={mobileNavItems.length + Number(overflowItems.length > 0)}>
+      {mobileNavItems.map(({ id, path, icon: Icon, en, ar }) => <Link key={id} className={`mobile-nav-item ${menuPage === id ? "active" : ""}`} href={path} aria-current={menuPage === id ? "page" : undefined}>
         <Icon size={18} /><span>{t(en, ar)}</span>
       </Link>)}
-      {hasMoreNavigation && <button
-        className={`mobile-nav-item mobile-nav-more ${mobileMenuOpen ? "active" : ""}`}
+      {overflowItems.length > 0 && <button
+        className={`mobile-nav-item mobile-nav-more ${overflowItems.some((item) => item.id === menuPage) ? "active" : ""}`}
         type="button"
         aria-expanded={mobileMenuOpen}
         aria-controls="mobile-workspace-menu"
@@ -283,28 +251,20 @@ function ReadyWorkspace({
     </nav>
     {mobileMenuOpen && <div className="mobile-menu-layer">
       <button className="mobile-menu-scrim" type="button" aria-label={t("Close navigation menu", "إغلاق قائمة التنقل")} onClick={() => setMobileMenuOpen(false)} />
-      <nav className="mobile-workspace-menu" id="mobile-workspace-menu" aria-label={t("All workspace sections", "كل أقسام مساحة العمل")}>
+      <nav className="mobile-workspace-menu" id="mobile-workspace-menu" aria-label={t("More sections", "المزيد من الأقسام")}>
         <div className="mobile-menu-head">
-          <div><span className="eyebrow">{t("Garage OS", "جراج أو إس")}</span><strong>{t("Workspace sections", "أقسام مساحة العمل")}</strong></div>
+          <strong>{t("More", "المزيد")}</strong>
           <button type="button" aria-label={t("Close navigation", "إغلاق التنقل")} onClick={() => setMobileMenuOpen(false)}><X size={18} /></button>
         </div>
-        {groupedNavItems.map((group) => <section className="mobile-nav-group" key={group.id}>
-          <h2>{t(group.en, group.ar)}</h2>
-          <p>{t(group.descriptionEn, group.descriptionAr)}</p>
-          <div>{group.items.map(({ id, path, icon: Icon, en, ar }) => <Link
-            key={id}
-            className={`mobile-route ${page === id ? "active" : ""}`}
-            href={path}
-            aria-current={page === id ? "page" : undefined}
-            onClick={() => setMobileMenuOpen(false)}
-          ><Icon size={17} /><span>{t(en, ar)}</span><span className="mobile-route-arrow" aria-hidden="true">{rtl ? "←" : "→"}</span></Link>)}</div>
-        </section>)}
+        <div className="mobile-menu-list">{overflowItems.map(({ id, path, icon: Icon, en, ar }) => <Link
+          key={id}
+          className={`mobile-route ${menuPage === id ? "active" : ""}`}
+          href={path}
+          aria-current={menuPage === id ? "page" : undefined}
+        ><Icon size={17} /><span>{t(en, ar)}</span><span className="mobile-route-arrow" aria-hidden="true">→</span></Link>)}</div>
       </nav>
     </div>}
     {toast && <div role="status" className="toast"><CheckCircle2 size={17} />{toast}</div>}
-    {modal && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setModal(null); }}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <h2 id="modal-title">{modal.title}</h2><p>{modal.body}</p>
-      <div className="modal-actions"><button className="btn" onClick={() => setModal(null)}>{t("Go back", "رجوع")}</button><button className={`btn ${modal.danger ? "btn-danger" : "btn-primary"}`} onClick={modal.confirm}>{t("Confirm", "تأكيد")}</button></div>
-    </section></div>}
+    <ConfirmDialog open={modal !== null} lang={lang} title={modal?.title ?? ""} body={modal?.body} danger={modal?.danger} onCancel={() => setModal(null)} onConfirm={() => modal?.confirm()} />
   </div>;
 }

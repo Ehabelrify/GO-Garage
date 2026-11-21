@@ -114,6 +114,9 @@ export interface GarageActor {
   role: GarageRole;
   branchIds: string[];
   isDemo?: boolean;
+  /** Effective capabilities (role defaults + overrides) computed by the server. Display hint only; the server enforces. */
+  capabilities?: string[];
+  permissions?: Partial<Record<string, boolean>>;
 }
 
 interface ApiFailure {

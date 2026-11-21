@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Pencil, Plus, Printer, Save, Trash2, X } from "lucide-react";
-import { calculateWarrantyInvoiceTotals } from "@garage/domain";
+import {
+  calculateWarrantyInvoiceTotals, currencyDefinition, formatCurrencyAmount, isSupportedCurrency, resolveCurrency, supportedCurrencies,
+} from "@garage/domain";
 import type {
   Locale,
   WarrantyInvoiceDraft,
@@ -8,6 +10,7 @@ import type {
   WarrantyInvoicePaymentMethod,
   WarrantyRecord,
 } from "@garage/domain";
+import { Collapsible, ConfirmDialog, Field, FormSection, Notice, RequiredNote, StatusBadge } from "../../shared/components";
 import { unknownWriteOutcomeCopy, useGarageStore } from "../../shared/store";
 import { startWarrantyPrint } from "./warranty-print";
 import { useWarrantyDraftState } from "./warranty-form-state";
@@ -21,7 +24,8 @@ interface WarrantyInvoicePanelProps {
   branchLabel: string;
 }
 
-const emptyDraft = (): WarrantyInvoiceDraftInput => ({
+const emptyDraft = (currency: string): WarrantyInvoiceDraftInput => ({
+  currency,
   items: [{ description: "", quantity: 1, unitAmount: null }],
   taxRatePercent: null,
   paidAmount: 0,
@@ -31,6 +35,7 @@ const emptyDraft = (): WarrantyInvoiceDraftInput => ({
 
 function inputFromInvoice(invoice: WarrantyInvoiceDraft): WarrantyInvoiceDraftInput {
   return {
+    currency: invoice.currency,
     items: invoice.items.map((item) => ({
       description: item.description,
       quantity: item.quantity,
@@ -43,29 +48,29 @@ function inputFromInvoice(invoice: WarrantyInvoiceDraft): WarrantyInvoiceDraftIn
   };
 }
 
-function money(value: number | null, locale: Locale) {
-  return value === null
-    ? "—"
-    : new Intl.NumberFormat(locale === "ar" ? "ar-EG" : "en-EG", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(value);
-}
-
 function text(locale: Locale, en: string, ar: string) {
   return locale === "ar" ? ar : en;
 }
 
+/** Amount in the invoice currency with its symbol; quantities and percentages use plain numbers. */
+function Amount({ value, currency, locale }: { value: number | null; currency: string; locale: Locale }) {
+  return <bdi className="money mono">{formatCurrencyAmount(value, currency, locale)}</bdi>;
+}
+const plain = (value: number, locale: Locale) => new Intl.NumberFormat(locale === "ar" ? "ar-EG-u-nu-latn" : "en-GB", { maximumFractionDigits: 2 }).format(value);
+
 function invoiceErrorText(code: string, locale: Locale) {
   const messages: Record<string, { en: string; ar: string }> = {
     ROLE_FORBIDDEN: { en: "Your role or branch access does not allow this invoice action.", ar: "دورك أو صلاحية فرعك مش بيسمحوا بإجراء الفاتورة ده." },
-    WARRANTY_NOT_FOUND: { en: "This warranty record is no longer available.", ar: "سجل الضمان ده مبقاش متاح." },
+    WARRANTY_NOT_FOUND: { en: "This warranty record is no longer available.", ar: "لم يعد سجل الضمان هذا متاحًا." },
     INVOICE_DRAFT_NOT_FOUND: { en: "Create a draft invoice before editing it.", ar: "جهّز مسودة فاتورة قبل تعديلها." },
     INVALID_INVOICE_DRAFT: { en: "Check the draft items, amounts, tax and payment fields.", ar: "راجع بنود المسودة والمبالغ والضريبة وبيانات الدفع." },
-    REQUEST_FAILED: { en: "The draft could not be saved. Check your connection and try again.", ar: "ماقدرناش نحفظ المسودة. راجع الاتصال وجرّب تاني." },
+    UNSUPPORTED_CURRENCY: { en: "Choose a currency from the supported list.", ar: "اختر عملة من القائمة المدعومة." },
+    MIXED_CURRENCY: { en: "Every line must use the invoice currency. Totals never mix currencies.", ar: "يجب أن تستخدم كل البنود عملة الفاتورة. لا تُجمع عملات مختلفة." },
+    CURRENCY_LOCKED: { en: "The currency cannot change once a payment amount has been entered.", ar: "لا يمكن تغيير العملة بعد إدخال مبلغ مدفوع." },
+    REQUEST_FAILED: { en: "The draft could not be saved. Check your connection and try again.", ar: "تعذر حفظ المسودة. راجع الاتصال وحاول مرة أخرى." },
   };
   const message = messages[code];
-  return message ? text(locale, message.en, message.ar) : text(locale, "The invoice draft could not be saved.", "ماقدرناش نحفظ مسودة الفاتورة.");
+  return message ? text(locale, message.en, message.ar) : text(locale, "The invoice draft could not be saved.", "تعذر حفظ مسودة الفاتورة.");
 }
 
 export function WarrantyInvoicePanel({
@@ -77,25 +82,35 @@ export function WarrantyInvoicePanel({
   branchLabel,
 }: WarrantyInvoicePanelProps) {
   const store = useGarageStore();
+  const t = (en: string, ar: string) => text(locale, en, ar);
   const invoice = store.state?.warrantyInvoiceDrafts.find((item) => item.warrantyId === warranty.id);
+  const storedCurrency = resolveCurrency(invoice?.currency);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft, discardInvoiceDraft] = useWarrantyDraftState<WarrantyInvoiceDraftInput>(
     { userId: store.actor?.userId ?? "anonymous", dataset: store.actor?.isDemo ? "demo" : "live",
       task: "invoice", entityId: `${warranty.id}:${invoice?.id ?? "new"}`,
       version: invoice ? Date.parse(invoice.updatedAt) || 0 : 0 },
-    () => invoice ? inputFromInvoice(invoice) : emptyDraft(),
+    () => invoice ? inputFromInvoice(invoice) : emptyDraft(storedCurrency),
   );
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [printPending, setPrintPending] = useState(false);
+  const [pendingCurrency, setPendingCurrency] = useState<string | null>(null);
   const printAreaRef = useRef<HTMLDivElement>(null);
   const printCleanupRef = useRef<(() => void) | null>(null);
+  const draftCurrency = resolveCurrency(draft.currency, storedCurrency);
   const totals = useMemo(
     () => calculateWarrantyInvoiceTotals(draft.items, draft.taxRatePercent, draft.paidAmount),
     [draft.items, draft.taxRatePercent, draft.paidAmount],
   );
+  const savedTotals = useMemo(
+    () => invoice ? calculateWarrantyInvoiceTotals(invoice.items, invoice.taxRatePercent, invoice.paidAmount) : totals,
+    [invoice, totals],
+  );
+  const currencyLocked = Boolean(invoice && invoice.paidAmount > 0);
+  const hasAmounts = draft.items.some((item) => item.unitAmount !== null);
 
   useEffect(() => () => printCleanupRef.current?.(), []);
 
@@ -105,7 +120,7 @@ export function WarrantyInvoicePanel({
   }, [store.actor?.userId, store.actor?.isDemo, warranty.id]);
 
   useEffect(() => {
-    if (!editing) setDraft(invoice ? inputFromInvoice(invoice) : emptyDraft());
+    if (!editing) setDraft(invoice ? inputFromInvoice(invoice) : emptyDraft(storedCurrency));
   }, [invoice, editing]);
 
   useEffect(() => {
@@ -128,30 +143,24 @@ export function WarrantyInvoicePanel({
       setError(unknownWriteOutcomeCopy(result.error, locale) ?? invoiceErrorText(result.error, locale));
       return;
     }
-    setDraft({
-      items: [{ description: serviceLabel, quantity: 1, unitAmount: null }],
-      taxRatePercent: null,
-      paidAmount: 0,
-      paymentMethod: null,
-      notes: "",
-    });
+    setDraft({ ...emptyDraft(storedCurrency), items: [{ description: serviceLabel, quantity: 1, unitAmount: null }] });
     setExpanded(true);
     setEditing(true);
-    setNotice(text(locale, "Draft saved. Add the Owner-approved amounts before printing.", "المسودة اتحفظت. أضف المبالغ المعتمدة من المالك قبل الطباعة."));
+    setNotice(t("Draft saved. Add the Owner-approved amounts before printing.", "المسودة اتحفظت. أضف المبالغ المعتمدة من المالك قبل الطباعة."));
   };
 
   const saveDraft = async () => {
     if (!invoice || !draft.items.length || draft.items.some((item) => !item.description.trim())) return;
     setBusy(true);
     setError("");
-    const result = await store.updateWarrantyInvoiceDraft(warranty.id, draft);
+    const result = await store.updateWarrantyInvoiceDraft(warranty.id, { ...draft, currency: draftCurrency });
     setBusy(false);
     if (!result.ok) {
       setError(unknownWriteOutcomeCopy(result.error, locale) ?? invoiceErrorText(result.error, locale));
       return;
     }
     setEditing(false);
-    setNotice(text(locale, "Draft invoice saved. It has not been issued.", "مسودة الفاتورة اتحفظت. ما اتصدرتش."));
+    setNotice(t("Draft invoice saved. It has not been issued.", "مسودة الفاتورة اتحفظت. ما اتصدرتش."));
   };
 
   const printDraft = () => {
@@ -167,114 +176,166 @@ export function WarrantyInvoicePanel({
     }));
   };
 
-  const paymentStatusLabel = {
-    unpriced: text(locale, "Amounts or Owner tax settings pending", "المبالغ أو إعداد الضريبة لسه محتاجة اعتماد"),
-    unpaid: text(locale, "Unpaid draft", "مسودة غير مدفوعة"),
-    partial: text(locale, "Partially paid · draft", "مدفوع جزئياً · مسودة"),
-    paid: text(locale, "Paid amount entered · draft", "تم إدخال مبلغ مدفوع · مسودة"),
-  }[totals.paymentStatus];
+  const chooseCurrency = (code: string) => {
+    if (code === draftCurrency) return;
+    // Amounts are never converted; confirm before keeping numbers under a different currency.
+    if (hasAmounts) setPendingCurrency(code);
+    else setDraft((current) => ({ ...current, currency: code }));
+  };
+
+  const currencyOptions = supportedCurrencies();
+  const currencyLabel = (code: string) => {
+    const definition = currencyDefinition(code);
+    return definition ? `${definition.name[locale]} (${definition.symbol[locale]})` : code;
+  };
+  const dateText = (value: string) => new Date(value).toLocaleDateString(locale === "ar" ? "ar-EG-u-nu-latn" : "en-GB");
+  const invalid = !draft.items.length || draft.items.some((item) => !item.description.trim() || item.quantity <= 0) || !isSupportedCurrency(draftCurrency);
+  const owner = store.actor?.role === "owner";
 
   return <section className="w-invoice-panel">
     <div className="w-invoice-head">
       <div>
-        <strong><FileText size={15} />{text(locale, "Draft invoice", "مسودة فاتورة")}</strong>
-        <p>{text(locale, "Amounts, tax and currency still require Owner confirmation. This cannot be issued as a final invoice.", "المبالغ والضريبة والعملة لسه محتاجة تأكيد المالك. المسودة دي مش فاتورة نهائية.")}</p>
+        <strong><FileText size={15} />{t("Draft invoice", "مسودة فاتورة")}</strong>
+        <p>{t("Amounts and tax still require Owner confirmation. This cannot be issued as a final invoice.", "المبالغ والضريبة بانتظار تأكيد المالك. المسودة دي مش فاتورة نهائية.")}</p>
       </div>
-      {invoice && <span className="w-badge draft">{text(locale, "Draft only", "مسودة فقط")}</span>}
+      {invoice && <div className="w-invoice-badges">
+        <StatusBadge status="draft" domain="invoice" lang={locale} />
+        <span className="tag" title={currencyLabel(storedCurrency)}>{storedCurrency}</span>
+      </div>}
     </div>
 
     {!invoice ? <div className="w-invoice-empty">
-      <span>{text(locale, "No invoice draft is linked yet.", "لسه مفيش مسودة فاتورة مرتبطة.")}</span>
+      <span>{t("No invoice draft is linked yet.", "لا توجد مسودة فاتورة مرتبطة بعد.")}</span>
       <button className="btn btn-sm btn-primary" type="button" disabled={busy} onClick={() => void createDraft()}>
-        <Plus size={14} />{busy ? text(locale, "Preparing…", "بنجهّز…") : text(locale, "Create draft invoice", "جهّز مسودة فاتورة")}
+        <Plus size={14} />{busy ? t("Preparing…", "بنجهّز…") : t("Create draft invoice", "جهّز مسودة فاتورة")}
       </button>
     </div> : <>
       <div className="w-invoice-actions">
         {!editing && <button className="btn btn-sm" type="button" onClick={() => setExpanded((current) => !current)} aria-expanded={expanded} aria-controls={`w-invoice-${invoice.id}`}>
-          <FileText size={13} />{expanded ? text(locale, "Hide draft", "اخفِ المسودة") : text(locale, "View draft", "اعرض المسودة")}
+          <FileText size={13} />{expanded ? t("Hide draft", "اخفِ المسودة") : t("View draft", "اعرض المسودة")}
         </button>}
         {!editing && <button className="btn btn-sm" type="button" onClick={() => { setDraft(inputFromInvoice(invoice)); setExpanded(true); setEditing(true); setError(""); }}>
-          <Pencil size={13} />{text(locale, "Edit draft", "عدّل المسودة")}
+          <Pencil size={13} />{t("Edit draft", "عدّل المسودة")}
         </button>}
         {!editing && <button className="btn btn-sm btn-primary" type="button" onClick={printDraft}>
-          <Printer size={13} />{text(locale, "Print draft", "اطبع المسودة")}
+          <Printer size={13} />{t("Print draft", "اطبع المسودة")}
         </button>}
-        {store.actor?.role === "owner" && <a className="btn btn-sm" href="/workspace/finance">{text(locale, "Open audited money ledger", "فتح سجل الأموال الخاضع للمراجعة")}</a>}
+        {owner && <a className="btn btn-sm" href="/workspace/finance">{t("Open audited money ledger", "فتح سجل الأموال الخاضع للمراجعة")}</a>}
       </div>
-      {store.actor?.role === "owner" && <p className="w-invoice-payment-meta">{text(locale, "Draft payment fields are legacy notes only. Record verified money events separately in Operational finance.", "حقول الدفع في المسودة ملاحظات قديمة فقط. سجّل أحداث الأموال المؤكدة بشكل منفصل في المالية التشغيلية.")}</p>}
+      {owner && <p className="w-invoice-payment-meta">{t("Draft payment fields are legacy notes only. Record verified money events separately in Operational finance.", "حقول الدفع في المسودة ملاحظات قديمة فقط. سجّل أحداث الأموال المؤكدة بشكل منفصل في المالية التشغيلية.")}</p>}
       {expanded && <>
       {invoice.paymentRecordedAt && <p className="w-invoice-payment-meta">
-        {text(locale, "Payment entry recorded", "اتسجلت بيانات الدفع")}
-        {` · ${new Date(invoice.paymentRecordedAt).toLocaleString(locale === "ar" ? "ar-EG" : "en-EG")}`}
+        {t("Payment entry recorded", "اتسجلت بيانات الدفع")}
+        {` · ${new Date(invoice.paymentRecordedAt).toLocaleString(locale === "ar" ? "ar-EG-u-nu-latn" : "en-GB")}`}
         {invoice.paymentRecordedBy ? ` · ${invoice.paymentRecordedBy}` : ""}
       </p>}
 
-      {editing && <div className="w-invoice-editor">
-        <div className="w-invoice-editor-head"><strong>{text(locale, "Job items", "بنود الشغل")}</strong>
-          <button className="btn btn-sm" type="button" onClick={() => setDraft((current) => ({
+      {editing && <form className="w-invoice-editor" noValidate onSubmit={(event) => { event.preventDefault(); if (!invalid) void saveDraft(); }}>
+        <RequiredNote text={t("* Required", "* مطلوب")} />
+        <FormSection title={t("Currency", "العملة")} description={t("Every amount on this invoice is in one currency. Amounts are not converted if you change it.", "كل مبالغ الفاتورة بعملة واحدة. لا يتم تحويل المبالغ إذا غيّرت العملة.")}>
+          <Field label={t("Invoice currency", "عملة الفاتورة")} required
+            hint={currencyLocked ? t("Locked because a payment amount was entered.", "مقفلة لأنه تم إدخال مبلغ مدفوع.") : undefined}>
+            <select className="field-select" value={draftCurrency} disabled={currencyLocked} onChange={(event) => chooseCurrency(event.target.value)}>
+              {currencyOptions.map((currency) => <option key={currency.code} value={currency.code}>{currencyLabel(currency.code)}</option>)}
+            </select>
+          </Field>
+        </FormSection>
+
+        <FormSection title={t("Job items", "بنود الشغل")} columns={1}>
+          {draft.items.map((item, index) => <div className="w-invoice-line-edit" key={index}>
+            <Field label={t("Description", "الوصف")} required>
+              <input className="field-input" maxLength={240} value={item.description} onChange={(event) => updateItem(index, { description: event.target.value })} />
+            </Field>
+            <Field label={t("Qty", "الكمية")}>
+              <input className="field-input" type="number" min="0.01" max="10000" step="0.01" value={item.quantity} onChange={(event) => updateItem(index, { quantity: Number(event.target.value) || 0 })} />
+            </Field>
+            <Field label={`${t("Unit amount", "سعر الوحدة")} (${currencyDefinition(draftCurrency)?.symbol[locale] ?? draftCurrency})`}>
+              <input className="field-input" type="number" min="0" max="1000000000" step="0.01" placeholder={t("Not entered", "لسه ماتكتبش")} value={item.unitAmount ?? ""} onChange={(event) => updateItem(index, { unitAmount: event.target.value === "" ? null : Number(event.target.value) })} />
+            </Field>
+            <button className="btn btn-icon btn-sm" type="button" aria-label={t(`Remove item ${index + 1}`, `احذف البند ${index + 1}`)} disabled={draft.items.length <= 1} onClick={() => setDraft((current) => ({ ...current, items: current.items.filter((_, itemIndex) => itemIndex !== index) }))}><Trash2 size={13} /></button>
+          </div>)}
+          <div><button className="btn btn-sm" type="button" onClick={() => setDraft((current) => ({
             ...current,
             items: [...current.items, { description: "", quantity: 1, unitAmount: null }],
-          }))}><Plus size={13} />{text(locale, "Add item", "أضف بند")}</button>
-        </div>
-        {draft.items.map((item, index) => <div className="w-invoice-line-edit" key={index}>
-          <label><span>{text(locale, "Description", "الوصف")}</span><input className="field-input" maxLength={240} value={item.description} onChange={(event) => updateItem(index, { description: event.target.value })} /></label>
-          <label><span>{text(locale, "Qty", "الكمية")}</span><input className="field-input" type="number" min="0.01" max="10000" step="0.01" value={item.quantity} onChange={(event) => updateItem(index, { quantity: Number(event.target.value) || 0 })} /></label>
-          <label><span>{text(locale, "Amount · currency pending", "المبلغ · العملة لسه مش معتمدة")}</span><input className="field-input" type="number" min="0" max="1000000000" step="0.01" placeholder={text(locale, "Not entered", "لسه ماتكتبش")} value={item.unitAmount ?? ""} onChange={(event) => updateItem(index, { unitAmount: event.target.value === "" ? null : Number(event.target.value) })} /></label>
-          <button className="btn btn-icon btn-sm" type="button" aria-label={text(locale, `Remove item ${index + 1}`, `احذف البند ${index + 1}`)} disabled={draft.items.length <= 1} onClick={() => setDraft((current) => ({ ...current, items: current.items.filter((_, itemIndex) => itemIndex !== index) }))}><Trash2 size={13} /></button>
-        </div>)}
-        <div className="w-invoice-edit-grid">
-          <label><span>{text(locale, "Draft tax rate (%) · Owner approval pending", "نسبة الضريبة للمسودة (%) · موافقة المالك مطلوبة")}</span><input className="field-input" type="number" min="0" max="100" step="0.01" placeholder={text(locale, "Not configured", "مش متحددة")} value={draft.taxRatePercent ?? ""} onChange={(event) => setDraft((current) => ({ ...current, taxRatePercent: event.target.value === "" ? null : Number(event.target.value) }))} /></label>
-          <label><span>{text(locale, "Amount paid · draft tracking only", "المبلغ المدفوع · متابعة مسودة فقط")}</span><input className="field-input" type="number" min="0" max="1000000000" step="0.01" value={draft.paidAmount} onChange={(event) => setDraft((current) => ({ ...current, paidAmount: Number(event.target.value) || 0 }))} /></label>
-          <label><span>{text(locale, "Payment method", "طريقة الدفع")}</span><select className="field-select" value={draft.paymentMethod ?? ""} onChange={(event) => setDraft((current) => ({ ...current, paymentMethod: (event.target.value || null) as WarrantyInvoicePaymentMethod | null }))}>
-            <option value="">{text(locale, "Not recorded", "غير مسجل")}</option>
-            <option value="cash">{text(locale, "Cash", "نقدي")}</option>
-            <option value="card">{text(locale, "Card", "بطاقة")}</option>
-            <option value="transfer">{text(locale, "Transfer", "تحويل")}</option>
-            <option value="other">{text(locale, "Other", "أخرى")}</option>
-          </select></label>
-        </div>
-        <label className="w-invoice-notes"><span>{text(locale, "Internal draft note", "ملاحظة داخلية للمسودة")}</span><textarea className="field-textarea" maxLength={1000} value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} /></label>
+          }))}><Plus size={13} />{t("Add item", "أضف بند")}</button></div>
+        </FormSection>
+
+        <Collapsible title={t("Tax and payment notes", "الضريبة وملاحظات الدفع")} defaultOpen={draft.taxRatePercent !== null || draft.paidAmount > 0}>
+          <FormSection title={t("Draft tracking", "متابعة المسودة")} description={t("Tax is a draft rate pending Owner approval. Payment fields are draft tracking only.", "الضريبة نسبة للمسودة بانتظار موافقة المالك. حقول الدفع للمتابعة فقط.")}>
+            <Field label={t("Draft tax rate (%)", "نسبة الضريبة للمسودة (%)")}>
+              <input className="field-input" type="number" min="0" max="100" step="0.01" placeholder={t("Not configured", "مش متحددة")} value={draft.taxRatePercent ?? ""} onChange={(event) => setDraft((current) => ({ ...current, taxRatePercent: event.target.value === "" ? null : Number(event.target.value) }))} />
+            </Field>
+            <Field label={t("Amount paid", "المبلغ المدفوع")}>
+              <input className="field-input" type="number" min="0" max="1000000000" step="0.01" value={draft.paidAmount} onChange={(event) => setDraft((current) => ({ ...current, paidAmount: Number(event.target.value) || 0 }))} />
+            </Field>
+            <Field label={t("Payment method", "طريقة الدفع")}>
+              <select className="field-select" value={draft.paymentMethod ?? ""} onChange={(event) => setDraft((current) => ({ ...current, paymentMethod: (event.target.value || null) as WarrantyInvoicePaymentMethod | null }))}>
+                <option value="">{t("Not recorded", "غير مسجل")}</option>
+                <option value="cash">{t("Cash", "نقدي")}</option>
+                <option value="card">{t("Card", "بطاقة")}</option>
+                <option value="transfer">{t("Transfer", "تحويل")}</option>
+                <option value="other">{t("Other", "أخرى")}</option>
+              </select>
+            </Field>
+            <Field label={t("Internal draft note", "ملاحظة داخلية للمسودة")} full>
+              <textarea className="field-textarea" maxLength={1000} value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} />
+            </Field>
+          </FormSection>
+        </Collapsible>
+
+        <p className="w-invoice-live-total">
+          {t("Draft total", "إجمالي المسودة")}: <Amount value={totals.total} currency={draftCurrency} locale={locale} />
+          {totals.total === null && <span className="form-hint"> · {t("add every amount and a tax rate", "أضف كل المبالغ ونسبة الضريبة")}</span>}
+        </p>
         <div className="w-invoice-actions">
-          <button className="btn btn-sm" type="button" disabled={busy} onClick={() => { discardInvoiceDraft(); setEditing(false); setError(""); }}><X size={13} />{text(locale, "Cancel", "إلغاء")}</button>
-          <button className="btn btn-sm btn-primary" type="button" disabled={busy || !draft.items.length || draft.items.some((item) => !item.description.trim() || item.quantity <= 0)} onClick={() => void saveDraft()}><Save size={13} />{busy ? text(locale, "Saving…", "بنحفظ…") : text(locale, "Save draft", "احفظ المسودة")}</button>
+          <button className="btn btn-sm" type="button" disabled={busy} onClick={() => { discardInvoiceDraft(); setEditing(false); setError(""); }}><X size={13} />{t("Cancel", "إلغاء")}</button>
+          <button className="btn btn-sm btn-primary" type="submit" disabled={busy || invalid}><Save size={13} />{busy ? t("Saving…", "بنحفظ…") : t("Save draft", "احفظ المسودة")}</button>
         </div>
-      </div>}
+      </form>}
 
       <div className="w-invoice-print-area" id={`w-invoice-${invoice.id}`} ref={printAreaRef} dir={locale === "ar" ? "rtl" : "ltr"}>
         <div className="w-invoice-print-title">
-          <div><span>{text(locale, "WORKSHOP INVOICE", "فاتورة ورشة")}</span><h3>{text(locale, "DRAFT · NOT A FINAL INVOICE", "مسودة · مش فاتورة نهائية")}</h3></div>
-          <bdi>{invoice.id}</bdi>
+          <div><span>{t("WORKSHOP INVOICE", "فاتورة ورشة")}</span><h3>{t("DRAFT · NOT A FINAL INVOICE", "مسودة · مش فاتورة نهائية")}</h3></div>
+          <bdi>{currencyLabel(storedCurrency)}</bdi>
         </div>
         <div className="w-invoice-party-grid">
-          <div><small>{text(locale, "Customer", "العميل")}</small><strong>{customerName}</strong></div>
-          <div><small>{text(locale, "Vehicle", "العربية")}</small><strong>{vehicleLabel}</strong></div>
-          <div><small>{text(locale, "Service", "الخدمة")}</small><strong>{serviceLabel}</strong></div>
-          <div><small>{text(locale, "Branch", "الفرع")}</small><strong>{branchLabel}</strong></div>
-          <div><small>{text(locale, "Job reference", "رقم أمر الشغل")}</small><strong><bdi>{warranty.jobId}</bdi></strong></div>
-          <div><small>{text(locale, "Prepared", "تاريخ التجهيز")}</small><strong>{new Date(invoice.updatedAt).toLocaleDateString(locale === "ar" ? "ar-EG" : "en-EG")}</strong></div>
+          <div><small>{t("Customer", "العميل")}</small><strong>{customerName}</strong></div>
+          <div><small>{t("Vehicle", "العربية")}</small><strong>{vehicleLabel}</strong></div>
+          <div><small>{t("Service", "الخدمة")}</small><strong>{serviceLabel}</strong></div>
+          <div><small>{t("Branch", "الفرع")}</small><strong>{branchLabel}</strong></div>
+          <div><small>{t("Prepared", "تاريخ التجهيز")}</small><strong>{dateText(invoice.updatedAt)}</strong></div>
         </div>
         <table className="w-invoice-table">
-          <thead><tr><th>{text(locale, "Item", "البند")}</th><th>{text(locale, "Qty", "الكمية")}</th><th>{text(locale, "Unit amount", "سعر الوحدة")}</th><th>{text(locale, "Line amount", "إجمالي البند")}</th></tr></thead>
+          <thead><tr><th>{t("Item", "البند")}</th><th>{t("Qty", "الكمية")}</th><th>{t("Unit amount", "سعر الوحدة")}</th><th>{t("Line amount", "إجمالي البند")}</th></tr></thead>
           <tbody>{invoice.items.map((item) => <tr key={item.id}>
-            <td>{item.description}</td><td>{money(item.quantity, locale)}</td>
-            <td>{money(item.unitAmount, locale)}</td>
-            <td>{item.unitAmount === null ? "—" : money(item.quantity * item.unitAmount, locale)}</td>
+            <td>{item.description}</td><td>{plain(item.quantity, locale)}</td>
+            <td>{item.unitAmount === null ? "—" : <Amount value={item.unitAmount} currency={storedCurrency} locale={locale} />}</td>
+            <td>{item.unitAmount === null ? "—" : <Amount value={item.quantity * item.unitAmount} currency={storedCurrency} locale={locale} />}</td>
           </tr>)}</tbody>
         </table>
         <div className="w-invoice-totals">
-          <div><span>{text(locale, "Subtotal", "الإجمالي قبل الضريبة")}</span><strong>{money(totals.subtotal, locale)}</strong></div>
-          <div><span>{text(locale, "Draft tax", "ضريبة المسودة")}{invoice.taxRatePercent === null ? ` · ${text(locale, "pending Owner confirmation", "بانتظار تأكيد المالك")}` : ` · ${money(invoice.taxRatePercent, locale)}%`}</span><strong>{money(totals.taxAmount, locale)}</strong></div>
-          <div className="w-invoice-total"><span>{text(locale, "Draft total", "إجمالي المسودة")}</span><strong>{money(totals.total, locale)}</strong></div>
-          <div><span>{text(locale, "Payment status", "حالة الدفع")}</span><strong>{paymentStatusLabel}</strong></div>
-          <div><span>{text(locale, "Amount paid", "المبلغ المدفوع")}{invoice.paymentMethod ? ` · ${invoice.paymentMethod}` : ""}</span><strong>{money(invoice.paidAmount, locale)}</strong></div>
-          {invoice.paymentRecordedAt && <div><span>{text(locale, "Payment entry date", "تاريخ تسجيل الدفع")}</span><strong>{new Date(invoice.paymentRecordedAt).toLocaleDateString(locale === "ar" ? "ar-EG" : "en-EG")}</strong></div>}
-          <div className="w-invoice-total"><span>{text(locale, "Draft balance · negative means overpayment", "المتبقي في المسودة · السالب معناه دفعة زيادة")}</span><strong>{money(totals.balance, locale)}</strong></div>
+          <div><span>{t("Subtotal", "الإجمالي قبل الضريبة")}</span><strong><Amount value={savedTotals.subtotal} currency={storedCurrency} locale={locale} /></strong></div>
+          <div><span>{t("Draft tax", "ضريبة المسودة")}{invoice.taxRatePercent === null ? ` · ${t("pending Owner confirmation", "بانتظار تأكيد المالك")}` : ` · ${plain(invoice.taxRatePercent, locale)}%`}</span><strong><Amount value={savedTotals.taxAmount} currency={storedCurrency} locale={locale} /></strong></div>
+          <div className="w-invoice-total"><span>{t("Draft total", "إجمالي المسودة")}</span><strong><Amount value={savedTotals.total} currency={storedCurrency} locale={locale} /></strong></div>
+          <div><span>{t("Payment status", "حالة الدفع")}</span><strong>{savedTotals.paymentStatus === "unpriced" ? <span title={t("Amounts or Owner tax settings pending", "المبالغ أو إعداد الضريبة بانتظار الاعتماد")}><StatusBadge status="unpriced" domain="invoice" lang={locale} /></span> : <StatusBadge status={savedTotals.paymentStatus} domain="invoice" lang={locale} />}</strong></div>
+          <div><span>{t("Amount paid", "المبلغ المدفوع")}</span><strong><Amount value={invoice.paidAmount} currency={storedCurrency} locale={locale} /></strong></div>
+          {invoice.paymentRecordedAt && <div><span>{t("Payment entry date", "تاريخ تسجيل الدفع")}</span><strong>{dateText(invoice.paymentRecordedAt)}</strong></div>}
+          <div className="w-invoice-total"><span>{t("Draft balance · negative means overpayment", "المتبقي في المسودة · السالب معناه دفعة زيادة")}</span><strong><Amount value={savedTotals.balance} currency={storedCurrency} locale={locale} /></strong></div>
         </div>
-        <p className="w-invoice-disclaimer">{text(locale, "Draft for review only. Currency, tax treatment, official template, and final issuance are pending Owner approval. Do not use as a tax invoice or proof of payment.", "مسودة للمراجعة فقط. العملة والمعاملة الضريبية والقالب الرسمي والإصدار النهائي بانتظار موافقة المالك. لا تستخدمها كفاتورة ضريبية أو إثبات دفع.")}</p>
+        <p className="w-invoice-disclaimer">{t("Draft for review only. Tax treatment, official template, and final issuance are pending Owner approval. Do not use as a tax invoice or proof of payment.", "مسودة للمراجعة فقط. المعاملة الضريبية والقالب الرسمي والإصدار النهائي بانتظار موافقة المالك. لا تستخدمها كفاتورة ضريبية أو إثبات دفع.")}</p>
       </div>
       </>}
-      {notice && <p className="w-inline-note" role="status">{notice}</p>}
+      {notice && <Notice tone="info">{notice}</Notice>}
       {error && <div className="w-error" role="alert">{error}</div>}
     </>}
+
+    <ConfirmDialog
+      open={pendingCurrency !== null} lang={locale}
+      title={t("Change the invoice currency?", "تغيير عملة الفاتورة؟")}
+      body={pendingCurrency ? t(`Amounts already entered stay the same numbers and will be read as ${currencyLabel(pendingCurrency)}. They are not converted.`, `تبقى المبالغ المدخلة بنفس الأرقام وستُقرأ بعملة ${currencyLabel(pendingCurrency)}. لا يتم تحويلها.`) : undefined}
+      confirmLabel={t("Change currency", "تغيير العملة")}
+      onCancel={() => setPendingCurrency(null)}
+      onConfirm={() => { if (pendingCurrency) setDraft((current) => ({ ...current, currency: pendingCurrency })); setPendingCurrency(null); }}
+    />
   </section>;
 }

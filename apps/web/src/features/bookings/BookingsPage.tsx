@@ -1,208 +1,343 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Plus, Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { hasCapability } from "../../shared/capabilities";
+import { Plus } from "lucide-react";
+import type { BranchId, CreateCustomerInput } from "@garage/domain";
 import { bookingAvailabilityApi, unknownWriteOutcomeCopy, useGarageStore, type SlotAvailability } from "../../shared/store";
-import type { BranchId } from "@garage/domain";
-import { customerDisplay, dateLabel, EmptyState, PageHeading, SectionTitle, serviceDisplay, Status, timeLabel, type ModalConfig, type RecordPageProps } from "../../shared/ui";
-import { reconcileBookingDraft } from "../../shared/task-steps";
+import { dateLabel, serviceDisplay, timeLabel, type ModalConfig, type RecordPageProps } from "../../shared/ui";
+import {
+  Collapsible, ConfirmDialog, DataTable, DetailDrawer, EmptyState, Field, FilterBar, FormSection, PageHeader, RecordRef, RequiredNote, StatusBadge, useUrlState,
+} from "../../shared/components";
+import { applyDraftChange, dateRanges, draftReady, isoDate, matchesBooking, noShowJob, sortKey, type BookingDraft, type DateRange } from "./booking-logic";
+import { CustomerVehiclePicker } from "./CustomerVehiclePicker";
+import { TransportPanel } from "../transport/TransportPanel";
+import "./bookings.css";
 
 interface BookingsPageProps extends RecordPageProps {
-  confirmModal: (config: ModalConfig | null) => void;
-}
-
-interface BookingForm {
-  customerId: string;
-  vehicleId: string;
-  serviceId: string;
-  branchId: BranchId;
-  dropoffDate: string;
-  dropoffTime: string;
+  /** Kept for the shell's prop contract; destructive actions now use ConfirmDialog. */
+  confirmModal?: (config: ModalConfig | null) => void;
 }
 
 const bookingErrorCopy: Record<string, { en: string; ar: string }> = {
-  INVALID_BOOKING: { en: "Check the customer, vehicle, service, date, and branch.", ar: "راجع بيانات العميل والعربية والخدمة والتاريخ والفرع." },
-  BRANCH_CLOSED: { en: "The branch is closed on this weekday.", ar: "الفرع مقفول في اليوم ده." },
-  DAILY_CAP_REACHED: { en: "The branch has reached its daily vehicle intake limit.", ar: "الفرع وصل للحد اليومي لاستقبال العربيات." },
-  BAY_CAPACITY_REACHED: { en: "Bay-hour capacity is full for this date and service.", ar: "ساعات البايات خلصت للتاريخ والخدمة دول." },
-  BOOKING_NOT_PENDING: { en: "This booking is no longer waiting for confirmation.", ar: "الحجز ده مش مستني تأكيد دلوقتي." },
-  MANAGER_REVIEW_REQUIRED: { en: "This booking needs a manager to confirm it.", ar: "مدير الفرع لازم يأكد الحجز ده." },
-  JOB_ALREADY_STARTED: { en: "The job has started; use the workshop workflow instead.", ar: "الشغل على العربية بدأ؛ كمّل من صفحة الورشة." },
+  INVALID_BOOKING: { en: "Check the customer, vehicle, service, date, and branch.", ar: "راجع بيانات العميل والمركبة والخدمة والتاريخ والفرع." },
+  BRANCH_CLOSED: { en: "The branch is closed on this weekday.", ar: "الفرع مغلق في هذا اليوم." },
+  DAILY_CAP_REACHED: { en: "The branch has reached its daily vehicle intake limit.", ar: "وصل الفرع إلى الحد اليومي لاستقبال المركبات." },
+  BAY_CAPACITY_REACHED: { en: "Bay-hour capacity is full for this date and service.", ar: "ساعات الأماكن ممتلئة لهذا التاريخ والخدمة." },
+  BOOKING_NOT_PENDING: { en: "This booking is no longer waiting for confirmation.", ar: "لم يعد هذا الحجز بانتظار التأكيد." },
+  MANAGER_REVIEW_REQUIRED: { en: "A manager must confirm this booking.", ar: "يجب أن يؤكد مدير الفرع هذا الحجز." },
+  JOB_ALREADY_STARTED: { en: "The job has started; use the workshop instead.", ar: "بدأ العمل على المركبة؛ تابع من صفحة الورشة." },
+  RESERVATION_CANCELLATION_REQUIRED: { en: "Use the linked reservation correction flow.", ar: "استخدم مسار تصحيح الحجز المؤجل المرتبط." },
+  INVALID_CUSTOMER: { en: "Complete the customer and vehicle fields.", ar: "أكمل بيانات العميل والمركبة." },
+  INVALID_PHONE: { en: "Enter a valid phone number (8 to 15 digits).", ar: "أدخل رقم هاتف صحيحاً (من 8 إلى 15 رقماً)." },
+  DUPLICATE_PHONE: { en: "A customer with this phone number already exists.", ar: "يوجد عميل بنفس رقم الهاتف." },
 };
 
-export function BookingsPage({ lang, t, state, branchName, customerName, serviceName, vehicleFor, notify, confirmModal }: BookingsPageProps) {
+type PendingAction = { kind: "cancel" | "no-show"; bookingId: string } | null;
+
+export function BookingsPage({ lang, t, state, branchName, customerName, serviceName, vehicleFor, notify }: BookingsPageProps) {
   const store = useGarageStore();
+  const role = store.actor?.role;
+  const canManage = hasCapability(store.actor, "bookings.manage");
+  const canTransport = hasCapability(store.actor, "transport.coordinate");
+  const today = isoDate(new Date());
   const firstBranchId = (state.branches[0]?.id ?? "branch-a") as BranchId;
-  const defaultBranch = state.currentBranch === "all" ? firstBranchId : state.currentBranch;
+  const defaultBranch = (state.currentBranch === "all" ? firstBranchId : state.currentBranch) as BranchId;
+  const emptyDraft = (): BookingDraft => ({ customerId: "", vehicleId: "", serviceId: "", branchId: defaultBranch, dropoffDate: today, dropoffTime: "" });
+
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("all");
-  const [showForm, setShowForm] = useState(false);
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [invalidated, setInvalidated] = useState<string[]>([]);
+  const [status, setStatus] = useState("all");
+  const [range, setRange] = useState<DateRange>("all");
+  const [record, setRecord] = useUrlState("record", "");
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState<BookingDraft>(emptyDraft);
+  const [availability, setAvailability] = useState<SlotAvailability | null | "error">(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [availability,setAvailability]=useState<SlotAvailability|null>(null);
-  const [moving,setMoving]=useState<{bookingId:string;date:string;time:string}|null>(null);
-  const [moveAvailability,setMoveAvailability]=useState<SlotAvailability|null>(null);
-  const [form, setForm] = useState<BookingForm>({
-    customerId: "",
-    vehicleId: "",
-    serviceId: "",
-    branchId: defaultBranch,
-    dropoffDate: "",
-    dropoffTime: "",
-  });
-  const availableCustomers = state.customers;
-  const draftIdentity = `${store.actor?.userId ?? "anonymous"}:${store.actor?.isDemo ? "demo" : "live"}`;
-  const updateDraft = (update: Partial<BookingForm>) => setForm((previous) => {
-    const result = reconcileBookingDraft(
-      { ...previous, identityKey: draftIdentity },
-      { ...previous, ...update, identityKey: draftIdentity },
-    );
-    setInvalidated(result.invalidated);
-    const { identityKey: _identityKey, availabilityVersion: _availabilityVersion, ...draft } = result.draft;
-    return draft as BookingForm;
-  });
-  const discardDraft = () => {
-    setForm({ customerId: "", vehicleId: "", serviceId: "", branchId: defaultBranch, dropoffDate: "", dropoffTime: "" });
-    setStep(1); setInvalidated([]); setError(""); setShowForm(false);
+  const [pending, setPending] = useState<PendingAction>(null);
+  const [acting, setActing] = useState(false);
+  const [moving, setMoving] = useState<{ date: string; time: string } | null>(null);
+  const [moveAvailability, setMoveAvailability] = useState<SlotAvailability | null | "error">(null);
+
+  const message = (code: string, fallback: { en: string; ar: string }) => {
+    const copy = bookingErrorCopy[code];
+    return unknownWriteOutcomeCopy(code, lang) ?? t((copy ?? fallback).en, (copy ?? fallback).ar);
   };
-  const filtered = state.bookings.filter((booking) => {
-    const customer = state.customers.find((item) => item.id === booking.customerId);
-    const vehicle = vehicleFor(booking.customerId, booking.vehicleId);
-    const searchable = `${customer?.name ?? ""} ${customer?.phone ?? ""} ${vehicle?.plate ?? ""} ${booking.id}`.toLowerCase();
-    return searchable.includes(query.toLowerCase()) &&
-      (filter === "all" || booking.status === filter) &&
-      (state.currentBranch === "all" || booking.branchId === state.currentBranch);
-  });
 
+  const rows = useMemo(() => state.bookings
+    .filter((booking) => {
+      const customer = state.customers.find((item) => item.id === booking.customerId);
+      const vehicle = vehicleFor(booking.customerId, booking.vehicleId);
+      return matchesBooking(booking, { customerName: customer?.name ?? "", phone: customer?.phone ?? "", plate: vehicle?.plate ?? "", makeModel: vehicle?.makeModel ?? "" },
+        { query, status, range, branchId: state.currentBranch }, today);
+    })
+    .sort((a, b) => sortKey(b).localeCompare(sortKey(a))),
+  [state.bookings, state.customers, state.currentBranch, query, status, range, today, vehicleFor]);
+
+  const selected = record ? state.bookings.find((booking) => booking.id === record) : undefined;
+  const selectedVehicle = selected ? vehicleFor(selected.customerId, selected.vehicleId) : undefined;
+  const selectedJob = selected ? state.jobs.find((job) => job.bookingId === selected.id) : undefined;
+  const clearFilters = () => { setQuery(""); setStatus("all"); setRange("all"); };
+
+  // Slot availability for the create form.
   useEffect(() => {
-    const customer = availableCustomers.find((item) => item.id === form.customerId);
-    if (customer && form.vehicleId && !customer.vehicles.some((vehicle) => vehicle.id === form.vehicleId)) {
-      setForm((previous) => ({ ...previous, vehicleId: "" }));
-    }
-  }, [form.customerId, form.vehicleId, availableCustomers]);
+    let live = true;
+    setAvailability(null);
+    if (!creating || !draft.branchId || !draft.serviceId || !draft.dropoffDate) return;
+    void bookingAvailabilityApi.slots({ branchId: draft.branchId, serviceId: draft.serviceId, fromDate: draft.dropoffDate, toDate: draft.dropoffDate })
+      .then((result) => { if (live) setAvailability(result); })
+      .catch(() => { if (live) setAvailability("error"); });
+    return () => { live = false; };
+  }, [creating, draft.branchId, draft.serviceId, draft.dropoffDate]);
 
-  useEffect(()=>{
-    let live=true;setAvailability(null);
-    if(!showForm||!form.branchId||!form.serviceId||!form.dropoffDate)return;
-    void bookingAvailabilityApi.slots({branchId:form.branchId,serviceId:form.serviceId,fromDate:form.dropoffDate,toDate:form.dropoffDate}).then(result=>{
-      if(live)setAvailability(result);
-    }).catch(()=>{if(live)setAvailability({status:"unconfigured",missing:["availability could not be loaded"]});});
-    return()=>{live=false};
-  },[showForm,form.branchId,form.serviceId,form.dropoffDate]);
-  useEffect(()=>{
-    let live=true;setMoveAvailability(null);
-    if(!moving?.date)return;
-    const booking=state.bookings.find(item=>item.id===moving.bookingId);if(!booking)return;
-    const selector=booking.acceptedQuoteRef?{quoteId:booking.acceptedQuoteRef.quoteId,quoteRevision:booking.acceptedQuoteRef.revision}:{serviceId:booking.serviceId};
-    void bookingAvailabilityApi.slots({branchId:booking.branchId,fromDate:moving.date,toDate:moving.date,bookingId:booking.id,...selector}).then(result=>{if(live)setMoveAvailability(result)}).catch(()=>{if(live)setMoveAvailability({status:"unconfigured",missing:["availability could not be loaded"]})});
-    return()=>{live=false};
-  },[moving?.bookingId,moving?.date,state.bookings]);
+  // Slot availability for rescheduling.
+  useEffect(() => {
+    let live = true;
+    setMoveAvailability(null);
+    if (!moving?.date || !selected) return;
+    const selector = selected.acceptedQuoteRef ? { quoteId: selected.acceptedQuoteRef.quoteId, quoteRevision: selected.acceptedQuoteRef.revision } : { serviceId: selected.serviceId };
+    void bookingAvailabilityApi.slots({ branchId: selected.branchId, fromDate: moving.date, toDate: moving.date, bookingId: selected.id, ...selector })
+      .then((result) => { if (live) setMoveAvailability(result); })
+      .catch(() => { if (live) setMoveAvailability("error"); });
+    return () => { live = false; };
+  }, [moving?.date, selected?.id, selected?.branchId]);
 
-  const create = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  useEffect(() => { setMoving(null); }, [record]);
+
+  const update = (change: Partial<BookingDraft>) => setDraft((previous) => applyDraftChange(previous, change));
+  const openCreate = () => { setDraft(emptyDraft()); setError(""); setCreating(true); };
+  const closeCreate = () => { setCreating(false); setError(""); };
+
+  const createCustomer = async (input: CreateCustomerInput) => {
+    const result = await store.createCustomer(input);
+    return result.ok ? { ok: true as const, customerId: result.customerId } : { ok: false as const, error: result.error };
+  };
+
+  async function create() {
     setError("");
-    setSaving(true);
-    if(availability?.status!=="available"||!availability.slots.some(slot=>slot.dropoffTime===form.dropoffTime)){
-      setSaving(false);setError(t("Choose an available slot first.","اختر موعداً متاحاً أولاً."));return;
+    if (availability === null || availability === "error" || availability.status !== "available" || !availability.slots.some((slot) => slot.dropoffTime === draft.dropoffTime)) {
+      setError(t("Choose an available time.", "اختر موعداً متاحاً."));
+      return;
     }
-    const result = await store.createBookingRequest({...form,configurationVersion:availability.configurationVersion} as typeof form);
+    setSaving(true);
+    const result = await store.createBookingRequest({ ...draft, configurationVersion: availability.configurationVersion } as typeof draft);
     setSaving(false);
     if (result.ok) {
-      setShowForm(false);
-       setForm({ customerId: "", vehicleId: "", serviceId: "", branchId: defaultBranch, dropoffDate: "", dropoffTime: "" });
-      notify(result.status === "confirmed"
-        ? t("Booking confirmed and added to the workshop.", "الحجز اتأكد واتضاف للورشة.")
-        : t("Booking request saved for staff review.", "طلب الحجز اتحفظ عشان الفريق يراجعه."));
+      closeCreate();
+      notify(result.status === "confirmed" ? t("Booking confirmed.", "تم تأكيد الحجز.") : t("Booking saved for review.", "تم حفظ الحجز للمراجعة."));
+      setRecord(result.bookingId);
       return;
     }
-    const copy = bookingErrorCopy[result.error];
-    setError(unknownWriteOutcomeCopy(result.error, lang) ?? (copy ? t(copy.en, copy.ar) : t("The booking could not be saved. Check your access and try again.", "ماقدرناش نحفظ الحجز. راجع صلاحيتك وجرّب تاني.")));
-  };
+    setError(message(result.error, { en: "The booking could not be saved. Check your access and try again.", ar: "تعذر حفظ الحجز. راجع صلاحيتك وحاول مجدداً." }));
+  }
 
-  const confirm = async (bookingId: string) => {
+  async function confirmBooking(bookingId: string) {
     const result = await store.confirmBooking(bookingId);
-    if (result.ok) {
-      notify(t("Booking confirmed and added to the workshop.", "الحجز اتأكد واتضاف للورشة."));
+    notify(result.ok ? t("Booking confirmed.", "تم تأكيد الحجز.") : message(result.error, { en: "The booking could not be confirmed.", ar: "تعذر تأكيد الحجز." }));
+  }
+
+  async function runPending() {
+    if (!pending) return;
+    setActing(true);
+    const booking = state.bookings.find((item) => item.id === pending.bookingId);
+    let result;
+    if (pending.kind === "cancel") result = await store.cancelBooking(pending.bookingId);
+    else {
+      const job = booking ? noShowJob(booking, state.jobs, role) : null;
+      result = job ? await store.transitionJob(job.id, "no-show") : { ok: false as const, error: "REQUEST_FAILED" };
+    }
+    setActing(false);
+    setPending(null);
+    notify(result.ok
+      ? pending.kind === "cancel" ? t("Booking cancelled.", "تم إلغاء الحجز.") : t("Marked as no-show.", "تم تسجيله كلم يحضر.")
+      : message(result.error, { en: "The change could not be saved.", ar: "تعذر حفظ التغيير." }));
+  }
+
+  async function reschedule() {
+    if (!selected || !moving) return;
+    if (moveAvailability === null || moveAvailability === "error" || moveAvailability.status !== "available" || !moveAvailability.slots.some((slot) => slot.dropoffTime === moving.time)) {
+      notify(t("Choose an available new time.", "اختر موعداً جديداً متاحاً."));
       return;
     }
-    const copy = bookingErrorCopy[result.error];
-    notify(unknownWriteOutcomeCopy(result.error, lang) ?? (copy ? t(copy.en, copy.ar) : t("The booking could not be confirmed.", "ماقدرناش نأكد الحجز.")));
+    try {
+      await bookingAvailabilityApi.reschedule(selected.id, moving.date, moving.time);
+      await store.refresh();
+      setMoving(null);
+      notify(t("Booking rescheduled.", "تم تغيير موعد الحجز."));
+    } catch {
+      notify(t("The new time is unavailable. The booking is unchanged.", "الموعد الجديد غير متاح. الحجز كما هو."));
+    }
+  }
+
+  const statusOptions = [
+    { value: "all", label: t("All statuses", "كل الحالات") },
+    ...(["pending", "confirmed", "cancelled", "no-show"] as const).map((value) => ({ value, label: value === "pending" ? t("Pending review", "بانتظار المراجعة") : value === "confirmed" ? t("Confirmed", "مؤكد") : value === "cancelled" ? t("Cancelled", "ملغي") : t("No-show", "لم يحضر") })),
+  ];
+  const rangeLabels: Record<DateRange, string> = {
+    all: t("Any date", "أي تاريخ"), today: t("Today", "اليوم"), tomorrow: t("Tomorrow", "غداً"), week: t("Next 7 days", "7 أيام قادمة"), upcoming: t("Upcoming", "القادمة"), past: t("Past", "السابقة"),
   };
 
-  const cancel = (bookingId: string) => confirmModal({
-    title: t("Cancel this booking?", "إلغاء هذا الحجز؟"),
-    body: t("This updates the booking and its workshop status. No customer message is sent.", "حالة الحجز والورشة هتتحدّث. مش هنبعت أي رسالة للعميل."),
-    danger: true,
-    confirm: async () => {
-      const result = await store.cancelBooking(bookingId);
-      confirmModal(null);
-      if (result.ok) {
-        notify(t("Booking cancelled.", "الحجز اتلغى."));
-        return;
-      }
-      const copy = bookingErrorCopy[result.error];
-      notify(unknownWriteOutcomeCopy(result.error, lang) ?? (copy ? t(copy.en, copy.ar) : t("The booking could not be cancelled.", "ماقدرناش نلغي الحجز.")));
-    },
-  });
-
-  const reschedule=async()=>{
-    if(!moving)return;
-    if(moveAvailability?.status!=="available"||!moveAvailability.slots.some(slot=>slot.dropoffTime===moving.time)){notify(t("Choose an available new slot.","اختر موعداً جديداً متاحاً."));return;}
-    try {await bookingAvailabilityApi.reschedule(moving.bookingId,moving.date,moving.time);await store.refresh();setMoving(null);notify(t("Booking rescheduled.","تم تغيير موعد الحجز."));}
-    catch {notify(t("The new slot is unavailable. The original booking is unchanged.","الموعد الجديد غير متاح. بقي الحجز الأصلي كما هو."));}
+  const slotsView = (current: SlotAvailability | null | "error", chosen: string, onPick: (time: string) => void, ready: boolean) => {
+    if (!ready) return <p className="bk-muted">{t("Pick a service and date to see times.", "اختر الخدمة والتاريخ لعرض المواعيد.")}</p>;
+    if (current === null) return <p className="bk-muted" role="status">{t("Loading times…", "جارٍ تحميل المواعيد…")}</p>;
+    if (current === "error") return <p className="form-error" role="alert">{t("Times could not be loaded.", "تعذر تحميل المواعيد.")}</p>;
+    if (current.status === "unconfigured") return <p className="bk-muted" role="status">{t("Availability is not set up for this branch and service.", "المواعيد غير مهيأة لهذا الفرع والخدمة.")}</p>;
+    if (current.slots.length === 0) return <p className="bk-muted" role="status">{t("No times available on this date.", "لا توجد مواعيد متاحة في هذا التاريخ.")}</p>;
+    return <div className="bk-slots" role="radiogroup" aria-label={t("Available times", "المواعيد المتاحة")}>
+      {current.slots.map((slot) => <button key={slot.dropoffTime} type="button" role="radio" aria-checked={chosen === slot.dropoffTime} className="bk-slot" onClick={() => onPick(slot.dropoffTime)}><bdi dir="ltr">{timeLabel(slot.dropoffTime, lang)}</bdi></button>)}
+    </div>;
   };
+
+  const pendingBooking = pending ? state.bookings.find((item) => item.id === pending.bookingId) : undefined;
+  const pendingWho = pendingBooking ? `${customerName(pendingBooking.customerId)} · ${vehicleFor(pendingBooking.customerId, pendingBooking.vehicleId)?.plate ?? ""}` : "";
 
   return <>
-    <PageHeading
-      eyebrow={t("Reception · Scheduling", "الاستقبال · المواعيد")}
+    <PageHeader
       title={t("Bookings", "الحجوزات")}
-      subtitle={t("Create and review appointments against the active branch capacity rules.", "اعمل مواعيد وراجعها حسب قواعد سعة الفرع اللي شغالة دلوقتي.")}
-      action={<button className="btn btn-primary" type="button" onClick={() => { setShowForm((value) => !value); setError(""); }}><Plus size={16} />{t("New booking", "حجز جديد")}</button>}
+      actions={canManage ? <button className="btn btn-primary" type="button" onClick={openCreate}><Plus size={16} aria-hidden="true" />{t("Add booking", "إضافة حجز")}</button> : undefined}
     />
 
-    {showForm && <form className="form-panel" onSubmit={(event) => void create(event)}>
-      <SectionTitle title={t("New booking", "حجز جديد")} description={t("Capacity and branch access are checked by the server before a booking is stored.", "النظام بيتأكد من السعة وصلاحية الفرع قبل ما يحفظ الحجز.")} />
-      <p className="top-meta" role="status">{t("Step", "الخطوة")} {step} {t("of 3", "من 3")} · {step === 1 ? t("Customer and vehicle", "العميل والعربية") : step === 2 ? t("Service and branch", "الخدمة والفرع") : t("Available appointment", "الموعد المتاح")}</p>
-      {invalidated.length > 0 && <p className="form-hint" role="status">{t("A prerequisite changed, so dependent choices were cleared:", "اتغير اختيار أساسي، فتم مسح الاختيارات التابعة:")} {invalidated.join(", ")}</p>}
-      <div className="form-grid">
-        {step === 1 && <>
-        <div className="form-field"><label className="field-label" htmlFor="booking-customer"><span>{t("Customer", "العميل")}</span><span aria-hidden="true">*</span></label><select id="booking-customer" className="field-select" required value={form.customerId} onChange={(event) => updateDraft({ customerId: event.target.value })}><option value="">{t("Choose a customer", "اختار عميل")}</option>{availableCustomers.map((customer) => <option key={customer.id} value={customer.id}>{customerDisplay(customer.name, lang)} · {customer.phone}</option>)}</select></div>
-        <div className="form-field"><label className="field-label" htmlFor="booking-vehicle"><span>{t("Vehicle", "العربية")}</span><span aria-hidden="true">*</span></label><select id="booking-vehicle" className="field-select vehicle-select" required value={form.vehicleId} onChange={(event) => setForm({ ...form, vehicleId: event.target.value })}><option value="">{t("Choose a vehicle", "اختار عربية")}</option>{state.customers.find((customer) => customer.id === form.customerId)?.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.plate} · {vehicle.makeModel}</option>)}</select>{form.vehicleId && <span className="vehicle-selection">{state.customers.find((customer) => customer.id === form.customerId)?.vehicles.find((vehicle) => vehicle.id === form.vehicleId)?.plate} · {state.customers.find((customer) => customer.id === form.customerId)?.vehicles.find((vehicle) => vehicle.id === form.vehicleId)?.makeModel}</span>}</div>
-        </>}
-        {step === 2 && <>
-        <div className="form-field"><label className="field-label" htmlFor="booking-service"><span>{t("Service", "الخدمة")}</span><span aria-hidden="true">*</span></label><select id="booking-service" className="field-select" required value={form.serviceId} onChange={(event) => updateDraft({ serviceId: event.target.value })}><option value="">{t("Choose a service", "اختار خدمة")}</option>{state.services.map((service) => <option key={service.id} value={service.id}>{serviceDisplay(service.name, lang)} · {service.id === "tint" || service.id === "ceramic" ? state.effectiveServiceHoursByBranch?.[form.branchId]?.[service.id] ?? service.bayHours : service.bayHours} {t("bay-hours", "ساعة باي")}</option>)}</select></div>
-        <div className="form-field"><label className="field-label" htmlFor="booking-branch"><span>{t("Branch", "الفرع")}</span><span aria-hidden="true">*</span></label><select id="booking-branch" className="field-select" required value={form.branchId} onChange={(event) => updateDraft({ branchId: event.target.value as BranchId })}>{state.branches.map((branch) => <option key={branch.id} value={branch.id}>{branchName(branch.id)}</option>)}</select></div>
-        </>}
-        {step === 3 && <>
-        <div className="form-field"><label className="field-label" htmlFor="booking-date"><span>{t("Drop-off date", "تاريخ الاستلام")}</span><span aria-hidden="true">*</span></label><input id="booking-date" className="field-input" type="date" required value={form.dropoffDate} onChange={(event) => setForm({ ...form, dropoffDate: event.target.value })} /></div>
-        <div className="form-field"><label className="field-label" htmlFor="booking-time"><span>{t("Drop-off time", "وقت تسليم العربية للفرع")}</span><span aria-hidden="true">*</span></label><input id="booking-time" className="field-input" type="time" lang="en-GB" dir="ltr" step={60} required aria-describedby="booking-time-hint" value={form.dropoffTime} onChange={(event) => setForm({ ...form, dropoffTime: event.target.value })} /><span id="booking-time-hint" className="form-hint">{t("24-hour time (00:00 midnight, 12:00 noon)", "الوقت بنظام 24 ساعة (00:00 منتصف الليل، 12:00 الظهر)")}</span></div>
-        </>}
-      </div>
-      {step === 3 && <><div role="status" aria-live="polite">{availability?.status==="unconfigured"&&t("Availability is not configured for this branch and service.","المواعيد المتاحة غير مهيأة لهذا الفرع والخدمة.")}{availability?.status==="available"&&availability.slots.length===0&&t("No available slots on this date.","لا توجد مواعيد متاحة في هذا التاريخ.")}</div>
-      {availability?.status==="available"&&<div className="action-row" aria-label={t("Available slots","المواعيد المتاحة")}>{availability.slots.map(slot=><button key={slot.dropoffTime} type="button" className={form.dropoffTime===slot.dropoffTime?"btn btn-sm btn-primary":"btn btn-sm"} onClick={()=>setForm({...form,dropoffTime:slot.dropoffTime})}>{slot.dropoffTime}</button>)}</div>}</>}
-      {error && <div className="form-error" role="alert">{error}</div>}
-      <div className="form-actions"><button type="button" className="btn btn-danger" onClick={discardDraft}>{t("Discard", "تجاهل")}</button>{step > 1 && <button type="button" className="btn" onClick={() => setStep((step - 1) as 1 | 2)}>{t("Back", "رجوع")}</button>}{step < 3 ? <button type="button" className="btn btn-primary" disabled={step === 1 ? !form.customerId || !form.vehicleId : !form.serviceId || !form.branchId} onClick={() => setStep((step + 1) as 2 | 3)}>{t("Continue", "متابعة")}</button> : <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? t("Saving…", "بنحفظ…") : t("Save booking", "احفظ الحجز")}</button>}</div>
-    </form>}
+    <FilterBar
+      lang={lang}
+      search={{ value: query, onChange: setQuery, placeholder: t("Search name, phone or plate", "ابحث بالاسم أو الهاتف أو اللوحة") }}
+      filters={[
+        { key: "range", label: t("Date", "التاريخ"), value: range, onChange: (value) => setRange(value as DateRange), options: dateRanges.map((value) => ({ value, label: rangeLabels[value] })) },
+        { key: "status", label: t("Status", "الحالة"), value: status, onChange: setStatus, options: statusOptions },
+      ]}
+      onClear={clearFilters}
+      resultCount={rows.length}
+    />
 
-    <div className="toolbar"><div className="toolbar-start"><label className="search-wrap"><Search size={16} /><span className="sr-only">{t("Search bookings", "دوّر على الحجوزات")}</span><input className="search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search name, phone, plate or booking…", "دوّر بالاسم أو رقم الموبايل أو اللوحة أو الحجز…")} /></label>
-      <select className="filter-select" style={{ width: "auto" }} value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">{t("All statuses", "كل الحالات")}</option><option value="pending">{t("Pending", "مستني")}</option><option value="confirmed">{t("Confirmed", "اتأكد")}</option><option value="cancelled">{t("Cancelled", "اتلغى")}</option><option value="no-show">{t("No-show", "ماجاش")}</option></select>
-    </div><span className="top-meta">{filtered.length} {t("records", "سجلات")}</span></div>
+    <DataTable
+      lang={lang}
+      caption={t("Bookings", "الحجوزات")}
+      rows={rows}
+      rowKey={(row) => row.id}
+      selectedKey={record || null}
+      onRowClick={(row) => setRecord(row.id)}
+      empty={state.bookings.length === 0
+        ? <EmptyState title={t("No bookings yet", "لا توجد حجوزات بعد")} action={canManage ? <button type="button" className="btn btn-primary" onClick={openCreate}>{t("Add booking", "إضافة حجز")}</button> : undefined} />
+        : <EmptyState variant="no-results" title={t("No matching bookings", "لا توجد حجوزات مطابقة")} action={<button type="button" className="btn" onClick={clearFilters}>{t("Clear filters", "مسح التصفية")}</button>} />}
+      columns={[
+        { key: "when", header: t("Drop-off", "الاستلام"), primary: true, sortable: true, sortValue: sortKey, render: (row) => <span><bdi>{dateLabel(row.dropoffDate, lang)}</bdi> <bdi dir="ltr">{timeLabel(row.dropoffTime, lang)}</bdi></span> },
+        { key: "customer", header: t("Customer / vehicle", "العميل / المركبة"), sortable: true, sortValue: (row) => customerName(row.customerId), render: (row) => <span>
+          <RecordRef type="customer" id={row.customerId} label={customerName(row.customerId)} hideIcon /><br />
+          <RecordRef type="vehicle" id={row.vehicleId} label={vehicleFor(row.customerId, row.vehicleId)?.plate} subtitle={vehicleFor(row.customerId, row.vehicleId)?.makeModel} hideIcon />
+        </span> },
+        { key: "service", header: t("Service", "الخدمة"), render: (row) => row.workSummary?.[lang] ?? serviceName(row.serviceId) },
+        { key: "branch", header: t("Branch", "الفرع"), render: (row) => branchName(row.branchId), hideOnCard: state.currentBranch !== "all" },
+        { key: "status", header: t("Status", "الحالة"), sortable: true, sortValue: (row) => row.status, render: (row) => <StatusBadge status={row.status} domain="booking" lang={lang} /> },
+        ...(canManage ? [{ key: "actions", header: "", hideOnCard: true, render: (row: (typeof rows)[number]) => row.status === "pending"
+          ? <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><button type="button" className="btn btn-sm btn-primary" onClick={() => void confirmBooking(row.id)}>{t("Confirm", "تأكيد")}</button></span>
+          : null }] : []),
+      ]}
+    />
 
-    <div className="table-wrap"><table><thead><tr>
-      <th>{t("Customer / vehicle", "العميل / المركبة")}</th><th>{t("Service", "الخدمة")}</th><th>{t("Branch", "الفرع")}</th><th>{t("Drop-off", "الاستلام")}</th><th>{t("Expected pickup", "التسليم المتوقع")}</th><th>{t("Status", "الحالة")}</th><th>{t("Actions", "الإجراءات")}</th>
-    </tr></thead><tbody>
-      {filtered.map((booking) => {
-        const vehicle = vehicleFor(booking.customerId, booking.vehicleId);
-        return <tr key={booking.id}>
-          <td><div className="primary-cell">{customerName(booking.customerId)}</div><div className="secondary-cell mono">{vehicle?.plate} · {vehicle?.makeModel}</div></td>
-          <td>{booking.workSummary?.[lang] ?? serviceName(booking.serviceId)}{booking.acceptedQuoteRef && <div className="secondary-cell mono">{t("Accepted quote", "عرض السعر المقبول")}: {booking.acceptedQuoteRef.quoteId} · {t("revision", "الإصدار")} {booking.acceptedQuoteRef.revision}</div>}</td><td>{branchName(booking.branchId)}</td>
-          <td><bdi className="localized-datetime">{dateLabel(booking.dropoffDate, lang)}</bdi><div className="secondary-cell"><bdi className="localized-datetime">{timeLabel(booking.dropoffTime, lang)}</bdi></div></td>
-          <td><bdi className="localized-datetime">{dateLabel(booking.expectedPickup, lang)}</bdi></td><td><Status status={booking.status} lang={lang} /></td>
-          <td><div className="action-row">{booking.status === "pending" && <button className="btn btn-sm btn-primary" onClick={() => void confirm(booking.id)}>{t("Confirm", "تأكيد")}</button>}{booking.status === "confirmed" && <button className="btn btn-sm" onClick={() => setMoving({bookingId:booking.id,date:booking.dropoffDate,time:booking.dropoffTime})}>{t("Reschedule","تغيير الموعد")}</button>}{(booking.status === "pending" || booking.status === "confirmed") && <button className="btn btn-sm btn-danger" onClick={() => cancel(booking.id)}>{t("Cancel", "إلغاء")}</button>}</div></td>
-        </tr>;
-      })}
-      {!filtered.length && <tr><td colSpan={7}><EmptyState title={t("No matching bookings", "مفيش حجوزات مطابقة")} text={t("Create a booking or adjust the search and status filter.", "اعمل حجز جديد أو غيّر كلمة البحث وفلتر الحالة.")} /></td></tr>}
-    </tbody></table></div>
-    {moving&&<div className="form-panel" dir={lang==="ar"?"rtl":"ltr"}><SectionTitle title={t("Reschedule booking","تغيير موعد الحجز")} description={t("The original booking remains if the new slot cannot be confirmed.","يبقى الحجز الأصلي إذا تعذر تأكيد الموعد الجديد.")}/><div className="form-grid"><label className="form-field">{t("Date","التاريخ")}<input className="field-input" type="date" value={moving.date} onChange={event=>setMoving({...moving,date:event.target.value})}/></label><label className="form-field">{t("Time","الوقت")}<select className="field-select" value={moving.time} onChange={event=>setMoving({...moving,time:event.target.value})}><option value="">{t("Choose available time","اختر موعداً متاحاً")}</option>{moveAvailability?.status==="available"&&moveAvailability.slots.map(slot=><option key={slot.dropoffTime} value={slot.dropoffTime}>{slot.dropoffTime}</option>)}</select></label></div><div className="form-actions"><button className="btn" onClick={()=>setMoving(null)}>{t("Close","إغلاق")}</button><button className="btn btn-primary" onClick={()=>void reschedule()}>{t("Confirm new slot","تأكيد الموعد الجديد")}</button></div></div>}
+    {/* Detail */}
+    <DetailDrawer
+      open={Boolean(record)}
+      lang={lang}
+      onClose={() => setRecord("")}
+      wide
+      title={selected ? customerName(selected.customerId) : t("Booking", "حجز")}
+      subtitle={selected ? `${dateLabel(selected.dropoffDate, lang)} · ${timeLabel(selected.dropoffTime, lang)}` : undefined}
+      footer={selected && canManage && (selected.status === "pending" || selected.status === "confirmed") ? <>
+        {selected.status === "pending" && <button type="button" className="btn btn-primary" onClick={() => void confirmBooking(selected.id)}>{t("Confirm", "تأكيد")}</button>}
+        {selected.status === "confirmed" && !moving && <button type="button" className="btn" onClick={() => setMoving({ date: selected.dropoffDate.slice(0, 10), time: "" })}>{t("Reschedule", "تغيير الموعد")}</button>}
+        {noShowJob(selected, state.jobs, role) && <button type="button" className="btn btn-danger" onClick={() => setPending({ kind: "no-show", bookingId: selected.id })}>{t("No-show", "لم يحضر")}</button>}
+        <button type="button" className="btn btn-danger" onClick={() => setPending({ kind: "cancel", bookingId: selected.id })}>{t("Cancel booking", "إلغاء الحجز")}</button>
+      </> : undefined}
+    >
+      {!selected
+        ? <EmptyState variant="no-results" title={t("Booking not found", "الحجز غير موجود")} text={t("It may be in another branch or was removed.", "قد يكون في فرع آخر أو تمت إزالته.")} />
+        : <div className="bk-stack">
+            <div><StatusBadge status={selected.status} domain="booking" lang={lang} /></div>
+            <dl className="kv-grid">
+              <div><dt>{t("Customer", "العميل")}</dt><dd><RecordRef type="customer" id={selected.customerId} label={customerName(selected.customerId)} /></dd></div>
+              <div><dt>{t("Vehicle", "المركبة")}</dt><dd><RecordRef type="vehicle" id={selected.vehicleId} label={selectedVehicle?.plate} subtitle={selectedVehicle?.makeModel} />{selectedVehicle && <><br /><small className="bk-muted"><bdi>{selectedVehicle.makeModel}</bdi></small></>}</dd></div>
+              <div><dt>{t("Service", "الخدمة")}</dt><dd>{selected.workSummary?.[lang] ?? serviceName(selected.serviceId)}</dd></div>
+              <div><dt>{t("Branch", "الفرع")}</dt><dd>{branchName(selected.branchId)}</dd></div>
+              <div><dt>{t("Drop-off", "الاستلام")}</dt><dd><bdi>{dateLabel(selected.dropoffDate, lang)}</bdi> <bdi dir="ltr">{timeLabel(selected.dropoffTime, lang)}</bdi></dd></div>
+              <div><dt>{t("Expected pickup", "التسليم المتوقع")}</dt><dd><bdi>{dateLabel(selected.expectedPickup, lang)}</bdi></dd></div>
+            </dl>
+            {(selected.acceptedQuoteRef || selectedJob) && <Collapsible title={t("Related", "مرتبط")} defaultOpen>
+              <div className="bk-related">
+                {selected.acceptedQuoteRef && <RecordRef type="quote" id={selected.acceptedQuoteRef.quoteId} label={t("Accepted quote", "عرض السعر المقبول")} />}
+                {selectedJob && <RecordRef type="job" id={selectedJob.id} label={t("Workshop job", "أمر الشغل")} />}
+              </div>
+            </Collapsible>}
+
+            {moving && canManage && <Collapsible title={t("Reschedule", "تغيير الموعد")} open onToggle={() => setMoving(null)}>
+              <div className="bk-stack">
+                <Field label={t("New date", "التاريخ الجديد")}><input className="field-input" type="date" min={today} value={moving.date} onChange={(event) => setMoving({ date: event.target.value, time: "" })} /></Field>
+                {slotsView(moveAvailability, moving.time, (time) => setMoving({ ...moving, time }), Boolean(moving.date))}
+                <div className="action-row">
+                  <button type="button" className="btn btn-primary btn-sm" disabled={!moving.time} onClick={() => void reschedule()}>{t("Move booking", "نقل الحجز")}</button>
+                  <button type="button" className="btn btn-sm" onClick={() => setMoving(null)}>{t("Keep current time", "إبقاء الموعد")}</button>
+                </div>
+              </div>
+            </Collapsible>}
+
+            {canTransport && selected.status !== "cancelled" && selected.status !== "no-show" && <Collapsible title={t("Transport", "النقل")}>
+              <TransportPanel lang={lang} bookingId={selected.id} />
+            </Collapsible>}
+          </div>}
+    </DetailDrawer>
+
+    {/* Create */}
+    <DetailDrawer
+      open={creating}
+      lang={lang}
+      onClose={closeCreate}
+      title={t("Add booking", "إضافة حجز")}
+      footer={<>
+        <button type="button" className="btn" onClick={closeCreate}>{t("Discard", "تجاهل")}</button>
+        <button type="button" className="btn btn-primary" disabled={!draftReady(draft) || saving} onClick={() => void create()}>{saving ? t("Saving…", "جارٍ الحفظ…") : t("Save booking", "حفظ الحجز")}</button>
+      </>}
+    >
+      <form className="bk-stack" onSubmit={(event) => { event.preventDefault(); void create(); }}>
+        <RequiredNote text={t("Required", "مطلوب")} />
+        <FormSection title={t("Customer and vehicle", "العميل والمركبة")} columns={1}>
+          <CustomerVehiclePicker
+            lang={lang}
+            branchId={draft.branchId}
+            customers={state.customers}
+            value={{ customerId: draft.customerId, vehicleId: draft.vehicleId }}
+            onChange={(value) => update(value)}
+            onCreate={canManage ? createCustomer : undefined}
+            errorCopy={(code) => message(code, { en: "The customer could not be saved.", ar: "تعذر حفظ العميل." })}
+          />
+        </FormSection>
+        <FormSection title={t("Service and time", "الخدمة والموعد")}>
+          <Field label={t("Service", "الخدمة")} required>
+            <select className="field-select" value={draft.serviceId} onChange={(event) => update({ serviceId: event.target.value })}>
+              <option value="">{t("Choose a service", "اختر خدمة")}</option>
+              {state.services.map((service) => <option key={service.id} value={service.id}>{serviceDisplay(service.name, lang)}</option>)}
+            </select>
+          </Field>
+          {state.branches.length > 1 && <Field label={t("Branch", "الفرع")} required>
+            <select className="field-select" value={draft.branchId} onChange={(event) => update({ branchId: event.target.value as BranchId })}>
+              {state.branches.map((branch) => <option key={branch.id} value={branch.id}>{branchName(branch.id)}</option>)}
+            </select>
+          </Field>}
+          <Field label={t("Drop-off date", "تاريخ الاستلام")} required><input className="field-input" type="date" min={today} value={draft.dropoffDate} onChange={(event) => update({ dropoffDate: event.target.value })} /></Field>
+          <Field label={t("Time", "الوقت")} required full>
+            <div>{slotsView(availability, draft.dropoffTime, (time) => update({ dropoffTime: time }), Boolean(draft.serviceId && draft.dropoffDate))}</div>
+          </Field>
+        </FormSection>
+        {error && <div className="form-error" role="alert">{error}</div>}
+      </form>
+    </DetailDrawer>
+
+    <ConfirmDialog
+      open={pending !== null}
+      lang={lang}
+      danger
+      busy={acting}
+      title={pending?.kind === "no-show" ? t("Mark as no-show?", "تسجيل أنه لم يحضر؟") : t("Cancel this booking?", "إلغاء هذا الحجز؟")}
+      body={`${pendingWho}. ${pending?.kind === "no-show" ? t("The job is closed. No message is sent.", "يُغلق أمر الشغل. لا تُرسل رسالة.") : t("The workshop job is cancelled too. No message is sent.", "يُلغى أمر الشغل أيضاً. لا تُرسل رسالة.")}`}
+      confirmLabel={pending?.kind === "no-show" ? t("Mark no-show", "تسجيل لم يحضر") : t("Cancel booking", "إلغاء الحجز")}
+      cancelLabel={t("Keep booking", "إبقاء الحجز")}
+      onConfirm={() => void runPending()}
+      onCancel={() => setPending(null)}
+    />
   </>;
 }

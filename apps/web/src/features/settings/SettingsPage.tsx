@@ -1,58 +1,27 @@
-import { useMemo, useState } from "react";
-import { CircleHelp, History, RotateCcw, Save, ShieldCheck } from "lucide-react";
+import { lazy, Suspense, useMemo, useState } from "react";
+import { RotateCcw, Save } from "lucide-react";
 import type { BranchId } from "@garage/domain";
 import { unknownWriteOutcomeCopy, useGarageStore } from "../../shared/store";
-import { categoryNames, decisionCopy, decisionNames, EmptyState, PageHeading, SectionTitle, valueLabel, type BranchPageProps } from "../../shared/ui";
-import { CommercialPolicyEditor } from "./CommercialPolicyEditor";
+import { decisionNames, valueLabel, type BranchPageProps } from "../../shared/ui";
+import {
+  Collapsible, DataTable, EmptyState, PageHeader, Skeleton, TabBar, TabPanel, useUrlState,
+} from "../../shared/components";
 import { AvailabilityEditor } from "./AvailabilityEditor";
+import { CommercialPolicyEditor } from "./CommercialPolicyEditor";
+import { buildPolicyCatalog, policyGroupLabels, policyLabel, type PolicyGroup } from "./policy-catalog";
+import { fmtDateTime, isOperatingRule } from "./settings-format";
+import "./settings.css";
 
-const settingDescriptions: Record<string, { question: string; impact: string }> = {
-  "booking-confirmation": {
-    question: "Choose who confirms a booking after capacity is checked.",
-    impact: "Controls whether a fitting booking is confirmed immediately or waits for staff review.",
-  },
-  "daily-dropoff-limit": {
-    question: "Set the maximum number of vehicle drop-offs for this branch each day.",
-    impact: "Limits daily intake independently of the available bay hours.",
-  },
-  "branch-working-hours": {
-    question: "Set the daily operating hours used in the capacity calculation.",
-    impact: "Sets the bay-hour budget used when checking booking availability.",
-  },
-  "clean-bays": {
-    question: "Set the number of clean bays available at this branch.",
-    impact: "Used by clean-bay services such as ceramic coating and full paint protection.",
-  },
-  "general-bays": {
-    question: "Set the number of general-purpose bays available at this branch.",
-    impact: "Used by inspection, tint, audio, and other general-bay services.",
-  },
-  "weekly-day-off": {
-    question: "Choose the weekday when this branch does not accept bookings.",
-    impact: "Bookings on the selected day are rejected before capacity is reserved.",
-  },
-  "tint-hours": {
-    question: "Set the bay hours required for a window-tint booking.",
-    impact: "Changes how much general-bay capacity a tint booking uses.",
-  },
-  "ceramic-hours": {
-    question: "Set the bay hours required for a ceramic-coating booking.",
-    impact: "Changes how much clean-bay capacity a ceramic booking uses.",
-  },
+const PolicyManager = lazy(() => import("../warranty/PolicyManager").then((m) => ({ default: m.PolicyManager })));
+const StaffPage = lazy(() => import("../staff/StaffPage").then((m) => ({ default: m.StaffPage })));
+
+const ruleHelp: Record<string, { en: string; ar: string }> = {
+  "booking-confirmation": { en: "Who confirms a booking once capacity is checked.", ar: "مين بيأكد الحجز بعد فحص السعة." },
+  "tint-hours": { en: "Bay hours a window-tint booking uses.", ar: "ساعات الباي التي يستهلكها حجز التظليل." },
+  "ceramic-hours": { en: "Bay hours a ceramic-coating booking uses.", ar: "ساعات الباي التي يستهلكها حجز السيراميك." },
 };
 
-const activeSettingIds = new Set([
-  "booking-confirmation",
-  "daily-dropoff-limit",
-  "branch-working-hours",
-  "clean-bays",
-  "general-bays",
-  "weekly-day-off",
-  "tint-hours",
-  "ceramic-hours",
-]);
-
-const holdItems = [
+const roadmap = [
   { en: "Branch sharing", ar: "مشاركة الموارد بين الفروع" },
   { en: "Intake photo requirements", ar: "الصور المطلوبة وقت الاستلام" },
   { en: "Automated technician assignment", ar: "توزيع الشغل على الفنيين تلقائياً" },
@@ -63,31 +32,27 @@ const holdItems = [
   { en: "Payments", ar: "المدفوعات" },
 ];
 
+type HistoryRow = { id: string; occurredAt: string; setting: string; scope: string; change: string };
+const HISTORY_PAGE = 10;
+
 export function SettingsPage({ lang, t, state, notify, branchName }: BranchPageProps) {
   const store = useGarageStore();
+  const isOwner = store.actor?.role === "owner";
+  const [tab, setTab] = useUrlState("tab", "general");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const allSettings = useMemo(
-    () => state.decisions.filter((item) => activeSettingIds.has(item.id)),
-    [state.decisions],
-  );
+  const [policyId, setPolicyId] = useState("quote-acceptance:default");
+  const [historyShown, setHistoryShown] = useState(HISTORY_PAGE);
+
+  const rules = useMemo(() => state.decisions.filter((item) => isOperatingRule(item.id)), [state.decisions]);
   const dirtyEntries = Object.entries(drafts);
-  const scopesFor = (setting: (typeof allSettings)[number]) => setting.scope === "business"
+  const scopesFor = (setting: (typeof rules)[number]) => setting.scope === "business"
     ? ["business" as const]
     : (setting.branches ?? []).filter((scope) => state.branches.some((branch) => branch.id === scope));
-  const getDraftKey = (settingId: string, scopeKey: string) => `${settingId}:${scopeKey}`;
-  const shownValue = (setting: (typeof allSettings)[number], scopeKey: string) =>
-    drafts[getDraftKey(setting.id, scopeKey)] ?? setting.valueByScope[scopeKey as BranchId | "business"] ?? "";
-  const change = (settingId: string, scopeKey: string, value: string) => {
-    setDrafts((current) => ({ ...current, [getDraftKey(settingId, scopeKey)]: value }));
-    setSaveError("");
-  };
-
-  const discardChanges = () => {
-    setDrafts({});
-    setSaveError("");
-  };
+  const draftKey = (settingId: string, scopeKey: string) => `${settingId}:${scopeKey}`;
+  const settingTitle = (settingId: string, fallback: string) => decisionNames[settingId]?.[lang] ?? fallback;
+  const scopeName = (scope: string) => scope === "business" ? t("Business-wide", "على مستوى الشركة") : branchName(scope);
 
   const saveChanges = async () => {
     if (!dirtyEntries.length || saving) return;
@@ -96,140 +61,164 @@ export function SettingsPage({ lang, t, state, notify, branchName }: BranchPageP
     let completed = 0;
     for (const [key, value] of dirtyEntries) {
       const divider = key.lastIndexOf(":");
-      const settingId = key.slice(0, divider);
-      const scopeKey = key.slice(divider + 1) as BranchId | "business";
-      const result = await store.updateSetting(settingId, scopeKey, value);
+      const result = await store.updateSetting(key.slice(0, divider), key.slice(divider + 1) as BranchId | "business", value);
       if (!result.ok) {
         setSaveError(unknownWriteOutcomeCopy(result.error, lang) ?? (result.error === "SETTING_ON_HOLD"
-          ? t("This setting is not active yet.", "الإعداد ده لسه مش شغّال.")
-          : t("A setting could not be saved. Review access and try again.", "ماقدرناش نحفظ أحد الإعدادات. راجع صلاحيتك وجرّب تاني.")));
+          ? t("This setting is not active yet.", "هذا الإعداد غير مفعّل بعد.")
+          : t("A setting could not be saved. Review access and try again.", "تعذر حفظ أحد الإعدادات. راجع صلاحياتك وحاول مرة أخرى.")));
         break;
       }
       completed += 1;
-      setDrafts((current) => {
-        const next = { ...current };
-        delete next[key];
-        return next;
-      });
+      setDrafts((current) => { const next = { ...current }; delete next[key]; return next; });
     }
     setSaving(false);
-    if (completed && completed === dirtyEntries.length) {
-      notify(t("Operating settings saved and applied.", "إعدادات التشغيل اتحفظت واتطبقت."));
-    }
+    if (completed && completed === dirtyEntries.length) notify(t("Settings saved.", "اتحفظت الإعدادات."));
   };
 
-  const settingTitle = (settingId: string, fallback: string) =>
-    lang === "ar" ? decisionNames[settingId]?.ar ?? fallback : decisionNames[settingId]?.en ?? fallback;
+  const history: HistoryRow[] = useMemo(() => state.auditEvents.map((event) => ({
+    id: event.id,
+    occurredAt: event.occurredAt,
+    setting: settingTitle(event.settingTitle, event.settingTitle),
+    scope: event.scopeLabel === "business" ? t("Business-wide", "على مستوى الشركة") : branchName(event.scopeLabel),
+    change: `${event.previousValue || "—"} → ${event.newValue}`,
+  })), [state.auditEvents, lang]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const catalog = useMemo(() => buildPolicyCatalog(state.branches.map((branch) => branch.id)), [state.branches]);
+  const selectedPolicy = catalog.find((entry) => entry.id === policyId) ?? catalog[0];
+  const policyName = (entry: (typeof catalog)[number]) => policyLabel(entry, lang, branchName);
+
+  const tabs = [
+    { id: "general", label: t("General", "عام") },
+    { id: "hours", label: t("Hours & capacity", "المواعيد والسعة") },
+    { id: "policies", label: t("Policies", "السياسات"), hidden: !isOwner },
+    { id: "warranty", label: t("Warranty", "الضمان"), hidden: !isOwner },
+    { id: "access", label: t("Staff & permissions", "الفريق والصلاحيات"), hidden: !isOwner },
+  ];
+  const activeTab = tabs.some((item) => item.id === tab && !item.hidden) ? tab : "general";
+  const prefix = "settings";
 
   return <>
-    <PageHeading
-      eyebrow={t("Owner account · Configuration", "حساب المالك · الإعدادات")}
-      title={t("Operating settings", "إعدادات التشغيل")}
-      subtitle={t(
-        "Update the rules used by booking and workshop workflows. Saved changes take effect immediately and appear in the settings history.",
-        "غيّر القواعد اللي بتستخدمها الحجوزات والورشة. التغييرات بتتطبق أول ما تحفظها وبتظهر في سجل الإعدادات.",
-      )}
-    />
+    <PageHeader title={t("Settings", "الإعدادات")} subtitle={t("Owner-only rules. Changes apply immediately and are logged.", "قواعد للمالك فقط. التغييرات بتتطبق فوراً وبتتسجل.")} />
+    <TabBar tabs={tabs} value={activeTab} onChange={setTab} ariaLabel={t("Settings sections", "أقسام الإعدادات")} idPrefix={prefix} />
 
-    <section className="settings-summary">
-      <div className="settings-summary-icon"><ShieldCheck size={19} /></div>
-      <div><strong>{t("Owner-controlled and enforced", "المالك هو اللي بيتحكم فيها")}</strong>
-        <p>{t("Only the Owner can change these values. The server checks access and applies capacity rules before confirming bookings.", "المالك بس يقدر يغيّر القيم دي. النظام بيتأكد من الصلاحية وبيطبق قواعد السعة قبل ما يأكد أي حجز.")}</p>
+    <TabPanel idPrefix={prefix} id="general" active={activeTab === "general"}>
+      <section className="panel" aria-label={t("Operating rules", "قواعد التشغيل")}>
+        {rules.length === 0
+          ? <EmptyState title={t("No operating rules", "لا توجد قواعد تشغيل")} />
+          : rules.map((setting) => {
+            const help = ruleHelp[setting.id];
+            return <div className="st-rule-row" key={setting.id}>
+              <div>
+                <div className="st-rule-title">{settingTitle(setting.id, setting.title)}</div>
+                {help && <p className="st-rule-help">{help[lang]}</p>}
+              </div>
+              <div className="st-rule-scopes">
+                {scopesFor(setting).map((scope) => {
+                  const key = draftKey(setting.id, scope);
+                  const current = setting.valueByScope[scope as BranchId | "business"] ?? "";
+                  return <label key={scope}>
+                    {setting.scope !== "business" && <span className="st-scope">{scopeName(scope)}</span>}
+                    <select
+                      className="field-select"
+                      aria-label={`${settingTitle(setting.id, setting.title)} — ${scopeName(scope)}`}
+                      data-dirty={key in drafts ? "true" : "false"}
+                      value={drafts[key] ?? current}
+                      disabled={saving}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setSaveError("");
+                        setDrafts((existing) => {
+                          const next = { ...existing };
+                          if (value === current) delete next[key]; else next[key] = value;
+                          return next;
+                        });
+                      }}
+                    >
+                      {setting.options.map((option) => <option key={option.value} value={option.value}>{valueLabel(setting, option.value, lang)}</option>)}
+                    </select>
+                  </label>;
+                })}
+              </div>
+            </div>;
+          })}
+      </section>
+
+      <div className="section-gap">
+        <Collapsible title={t("Change history", "سجل التغييرات")} count={history.length}>
+          <DataTable<HistoryRow>
+            lang={lang}
+            caption={t("Change history", "سجل التغييرات")}
+            rows={history.slice(0, historyShown)}
+            rowKey={(row) => row.id}
+            columns={[
+              { key: "setting", header: t("Setting", "الإعداد"), render: (row) => row.setting, primary: true },
+              { key: "scope", header: t("Scope", "النطاق"), render: (row) => row.scope },
+              { key: "change", header: t("Change", "التغيير"), render: (row) => row.change },
+              { key: "occurredAt", header: t("When", "امتى"), render: (row) => fmtDateTime(row.occurredAt, lang) },
+            ]}
+            empty={<EmptyState title={t("No changes yet", "لا توجد تغييرات")} text={t("Saved changes appear here.", "ستظهر التغييرات المحفوظة هنا.")} />}
+          />
+          {history.length > historyShown && <div className="form-actions"><button type="button" className="btn btn-sm" onClick={() => setHistoryShown((n) => n + HISTORY_PAGE)}>{t("Show more", "اعرض أكتر")}</button></div>}
+        </Collapsible>
+        <Collapsible title={t("Not available yet", "غير متاح بعد")} count={roadmap.length}>
+          <ul className="st-roadmap">{roadmap.map((item) => <li key={item.en}>{t(item.en, item.ar)}</li>)}</ul>
+        </Collapsible>
       </div>
-      <span className="settings-live-tag"><span />{t("Active", "شغّالة")}</span>
-    </section>
 
-    <div className="settings-toolbar">
-      <div><span className="eyebrow">{t("Current configuration", "الإعدادات الحالية")}</span><strong>{allSettings.length} {t("enforced settings", "إعدادات شغّالة")}</strong></div>
-      <span className="top-meta"><History size={14} />{t("Saved changes are audited", "التغييرات المحفوظة بتتسجل")}</span>
-    </div>
+      {dirtyEntries.length > 0 && <div className="st-savebar" role="region" aria-label={t("Unsaved changes", "تغييرات غير محفوظة")}>
+        <span>{saveError ? <span role="alert">{saveError}</span> : `${dirtyEntries.length} ${t("unsaved", "غير محفوظ")}`}</span>
+        <div className="st-savebar-actions">
+          <button className="btn" type="button" onClick={() => { setDrafts({}); setSaveError(""); }} disabled={saving}><RotateCcw size={15} />{t("Discard", "تجاهل")}</button>
+          <button className="btn btn-primary" type="button" onClick={() => void saveChanges()} disabled={saving}><Save size={15} />{saving ? t("Saving…", "بنحفظ…") : t("Save", "احفظ")}</button>
+        </div>
+      </div>}
+    </TabPanel>
 
-    <div className="settings-list">
-      {allSettings.map((setting) => {
-        const scopes = scopesFor(setting);
-        return <article className="setting-card" key={setting.id}>
-          <div className="setting-card-heading">
-            <div>
-              <div className="eyebrow">{lang === "ar" ? categoryNames[setting.category]?.ar ?? setting.category : setting.category}</div>
-              <h2>{settingTitle(setting.id, setting.title)}</h2>
-               <p>{lang === "ar" ? decisionCopy[setting.id]?.question ?? setting.question : settingDescriptions[setting.id]?.question ?? setting.question}</p>
-            </div>
-            <span className="setting-version">{t("Version", "الإصدار")} {Math.max(1, ...scopes.map((scope) => setting.versionByScope[scope] ?? 1))}</span>
-          </div>
-          <div className={`setting-values ${setting.scope === "business" ? "single" : ""}`}>
-            {scopes.map((scope) => {
-              const scopeName = scope === "business"
-                ? t("Business-wide", "على مستوى الشركة كلها")
-                : branchName(scope);
-              const label = settingTitle(setting.id, setting.title);
-              const currentValue = shownValue(setting, scope);
-              return <label className="setting-field" key={scope}>
-                <span className="setting-field-title">{scopeName}</span>
-                <select
-                  className="field-select"
-                  aria-label={`${label} — ${scopeName}`}
-                  value={currentValue}
-                  onChange={(event) => change(setting.id, scope, event.target.value)}
-                  disabled={saving}
-                >
-                  {setting.options.map((option) => <option key={option.value} value={option.value}>
-                    {valueLabel(setting, option.value, lang)}
-                  </option>)}
-                </select>
-                <span className="setting-current">
-                  {t("Current", "الحالي")}: <strong>{valueLabel(setting, setting.valueByScope[scope as BranchId | "business"] ?? "", lang)}</strong>
-                </span>
-              </label>;
-            })}
-          </div>
-          <div className="setting-card-foot"><CircleHelp size={14} /><span>{lang === "ar" ? decisionCopy[setting.id]?.impact ?? setting.impact : settingDescriptions[setting.id]?.impact ?? setting.impact}</span></div>
-        </article>;
-      })}
-      {!allSettings.length && <EmptyState title={t("No operating settings are configured", "لسه مافيش إعدادات تشغيل")} text={t("The workspace owner can initialize the branch setup before using booking rules.", "المالك يقدر يجهز الفروع قبل استخدام قواعد الحجز.")} />}
-    </div>
+    <TabPanel idPrefix={prefix} id="hours" active={activeTab === "hours"}>
+      <section className="panel">
+        <AvailabilityEditor lang={lang} notify={notify} branches={state.branches.map((branch) => ({ id: branch.id, name: branchName(branch.id) }))} />
+      </section>
+    </TabPanel>
 
-    {store.actor?.role === "owner" && <CommercialPolicyEditor lang={lang} />}
-    {store.actor?.role === "owner" && state.branches.map(branch => <CommercialPolicyEditor key={`pickup-${branch.id}`} lang={lang} policyId={`pickup-commitment:${branch.id}`} />)}
-    {store.actor?.role === "owner" && ["quoted-value","draft-value","collections","outstanding","direct-cost","recognized-revenue","gross-profit","net-profit"].map(metric => <CommercialPolicyEditor key={`finance-${metric}`} lang={lang} policyId={`finance-definition:${metric}`} />)}
-    {store.actor?.role === "owner" && <AvailabilityEditor lang={lang} branches={state.branches.map(branch=>({id:branch.id,name:branchName(branch.id)}))} />}
+    <TabPanel idPrefix={prefix} id="policies" active={activeTab === "policies" && isOwner}>
+      <section className="panel st-split">
+        <nav className="st-policy-list" aria-label={t("Policies", "السياسات")}>
+          {(["quote", "pickup", "finance"] as PolicyGroup[]).map((group) => <div className="st-policy-group" key={group}>
+            <h3>{policyGroupLabels[group][lang]}</h3>
+            {catalog.filter((entry) => entry.group === group).map((entry) => <button
+              key={entry.id}
+              type="button"
+              className="st-policy-item"
+              aria-current={entry.id === selectedPolicy.id ? "true" : undefined}
+              onClick={() => setPolicyId(entry.id)}
+            >{policyName(entry)}</button>)}
+          </div>)}
+        </nav>
+        <div className="st-policy-body">
+          <label className="st-policy-select">
+            <span className="sr-only">{t("Policy", "السياسة")}</span>
+            <select className="field-select" value={selectedPolicy.id} onChange={(event) => setPolicyId(event.target.value)}>
+              {(["quote", "pickup", "finance"] as PolicyGroup[]).map((group) => <optgroup key={group} label={policyGroupLabels[group][lang]}>
+                {catalog.filter((entry) => entry.group === group).map((entry) => <option key={entry.id} value={entry.id}>{policyName(entry)}</option>)}
+              </optgroup>)}
+            </select>
+          </label>
+          <h2>{policyGroupLabels[selectedPolicy.group][lang]} · {policyName(selectedPolicy)}</h2>
+          <CommercialPolicyEditor key={selectedPolicy.id} lang={lang} policyId={selectedPolicy.id} notify={notify} />
+        </div>
+      </section>
+    </TabPanel>
 
-    <section className="panel section-gap">
-      <SectionTitle
-        title={t("On hold", "لسه مش متاح")}
-        description={t("Live WhatsApp connection remains on hold; the separate labelled simulator is available for review. Other listed areas have no active controls yet.", "ربط واتساب الفعلي لسه موقوف؛ تقدر تراجع المحاكاة المنفصلة. باقي الأقسام دي لسه مافيهاش أدوات شغالة.")}
-      />
-      <div className="hold-grid">
-        {holdItems.map((item) => <div className="hold-card" key={item.en}>
-          <span className="hold-dot" /><strong>{t(item.en, item.ar)}</strong><span className="hold-badge">ON HOLD</span>
-        </div>)}
-      </div>
-    </section>
+    <TabPanel idPrefix={prefix} id="warranty" active={activeTab === "warranty" && isOwner}>
+      <Suspense fallback={<Skeleton rows={5} />}>
+        <PolicyManager lang={lang} t={t} state={state} notify={notify} />
+      </Suspense>
+    </TabPanel>
 
-    <section className="panel section-gap">
-      <SectionTitle
-        title={t("Settings history", "سجل الإعدادات")}
-        description={t("Each saved update records the previous value, new value, scope, and time.", "كل تغيير محفوظ بيسجل القيمة القديمة والجديدة والنطاق والوقت.")}
-      />
-      {state.auditEvents.length
-        ? <div className="history-list">{state.auditEvents.map((event) => <div className="history-item" key={event.id}>
-            <div className="history-date">{new Intl.DateTimeFormat(lang === "ar" ? "ar-EG" : "en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(event.occurredAt))}</div>
-            <div className="history-event"><strong>{settingTitle(event.settingTitle, event.settingTitle)}</strong> · {event.scopeLabel === "business" ? t("Business-wide", "على مستوى الشركة") : branchName(event.scopeLabel as BranchId)}<br />
-            <span>{event.previousValue || "—"} → {event.newValue}</span>
-          </div>
-        </div>)}</div>
-        : <EmptyState title={t("No settings changes yet", "لسه مافيش تغييرات")} text={t("Saved updates will appear here.", "التغييرات المحفوظة هتظهر هنا.")} />}
-    </section>
-
-    {dirtyEntries.length > 0 && <div className="settings-savebar" role="region" aria-label={t("Unsaved settings", "إعدادات لسه ماتحفظتش")}>
-      <div><strong>{dirtyEntries.length} {t("unsaved changes", "تغييرات غير محفوظة")}</strong>
-        <span>{saveError || t("Changes apply when you save.", "التغييرات هتتطبق لما تحفظها.")}</span>
-      </div>
-      <div className="settings-save-actions">
-        <button className="btn" type="button" onClick={discardChanges} disabled={saving}><RotateCcw size={15} />{t("Discard", "الغِ التغييرات")}</button>
-        <button className="btn btn-primary" type="button" onClick={() => void saveChanges()} disabled={saving}>
-          <Save size={15} />{saving ? t("Saving…", "بنحفظ…") : t("Save settings", "احفظ الإعدادات")}
-        </button>
-      </div>
-    </div>}
+    <TabPanel idPrefix={prefix} id="access" active={activeTab === "access" && isOwner}>
+      <Suspense fallback={<Skeleton rows={5} />}>
+        <StaffPage embedded lang={lang} t={t} state={state} notify={notify} />
+      </Suspense>
+    </TabPanel>
   </>;
 }

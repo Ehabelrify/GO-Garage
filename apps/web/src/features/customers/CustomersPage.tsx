@@ -1,88 +1,154 @@
-import { useState, type FormEvent } from "react";
-import { Plus, Search } from "lucide-react";
-import type { BranchId, Locale } from "@garage/domain";
-import { unknownWriteOutcomeCopy, useGarageStore } from "../../shared/store";
-import { customerDisplay, EmptyState, PageHeading, type PageProps } from "../../shared/ui";
+import { useMemo, useState, type FormEvent } from "react";
+import { useLocation, useSearchParams } from "wouter";
+import { Plus, ScanLine } from "lucide-react";
+import type { BranchId } from "@garage/domain";
+import {
+  DataTable, DetailDrawer, EmptyState, FilterBar, PageHeader, RecordRef, TabBar, TabPanel, resolveWarrantyCode, useUrlState,
+  type Column, type ResolvedWarranty,
+} from "../../shared/components";
+import { hasCapability } from "../../shared/capabilities";
+import { SpecialRequestsPanel } from "../special-requests/SpecialRequestsPanel";
+import { useGarageStore } from "../../shared/store";
+import { customerDisplay, type PageProps } from "../../shared/ui";
+import { CustomerForm, writeErrorMessage, type BranchOption } from "./CustomerForm";
+import { defaultFormBranch, filterCustomers, findByPlate, recordFromParams } from "./customers-logic";
+import { CustomerDetail, VehicleDetail } from "./RecordDetail";
+import { PlateChips } from "./Record360View";
+import "./customers.css";
 
-interface CustomerForm {
-  name: string;
-  phone: string;
-  plate: string;
-  makeModel: string;
-  language: Locale;
-}
+type Row = ReturnType<typeof filterCustomers>[number];
 
 interface CustomersPageProps extends PageProps {
+  /** Kept for the shell's call site; the page reads the real branch from the store. */
   branchId?: BranchId | "all";
 }
 
-const customerErrorCopy: Record<string, { en: string; ar: string }> = {
-  INVALID_CUSTOMER: { en: "Complete the customer and vehicle fields.", ar: "كمّل بيانات العميل والعربية." },
-  INVALID_PHONE: { en: "Enter a valid phone number with 8–15 digits.", ar: "اكتب رقم موبايل صحيح من ٨ لـ ١٥ رقم." },
-  DUPLICATE_PHONE: { en: "A customer with this phone number already exists.", ar: "فيه عميل مسجل بنفس رقم الموبايل ده." },
-};
+type LookupState =
+  | { status: "idle" }
+  | { status: "busy" }
+  | { status: "none" }
+  | { status: "error" }
+  | { status: "found"; result: ResolvedWarranty };
 
-export function CustomersPage({ lang, t, state, notify, branchId }: CustomersPageProps) {
+export function CustomersPage({ lang, t, state, notify }: CustomersPageProps) {
   const store = useGarageStore();
-  const [query, setQuery] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [form, setForm] = useState<CustomerForm>({ name: "", phone: "", plate: "", makeModel: "", language: lang });
-  const rows = state.customers.filter((customer) =>
-    `${customer.name} ${customer.phone} ${customer.vehicles.map((vehicle) => `${vehicle.plate} ${vehicle.makeModel}`).join(" ")}`.toLowerCase().includes(query.toLowerCase()));
+  const actor = store.actor;
+  const [, navigate] = useLocation();
+  const [params] = useSearchParams();
+  const open = recordFromParams(params);
+  const canAdd = !!actor && actor.role !== "technician";
 
-  const create = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError("");
-    if (!branchId || branchId === "all") {
-      setError(t("Choose a branch before adding a customer.", "اختار فرع قبل ما تضيف عميل."));
-      return;
-    }
-    setSaving(true);
-    const result = await store.createCustomer({ ...form, branchId });
-    setSaving(false);
-    if (result.ok) {
-      setShowForm(false);
-      setForm({ name: "", phone: "", plate: "", makeModel: "", language: lang });
-      notify(t("Customer and vehicle saved.", "اتحفظت بيانات العميل والعربية."));
-      return;
-    }
-    const copy = customerErrorCopy[result.error];
-    setError(unknownWriteOutcomeCopy(result.error, lang) ?? (copy ? t(copy.en, copy.ar) : t("The customer record could not be saved.", "ماقدرناش نحفظ بيانات العميل.")));
+  const branchOptions: BranchOption[] = useMemo(() => {
+    if (!actor) return [];
+    const allowed = actor.role === "owner" ? state.branches : state.branches.filter((branch) => actor.branchIds.includes(branch.id));
+    return allowed.map((branch) => ({ id: branch.id, label: lang === "ar" && branch.nameAr ? branch.nameAr : branch.name }));
+  }, [actor, state.branches, lang]);
+
+  const [query, setQuery] = useState("");
+  const [language, setLanguage] = useState("all");
+  const [adding, setAdding] = useState(false);
+  const [code, setCode] = useState("");
+  const [lookup, setLookup] = useState<LookupState>({ status: "idle" });
+  const [tabValue, setTab] = useUrlState("tab", "customers");
+  const canSeeRequests = hasCapability(actor, "bookings.manage");
+  const tab = tabValue === "requests" && canSeeRequests ? "requests" : "customers";
+
+  const all = state.customers;
+  const rows = useMemo(() => filterCustomers(all, query).filter((customer) => language === "all" || customer.language === language), [all, query, language]);
+  const loading = store.status === "loading" && all.length === 0;
+  const clear = () => { setQuery(""); setLanguage("all"); };
+
+  const openCustomer = (id: string) => navigate(`/workspace/customers?customer=${encodeURIComponent(id)}`);
+
+  if (open?.kind === "customer") return <CustomerDetail lang={lang} state={state} id={open.id} canEdit={canAdd} notify={notify} />;
+  if (open?.kind === "vehicle") return <VehicleDetail lang={lang} state={state} id={open.id} canEdit={false} notify={notify} />;
+
+  const create = async (values: { name: string; phone: string; plate: string; makeModel: string; language: "ar" | "en"; branchId: string }) => {
+    const result = await store.createCustomer({ ...values, name: values.name.trim(), phone: values.phone.trim(), plate: values.plate.trim(), makeModel: values.makeModel.trim(), branchId: values.branchId as BranchId });
+    if (!result.ok) return writeErrorMessage(result.error, lang);
+    setAdding(false);
+    notify(t("Customer and vehicle saved.", "تم حفظ العميل والمركبة."));
+    return null;
   };
 
+  // Plate first (store), then warranty code / QR through the server resolver.
+  const scan = async (event: FormEvent) => {
+    event.preventDefault();
+    const value = code.trim();
+    if (!value) return;
+    const byPlate = findByPlate(all, value);
+    if (byPlate) { navigate(`/workspace/customers?vehicle=${encodeURIComponent(byPlate.vehicle.id)}`); return; }
+    setLookup({ status: "busy" });
+    try {
+      const result = await resolveWarrantyCode(value);
+      setLookup(result ? { status: "found", result } : { status: "none" });
+    } catch {
+      setLookup({ status: "error" });
+    }
+  };
+
+  const columns: Column<Row>[] = [
+    { key: "name", header: t("Customer", "العميل"), sortable: true, primary: true, sortValue: (row) => row.name, render: (row) => customerDisplay(row.name, lang) },
+    { key: "phone", header: t("Phone", "الهاتف"), mono: true, render: (row) => row.phone },
+    { key: "vehicles", header: t("Vehicles", "المركبات"), sortable: true, sortValue: (row) => row.vehicles.length, render: (row) => <PlateChips vehicles={row.vehicles.map((vehicle) => ({ id: vehicle.id, plate: vehicle.plate }))} lang={lang} /> },
+  ];
+
+  const lookupNote = lookup.status === "busy" ? t("Looking up…", "جارٍ البحث…")
+    : lookup.status === "none" ? t("No vehicle or warranty matches this code.", "لا توجد مركبة أو ضمان بهذا الرمز.")
+    : lookup.status === "error" ? t("Lookup failed. Try again.", "تعذر البحث. حاول مرة أخرى.")
+    : "";
+
   return <>
-    <PageHeading
-      eyebrow={t("Reception · Records", "الاستقبال · السجلات")}
-      title={t("Customers & vehicles", "العملاء والمركبات")}
-      subtitle={t("Find the existing customer or vehicle first. Add a new record only when there is no match.", "ابحث عن العميل أو المركبة أولاً. أضف سجلاً جديداً فقط إذا لم تجد تطابقاً.")}
-      action={<button className="btn btn-primary" type="button" onClick={() => { setShowForm((value) => !value); setError(""); }} disabled={!branchId}><Plus size={16} />{t("Add customer", "إضافة عميل")}</button>}
+    {canSeeRequests && <TabBar ariaLabel={t("Customers", "العملاء")} idPrefix="cust" value={tab} onChange={setTab}
+      tabs={[{ id: "customers", label: t("Customers", "العملاء") }, { id: "requests", label: t("Special requests", "الطلبات الخاصة") }]} />}
+    <TabPanel idPrefix="cust" id="requests" active={tab === "requests"}><SpecialRequestsPanel lang={lang} notify={notify} /></TabPanel>
+    {tab === "customers" && <TabPanel idPrefix="cust" id="customers" active>
+    <PageHeader
+      title={t("Customers", "العملاء")}
+      meta={<span>{all.length} {t("customers", "عميل")}</span>}
+      actions={canAdd ? <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}><Plus size={16} aria-hidden="true" />{t("Add customer", "إضافة عميل")}</button> : undefined}
     />
-
-    <div className="customer-workspace">
-    {showForm && <form className="form-panel customer-form" onSubmit={(event) => void create(event)}>
-      <div className="panel-title-row"><div><h2 className="panel-title">{t("Create customer record", "سجّل عميل جديد")}</h2><p className="panel-desc">{t("A customer and the first vehicle are stored together.", "بيانات العميل وأول عربية بتتحفظ مع بعض.")}</p></div></div>
-      <div className="form-grid">
-        <div className="form-field"><label className="field-label" htmlFor="customer-name">{t("Customer name", "اسم العميل")} *</label><input id="customer-name" className="field-input" required maxLength={120} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></div>
-        <div className="form-field"><label className="field-label" htmlFor="customer-phone">{t("Phone", "رقم الهاتف")} *</label><input id="customer-phone" className="field-input mono" required type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} placeholder="+20…" /></div>
-        <div className="form-field"><label className="field-label" htmlFor="customer-plate">{t("Vehicle plate", "لوحة المركبة")} *</label><input id="customer-plate" className="field-input mono" required maxLength={20} value={form.plate} onChange={(event) => setForm({ ...form, plate: event.target.value })} /></div>
-        <div className="form-field"><label className="field-label" htmlFor="customer-model">{t("Make & model", "ماركة وموديل العربية")} *</label><input id="customer-model" className="field-input" required maxLength={100} value={form.makeModel} onChange={(event) => setForm({ ...form, makeModel: event.target.value })} placeholder={t("Toyota Corolla 2022", "تويوتا كورولا ٢٠٢٢")} /></div>
-        <div className="form-field"><label className="field-label" htmlFor="customer-language">{t("Preferred language", "اللغة المفضلة")}</label><select id="customer-language" className="field-select" value={form.language} onChange={(event) => setForm({ ...form, language: event.target.value as Locale })}><option value="ar">{t("Arabic", "العربية")}</option><option value="en">{t("English", "الإنجليزية")}</option></select></div>
-      </div>
-      {error && <div className="form-error" role="alert">{error}</div>}
-      <div className="form-actions"><button type="button" className="btn" onClick={() => setShowForm(false)}>{t("Close", "اقفل")}</button><button className="btn btn-primary" type="submit" disabled={saving}>{saving ? t("Saving…", "بنحفظ…") : t("Save customer", "احفظ بيانات العميل")}</button></div>
-    </form>}
-
-    <div className="toolbar customer-lookup"><div className="toolbar-start"><label className="search-wrap"><Search size={16} /><span className="sr-only">{t("Search customers", "دوّر على العملاء")}</span><input className="search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search name, phone, plate or model…", "دوّر بالاسم أو رقم الموبايل أو اللوحة أو الموديل…")} /></label></div><span className="top-meta">{rows.length} {t("customers", "عميل")}</span></div>
-
-    <div className="table-wrap"><table><thead><tr><th>{t("Customer", "العميل")}</th><th>{t("Phone", "الهاتف")}</th><th>{t("Language", "اللغة")}</th><th>{t("Vehicle", "المركبة")}</th><th>{t("Plate", "اللوحة")}</th></tr></thead><tbody>
-      {rows.flatMap((customer) => customer.vehicles.map((vehicle) => <tr key={`${customer.id}-${vehicle.id}`}>
-        <td><div className="primary-cell">{customerDisplay(customer.name, lang)}</div></td><td className="mono">{customer.phone}</td>
-        <td>{customer.language === "ar" ? t("Arabic", "العربية") : t("English", "الإنجليزية")}</td><td>{vehicle.makeModel}</td><td className="mono">{vehicle.plate}</td>
-      </tr>))}
-      {!rows.length && <tr><td colSpan={5}><EmptyState title={t("No matching customers", "مفيش عملاء مطابقين")} text={t("Adjust your search or add a customer to this branch.", "غيّر كلمة البحث أو ضيف عميل للفرع ده.")} /></td></tr>}
-    </tbody></table></div>
-    </div>
+    <FilterBar
+      lang={lang}
+      search={{ value: query, onChange: setQuery, placeholder: t("Name, phone or plate", "الاسم أو الهاتف أو اللوحة") }}
+      filters={[{ key: "language", label: t("Language", "اللغة"), value: language, onChange: setLanguage, options: [{ value: "all", label: t("All languages", "كل اللغات") }, { value: "ar", label: t("Arabic", "العربية") }, { value: "en", label: t("English", "الإنجليزية") }] }]}
+      onClear={clear}
+      resultCount={rows.length}
+    >
+      <form className="cust-lookup" onSubmit={(event) => void scan(event)} role="search" aria-label={t("Plate or QR lookup", "بحث باللوحة أو QR")}>
+        <input className="field-input mono" dir="ltr" value={code} onChange={(event) => { setCode(event.target.value); if (lookup.status !== "idle") setLookup({ status: "idle" }); }}
+          placeholder={t("Plate or warranty QR", "اللوحة أو QR الضمان")} aria-label={t("Plate or warranty QR code", "اللوحة أو رمز QR للضمان")} />
+        <button type="submit" className="btn" disabled={!code.trim() || lookup.status === "busy"}><ScanLine size={16} aria-hidden="true" />{t("Find", "بحث")}</button>
+        {lookupNote && <p className="cust-lookup-note" role="status" data-tone={lookup.status === "error" ? "error" : undefined}>{lookupNote}</p>}
+        {lookup.status === "found" && <div className="cust-lookup-note" role="status">
+          <span className="plate-chips">
+            {lookup.result.customer && <RecordRef type="customer" id={lookup.result.customer.id} label={lookup.result.customer.title} mode="link" />}
+            {lookup.result.vehicle && <RecordRef type="vehicle" id={lookup.result.vehicle.id} label={lookup.result.vehicle.title} mode="link" />}
+            {lookup.result.warranty && <RecordRef type="warranty" id={lookup.result.warranty.id} label={lookup.result.warranty.title || undefined} badge={lookup.result.warranty.badge} />}
+          </span>
+        </div>}
+      </form>
+    </FilterBar>
+    <DataTable
+      columns={columns}
+      rows={rows}
+      rowKey={(row) => row.id}
+      lang={lang}
+      caption={t("Customers", "العملاء")}
+      loading={loading}
+      error={store.status === "error" && all.length === 0 ? t("Customers could not be loaded.", "تعذر تحميل العملاء.") : null}
+      onRetry={() => void store.refresh()}
+      onRowClick={(row) => openCustomer(row.id)}
+      initialSort={{ key: "name", direction: "asc" }}
+      empty={all.length === 0
+        ? <EmptyState title={t("No customers yet", "لا يوجد عملاء بعد")} action={canAdd ? <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}><Plus size={16} aria-hidden="true" />{t("Add customer", "إضافة عميل")}</button> : undefined} />
+        : <EmptyState variant="no-results" title={t("No matching customers", "لا يوجد عملاء مطابقون")} action={<button type="button" className="btn" onClick={clear}>{t("Clear filters", "مسح التصفية")}</button>} />}
+    />
+    <DetailDrawer open={adding} onClose={() => setAdding(false)} lang={lang} title={t("Add customer", "إضافة عميل")}>
+      <CustomerForm lang={lang} mode="create" branches={branchOptions}
+        defaultBranchId={defaultFormBranch(branchOptions.map((branch) => branch.id), state.currentBranch)}
+        onCancel={() => setAdding(false)} onSubmit={create} />
+    </DetailDrawer>
+    </TabPanel>}
   </>;
 }

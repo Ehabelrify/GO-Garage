@@ -1,42 +1,146 @@
-import {useEffect,useState,type FormEvent} from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Plus, Trash2 } from "lucide-react";
+import type { Locale } from "@garage/domain";
+import { EmptyState, Field, FormSection, Notice, RequiredNote, Skeleton } from "../../shared/components";
+import {
+  availabilityComplete, availabilityFromApi, availabilityPayload, type AvailabilityForm,
+} from "./availability-form";
+import "./settings.css";
 
-type Form={version:number;timezone:string;opensAt:string;closesAt:string;workingWeekdays:number[];slotMinutes:string;dailyIntakeLimit:string;cleanBays:string;generalBays:string;effectiveFrom:string;closures:string;reason:string};
-const blank:Form={version:0,timezone:"",opensAt:"",closesAt:"",workingWeekdays:[],slotMinutes:"",dailyIntakeLimit:"",cleanBays:"",generalBays:"",effectiveFrom:"",closures:"",reason:""};
-export function AvailabilityEditor({branches,lang}:{branches:{id:string;name:string}[];lang:"ar"|"en"}){
-  const [branchId,setBranchId]=useState(branches[0]?.id??"");
-  const [form,setForm]=useState<Form|null>(null);
-  const [state,setState]=useState("");
-  const [busy,setBusy]=useState(false);
-  const t=(en:string,ar:string)=>lang==="ar"?ar:en;
-  useEffect(()=>{let live=true;setForm(null);if(!branchId)return;
-    void fetch(`/api/availability/config/${encodeURIComponent(branchId)}`,{credentials:"same-origin"}).then(async r=>{if(!r.ok)throw Error("read");return r.json()}).then(data=>{
-      if(!live)return;
-      setForm(data.status==="unconfigured"?{...blank}:{version:data.version,timezone:data.timezone,opensAt:String(data.opensAt).slice(0,5),closesAt:String(data.closesAt).slice(0,5),workingWeekdays:data.workingWeekdays,slotMinutes:String(data.slotMinutes),dailyIntakeLimit:String(data.dailyIntakeLimit),cleanBays:String(data.bayCounts?.clean??""),generalBays:String(data.bayCounts?.general??""),effectiveFrom:String(data.effectiveFrom).slice(0,10),closures:(data.closures??[]).map((c:{closed_date:string;reason:string})=>`${c.closed_date}: ${c.reason}`).join("\n"),reason:""});
-      setState(data.status==="unconfigured"?t("Unconfigured. Complete every required field before saving.","غير مهيأ. أكمل جميع الحقول المطلوبة قبل الحفظ."):"");
-    }).catch(()=>{if(live)setState(t("Configuration could not be loaded.","تعذر تحميل الإعدادات."));});return()=>{live=false};
-  },[branchId,lang]);
-  const save=async(event:FormEvent)=>{event.preventDefault();if(!form||busy)return;setBusy(true);setState("");
-    const closures=form.closures.split(/\r?\n/).map(s=>s.trim()).filter(Boolean).map(line=>{const match=/^(\d{4}-\d{2}-\d{2}):\s*(.+)$/.exec(line);return match?{date:match[1],reason:match[2]}:null});
-    if(closures.some(c=>!c)){setState(t("Use YYYY-MM-DD: reason for each closure.","اكتب كل يوم إغلاق بصيغة YYYY-MM-DD: السبب."));setBusy(false);return;}
-    try{const response=await fetch(`/api/availability/config/${encodeURIComponent(branchId)}`,{method:"PUT",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({expectedVersion:form.version,timezone:form.timezone,opensAt:form.opensAt,closesAt:form.closesAt,workingWeekdays:form.workingWeekdays,closures,slotMinutes:Number(form.slotMinutes),dailyIntakeLimit:Number(form.dailyIntakeLimit),bayCounts:{clean:Number(form.cleanBays),general:Number(form.generalBays)},effectiveFrom:form.effectiveFrom,reason:form.reason})});
-      const data=await response.json();if(!response.ok)throw Error(data.code??"SAVE_FAILED");setForm({...form,version:data.version,reason:""});setState(t("Availability configuration saved.","تم حفظ إعدادات المواعيد المتاحة."));}
-    catch(error){setState(t("Configuration was not saved. Refresh if another owner changed it.","لم تُحفظ الإعدادات. حدّث الصفحة إذا غيّرها مالك آخر.")+` (${String(error)})`);}finally{setBusy(false);}
+type Load = "loading" | "error" | "ready";
+
+const timezones = ["Africa/Cairo", "Asia/Riyadh", "Asia/Dubai", "Europe/London", "UTC"];
+
+/**
+ * Hours and capacity for one branch. This is the single source of truth for working days,
+ * opening hours, daily intake and bay counts (the old duplicate "decision" controls were removed).
+ */
+export function AvailabilityEditor({ branches, lang, notify }: { branches: { id: string; name: string }[]; lang: Locale; notify?: (message: string) => void }) {
+  const t = (en: string, ar: string) => lang === "ar" ? ar : en;
+  const [branchId, setBranchId] = useState(branches[0]?.id ?? "");
+  const [form, setForm] = useState<AvailabilityForm | null>(null);
+  const [load, setLoad] = useState<Load>("loading");
+  const [unconfigured, setUnconfigured] = useState(false);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const read = useCallback(async (live: () => boolean) => {
+    setLoad("loading");
+    setForm(null);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/availability/config/${encodeURIComponent(branchId)}`, { credentials: "same-origin" });
+      if (!response.ok) throw new Error("read");
+      const data = await response.json();
+      if (!live()) return;
+      setUnconfigured(data.status === "unconfigured");
+      setForm(availabilityFromApi(data));
+      setLoad("ready");
+    } catch {
+      if (live()) setLoad("error");
+    }
+  }, [branchId]);
+
+  const [reloadKey, setReloadKey] = useState(0);
+  useEffect(() => {
+    if (!branchId) return;
+    let alive = true;
+    void read(() => alive);
+    return () => { alive = false; };
+  }, [branchId, reloadKey, read]);
+
+  const patch = (next: Partial<AvailabilityForm>) => setForm((current) => current ? { ...current, ...next } : current);
+  const dayName = (day: number) => new Intl.DateTimeFormat(lang === "ar" ? "ar-EG" : "en", { weekday: "short", timeZone: "UTC" }).format(new Date(Date.UTC(2023, 0, 1 + day)));
+
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!form || busy) return;
+    const body = availabilityPayload(form);
+    if (!body) {
+      setMessage(t("Give each closure a date and a reason, or remove it.", "اكتب تاريخ وسبب لكل إغلاق، أو احذفه."));
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/availability/config/${encodeURIComponent(branchId)}`, {
+        method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      const data = await response.json().catch(() => ({})) as { code?: string; version?: number };
+      if (!response.ok) throw new Error(data.code ?? "SAVE_FAILED");
+      patch({ version: data.version ?? form.version, reason: "" });
+      setUnconfigured(false);
+      notify?.(t("Hours and capacity saved.", "اتحفظت المواعيد والسعة."));
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      setMessage(code === "STALE_VERSION" || code === "STALE_CONFIG_VERSION"
+        ? t("Another owner changed this. Reload and try again.", "غيّر مالك آخر الإعدادات. حدّث الصفحة وحاول مرة أخرى.")
+        : t("Not saved. Check the values and try again.", "لم يُحفظ. راجع القيم وحاول مرة أخرى."));
+    } finally {
+      setBusy(false);
+    }
   };
-  const field=(key:keyof Form,value:string)=>setForm(current=>current?{...current,[key]:value}:current);
-  return <section className="panel section-gap" dir={lang==="ar"?"rtl":"ltr"}><h2>{t("Branch availability","مواعيد الفرع المتاحة")}</h2><p>{t("Approved local hours, calendar and capacity. No values are assumed.","ساعات العمل والتقويم والسعة المعتمدة. لا توجد قيم مفترضة.")}</p>
-    <label>{t("Branch","الفرع")}<select className="field-select" value={branchId} onChange={e=>setBranchId(e.target.value)}>{branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
-    {form&&<form onSubmit={event=>void save(event)}><div className="form-grid">
-      <label className="form-field">{t("IANA timezone","المنطقة الزمنية IANA")}<input className="field-input" required value={form.timezone} onChange={e=>field("timezone",e.target.value)} placeholder="Africa/Cairo"/></label>
-      <label className="form-field">{t("Opening time","وقت الفتح")}<input className="field-input" type="time" required value={form.opensAt} onChange={e=>field("opensAt",e.target.value)}/></label>
-      <label className="form-field">{t("Closing time","وقت الإغلاق")}<input className="field-input" type="time" required value={form.closesAt} onChange={e=>field("closesAt",e.target.value)}/></label>
-      <label className="form-field">{t("Slot grid (minutes)","الفاصل بين المواعيد بالدقائق")}<input className="field-input" type="number" min="1" required value={form.slotMinutes} onChange={e=>field("slotMinutes",e.target.value)}/></label>
-      <label className="form-field">{t("Daily vehicle intake","عدد السيارات اليومي")}<input className="field-input" type="number" min="1" required value={form.dailyIntakeLimit} onChange={e=>field("dailyIntakeLimit",e.target.value)}/></label>
-      <label className="form-field">{t("Clean bays","البايات النظيفة")}<input className="field-input" type="number" min="0" required value={form.cleanBays} onChange={e=>field("cleanBays",e.target.value)}/></label>
-      <label className="form-field">{t("General bays","البايات العامة")}<input className="field-input" type="number" min="0" required value={form.generalBays} onChange={e=>field("generalBays",e.target.value)}/></label>
-      <label className="form-field">{t("Effective from","ساري من")}<input className="field-input" type="date" required value={form.effectiveFrom} onChange={e=>field("effectiveFrom",e.target.value)}/></label>
-      <fieldset className="form-field"><legend>{t("Working weekdays","أيام العمل")}</legend>{[0,1,2,3,4,5,6].map(day=><label key={day}><input type="checkbox" checked={form.workingWeekdays.includes(day)} onChange={e=>setForm(current=>current?{...current,workingWeekdays:e.target.checked?[...current.workingWeekdays,day]:current.workingWeekdays.filter(d=>d!==day)}:current)}/>{new Intl.DateTimeFormat(lang==="ar"?"ar-EG":"en",{weekday:"short",timeZone:"UTC"}).format(new Date(Date.UTC(2023,0,1+day)))}</label>)}</fieldset>
-      <label className="form-field">{t("Dated closures, one per line: YYYY-MM-DD: reason","أيام الإغلاق، سطر لكل يوم: YYYY-MM-DD: السبب")}<textarea className="field-input" value={form.closures} onChange={e=>field("closures",e.target.value)}/></label>
-      <label className="form-field">{t("Approval reason","سبب الاعتماد")}<input className="field-input" required value={form.reason} onChange={e=>field("reason",e.target.value)}/></label>
-    </div><p role="status">{state}</p><button className="btn btn-primary" type="submit" disabled={busy}>{t("Save availability","حفظ المواعيد المتاحة")}</button></form>}
+
+  if (!branches.length) return <EmptyState title={t("No branches yet", "لا توجد فروع")} />;
+
+  return <section className="st-section" aria-label={t("Hours and capacity", "المواعيد والسعة")}>
+    <div className="st-toolbar">
+      <label className="st-inline-field">
+        <span className="field-label">{t("Branch", "الفرع")}</span>
+        <select className="field-select" value={branchId} onChange={(event) => setBranchId(event.target.value)}>
+          {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+        </select>
+      </label>
+    </div>
+    {load === "loading" && <Skeleton rows={5} label={t("Loading", "جارٍ التحميل")} />}
+    {load === "error" && <EmptyState variant="error" title={t("Could not load hours and capacity", "تعذر تحميل المواعيد والسعة")}
+      action={<button type="button" className="btn" onClick={() => setReloadKey((key) => key + 1)}>{t("Retry", "إعادة المحاولة")}</button>} />}
+    {load === "ready" && form && <form onSubmit={(event) => void save(event)} className="st-form">
+      {unconfigured && <Notice tone="info">{t("This branch is not set up yet. Fill in the required fields to start taking bookings.", "لم يُعدّ الفرع بعد. املا الحقول المطلوبة عشان يستقبل حجوزات.")}</Notice>}
+      <FormSection title={t("Working time", "وقت العمل")} columns={3}>
+        <Field label={t("Opens", "يفتح")} required><input className="field-input" type="time" value={form.opensAt} onChange={(event) => patch({ opensAt: event.target.value })} /></Field>
+        <Field label={t("Closes", "يقفل")} required><input className="field-input" type="time" value={form.closesAt} onChange={(event) => patch({ closesAt: event.target.value })} /></Field>
+        <Field label={t("Time zone", "المنطقة الزمنية")} required>
+          <input className="field-input" list="st-timezones" value={form.timezone} onChange={(event) => patch({ timezone: event.target.value })} placeholder="Africa/Cairo" dir="ltr" />
+        </Field>
+        <datalist id="st-timezones">{timezones.map((zone) => <option key={zone} value={zone} />)}</datalist>
+        <Field label={t("Working days", "أيام العمل")} full required>
+          <div className="st-weekdays" role="group" aria-label={t("Working days", "أيام العمل")}>
+            {[0, 1, 2, 3, 4, 5, 6].map((day) => <label key={day} className="st-chip" data-on={form.workingWeekdays.includes(day) ? "true" : "false"}>
+              <input type="checkbox" checked={form.workingWeekdays.includes(day)} onChange={(event) => patch({
+                workingWeekdays: event.target.checked ? [...form.workingWeekdays, day] : form.workingWeekdays.filter((item) => item !== day),
+              })} />
+              <span>{dayName(day)}</span>
+            </label>)}
+          </div>
+        </Field>
+      </FormSection>
+      <FormSection title={t("Capacity", "السعة")} columns={3}>
+        <Field label={t("Cars per day", "عربيات في اليوم")} required><input className="field-input" type="number" min={1} value={form.dailyIntakeLimit} onChange={(event) => patch({ dailyIntakeLimit: event.target.value })} /></Field>
+        <Field label={t("Clean bays", "بايات نظيفة")} required><input className="field-input" type="number" min={0} value={form.cleanBays} onChange={(event) => patch({ cleanBays: event.target.value })} /></Field>
+        <Field label={t("General bays", "بايات عامة")} required><input className="field-input" type="number" min={0} value={form.generalBays} onChange={(event) => patch({ generalBays: event.target.value })} /></Field>
+        <Field label={t("Slot length (min)", "مدة الموعد (دقيقة)")} required><input className="field-input" type="number" min={1} value={form.slotMinutes} onChange={(event) => patch({ slotMinutes: event.target.value })} /></Field>
+        <Field label={t("Effective from", "ساري من")} required><input className="field-input" type="date" value={form.effectiveFrom} onChange={(event) => patch({ effectiveFrom: event.target.value })} /></Field>
+      </FormSection>
+      <FormSection title={t("Closed dates", "أيام الإغلاق")} columns={1}>
+        <div className="st-closures">
+          {form.closures.length === 0 && <p className="form-hint">{t("No closed dates.", "لا توجد أيام إغلاق.")}</p>}
+          {form.closures.map((closure, index) => <div className="st-closure-row" key={index}>
+            <input className="field-input" type="date" aria-label={t("Date", "التاريخ")} value={closure.date} onChange={(event) => patch({ closures: form.closures.map((item, i) => i === index ? { ...item, date: event.target.value } : item) })} />
+            <input className="field-input" aria-label={t("Reason", "السبب")} placeholder={t("Reason", "السبب")} value={closure.reason} onChange={(event) => patch({ closures: form.closures.map((item, i) => i === index ? { ...item, reason: event.target.value } : item) })} />
+            <button type="button" className="icon-button" aria-label={t("Remove closed date", "احذف يوم الإغلاق")} onClick={() => patch({ closures: form.closures.filter((_, i) => i !== index) })}><Trash2 size={16} /></button>
+          </div>)}
+          <div><button type="button" className="btn btn-sm" onClick={() => patch({ closures: [...form.closures, { date: "", reason: "" }] })}><Plus size={14} />{t("Add closed date", "أضف يوم إغلاق")}</button></div>
+        </div>
+      </FormSection>
+      <FormSection title={t("Approval", "الاعتماد")} columns={1}>
+        <Field label={t("Reason for this change", "سبب التغيير")} required><input className="field-input" value={form.reason} onChange={(event) => patch({ reason: event.target.value })} /></Field>
+      </FormSection>
+      <RequiredNote text={t("Required", "مطلوب")} />
+      {message && <div className="form-error" role="alert">{message}</div>}
+      <div className="form-actions">
+        <button className="btn btn-primary" type="submit" disabled={busy || !availabilityComplete(form)}>{busy ? t("Saving…", "بنحفظ…") : t("Save hours and capacity", "احفظ المواعيد والسعة")}</button>
+      </div>
+    </form>}
   </section>;
 }

@@ -1,0 +1,23 @@
+/* Bookings + Transport local styles. Logical properties only; tokens from shared/styles/tokens.css. */
+.bk-pick { display: grid; gap: 8px; }
+.bk-pick-list { display: grid; gap: 6px; max-block-size: 232px; overflow-y: auto; overscroll-behavior: contain; }
+.bk-pick-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-block-size: 44px; padding: 8px 11px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; color: var(--ink); font: inherit; text-align: start; cursor: pointer; }
+.bk-pick-item:hover { border-color: var(--teal); }
+.bk-pick-item[aria-checked="true"] { border-color: var(--teal); background: var(--teal-soft); }
+.bk-pick-item small { color: var(--muted); font-size: 12px; }
+.bk-pick-selected { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 11px; border: 1px solid var(--teal); border-radius: var(--radius); background: var(--teal-soft); }
+.bk-pick-selected > div { min-inline-size: 0; display: grid; }
+.bk-pick-selected small { color: var(--muted); font-size: 12px; }
+.bk-inline-form { display: grid; gap: 10px; padding: 12px; border: 1px dashed var(--line); background: var(--paper); }
+.bk-slots { display: flex; flex-wrap: wrap; gap: 6px; }
+.bk-slot { min-block-size: 40px; min-inline-size: 64px; padding: 6px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; color: var(--ink); font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
+.bk-slot:hover { border-color: var(--teal); }
+.bk-slot[aria-checked="true"] { border-color: var(--teal); background: var(--teal); color: #fff; }
+.bk-muted { color: var(--muted); font-size: 13px; margin: 0; }
+.bk-stack { display: grid; gap: 14px; }
+.bk-history { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.bk-history li { display: grid; gap: 3px; padding-block-end: 8px; border-block-end: 1px solid var(--line-soft); font-size: 13px; }
+.bk-history .bk-arrow { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bk-related { display: grid; gap: 4px; }
+.bk-row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+[dir="rtl"] .bk-arrow-icon { transform: scaleX(-1); }

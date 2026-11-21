@@ -1,33 +1,11 @@
-import { useEffect, useState } from "react";
-import type { TransportRequest } from "@garage/domain";
-import { transportApi, useGarageStore } from "../../shared/store";
-import { TransportDetail } from "./TransportDetail";
-import { customerDisplay, PageHeading, type Lang } from "../../shared/ui";
+import { PageHeader } from "../../shared/components";
+import type { Lang } from "../../shared/ui";
+import { TransportPanel } from "./TransportPanel";
 
-export function TransportPage({lang}:{lang:Lang}){
-  const store=useGarageStore();
-  const state=store.state;
-  const t=(en:string,ar:string)=>lang==="ar"?ar:en;
-  const [items,setItems]=useState<TransportRequest[]>([]),[selected,setSelected]=useState<string|null>(null),[bookingId,setBookingId]=useState(""),[direction,setDirection]=useState<"pickup"|"return"|"courtesy"|"">(""),[mode,setMode]=useState<"tow"|"driver"|"courtesy-car"|"">(""),[contact,setContact]=useState(""),[location,setLocation]=useState(""),[instructions,setInstructions]=useState(""),[message,setMessage]=useState(""),[busy,setBusy]=useState(false);
-  const bookings=(state?.bookings??[]).filter(item=>state?.currentBranch==="all"||item.branchId===state?.currentBranch);
-  const directionLabel=(value:string)=>value==="pickup"?t("Pickup","استلام"):value==="return"?t("Return","إعادة"):t("Courtesy","مجاملة");
-  const modeLabel=(value:string)=>value==="tow"?t("Tow truck","ونش"):value==="driver"?t("Driver","سائق"):t("Courtesy car","سيارة بديلة");
-  const statusLabel=(value:string)=>({proposed:t("Proposed","مقترح"),requested:t("Requested","مطلوب"),confirmed:t("Confirmed","مؤكد"),"pickup-in-progress":t("Pickup in progress","الاستلام جارٍ"),"in-custody":t("In custody","في العهدة"),completed:t("Completed","مكتمل"),cancelled:t("Cancelled","ملغي"),exception:t("Needs attention","يحتاج متابعة")} as Record<string,string>)[value]??value;
-  async function refresh(){setItems(await transportApi.list());}
-  useEffect(()=>{void refresh().catch(error=>setMessage(error instanceof Error?error.message:String(error)));},[]);
-  async function create(){if(!bookingId||!direction||!mode||!contact.trim()||!location.trim())return;setBusy(true);setMessage("");try{const result=await transportApi.request({bookingId,direction:direction as "pickup"|"return"|"courtesy",mode:mode as "tow"|"driver"|"courtesy-car",contact:contact.trim(),location:location.trim(),instructions:instructions.trim(),idempotencyKey:crypto.randomUUID()});setSelected(result.id);await refresh();setMessage(result.status==="proposed"?t("Request saved. No provider commitment exists until policy is configured.","تم حفظ الطلب. لا يوجد التزام من مقدم خدمة حتى تهيئة السياسة."):t("Transport request recorded; timing is not committed yet.","تم تسجيل طلب النقل؛ التوقيت غير ملتزم به بعد."));}catch(error){setMessage(error instanceof Error?error.message:String(error));}finally{setBusy(false);}}
-  const labelBooking=(id:string)=>{const booking=bookings.find(item=>item.id===id);if(!booking)return id;const customer=state?.customers.find(item=>item.id===booking.customerId);const vehicle=customer?.vehicles.find(item=>item.id===booking.vehicleId);return `${customer?customerDisplay(customer.name,lang):"—"} · ${vehicle?.plate??"—"} · ${booking.dropoffDate}`;};
-  return <div dir={lang==="ar"?"rtl":"ltr"}>
-    <PageHeading eyebrow={t("Reception · Existing bookings","الاستقبال · الحجوزات الحالية")} title={t("Transport coordination","تنسيق النقل")} subtitle={t("Start from a booking, then add private contact and location details. A request is not a confirmed provider commitment.","ابدأ من حجز قائم، ثم أضف بيانات الاتصال والموقع الخاصة. الطلب لا يعني تأكيد مقدم الخدمة.")}/>
-    <section className="panel section-gap"><h2>{t("New coordination request","طلب تنسيق جديد")}</h2><div className="form-grid">
-      <label className="form-field">{t("Booking","الحجز")}<select className="field-select" required value={bookingId} onChange={event=>setBookingId(event.target.value)}><option value="">{t("Choose an existing booking","اختر حجزاً قائماً")}</option>{bookings.map(booking=><option key={booking.id} value={booking.id}>{labelBooking(booking.id)}</option>)}</select><span className="form-hint">{t("Customer and vehicle are taken from this booking.","يتم استخدام العميل والمركبة من هذا الحجز.")}</span></label>
-      <label className="form-field">{t("Request type","نوع الطلب")}<select className="field-select" required value={direction} onChange={event=>setDirection(event.target.value as typeof direction)}><option value="">{t("Choose a request type","اختر نوع الطلب")}</option><option value="pickup">{t("Pickup","استلام")}</option><option value="return">{t("Return to customer","إعادة للعميل")}</option><option value="courtesy">{t("Courtesy service","خدمة مجاملة")}</option></select></label>
-      <label className="form-field">{t("Transport method","وسيلة النقل")}<select className="field-select" required value={mode} onChange={event=>setMode(event.target.value as typeof mode)}><option value="">{t("Choose a method","اختر الوسيلة")}</option><option value="tow">{t("Tow truck","ونش")}</option><option value="driver">{t("Driver","سائق")}</option><option value="courtesy-car">{t("Courtesy car","سيارة بديلة")}</option></select></label>
-      <label className="form-field">{t("Private contact","بيانات الاتصال الخاصة")}<input className="field-input" required autoComplete="tel" value={contact} onChange={event=>setContact(event.target.value)}/></label>
-      <label className="form-field">{t("Private location","الموقع الخاص")}<input className="field-input" required value={location} onChange={event=>setLocation(event.target.value)}/></label>
-      <label className="form-field full"><details><summary>{t("Add optional instructions","إضافة تعليمات اختيارية")}</summary><textarea className="field-textarea" value={instructions} onChange={event=>setInstructions(event.target.value)}/></details></label>
-    </div><div className="form-actions"><button className="btn btn-primary" type="button" disabled={!bookingId||!direction||!mode||!contact.trim()||!location.trim()||busy} onClick={()=>void create()}>{busy?t("Saving…","جارٍ الحفظ…"):t("Save request","حفظ الطلب")}</button></div></section>
-    <section className="panel section-gap"><h2>{t("Open transport requests","طلبات النقل")}</h2>{items.length? <div className="action-row">{items.map(item=><button className={`btn ${selected===item.id?"btn-primary":""}`} type="button" key={item.id} onClick={()=>setSelected(item.id)}>{labelBooking(item.bookingId)} · {directionLabel(item.direction)} · {modeLabel(item.mode)} · {statusLabel(item.status)}</button>)}</div>:<p className="form-hint">{t("No transport requests yet. Start with an existing booking above.","لا توجد طلبات نقل بعد. ابدأ بحجز قائم من الأعلى.")}</p>}</section>
-    {selected&&<TransportDetail key={selected} id={selected} lang={lang} onChanged={()=>void refresh()}/>} {message&&<p role="status">{message}</p>}
+/** Standalone Transport page (still routable; also embedded as a booking tab). */
+export function TransportPage({ lang }: { lang: Lang }) {
+  return <div dir={lang === "ar" ? "rtl" : "ltr"}>
+    <PageHeader title={lang === "ar" ? "النقل" : "Transport"} subtitle={lang === "ar" ? "طلبات الاستلام والإعادة للحجوزات القائمة." : "Pickup and return requests for existing bookings."} />
+    <TransportPanel lang={lang} />
   </div>;
 }

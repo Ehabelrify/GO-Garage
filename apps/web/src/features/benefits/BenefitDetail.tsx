@@ -1,70 +1,133 @@
-import { useEffect, useState } from "react";
-import { benefitApi, type BenefitDetailData } from "../../shared/store";
+import { useEffect, useMemo, useState } from "react";
+import type { Locale } from "@garage/domain";
+import { benefitApi, useGarageStore } from "../../shared/store";
+import { Collapsible, ConfirmDialog, EmptyState, Field, FormSection, RecordRef, Skeleton, StatusBadge } from "../../shared/components";
+import { dateLabel } from "../../shared/ui";
+import { commercialError } from "../quotes/commercial-errors";
+import { useLoader } from "../quotes/commercial-data";
+import { buildLookups, tr } from "../quotes/lookups";
+import { isProtectedRef, todayIso } from "../quotes/quote-logic";
+import { activationLabels, benefitName, cancellationLabels, expiryText, limitText, reasonText, totalUses, transferLabels } from "./benefit-logic";
 
-export function BenefitDetail({ id, lang, onChanged }: { id: string; lang: "ar" | "en"; onChanged: () => void }) {
-  const t = (en: string, ar: string) => lang === "ar" ? ar : en;
-  const [detail, setDetail] = useState<BenefitDetailData | null>(null);
-  const [on, setOn] = useState(new Date().toISOString().slice(0, 10));
+type Check = { state: string; reasons: string[] } | null;
+
+/** Benefit drawer body: terms in plain words, check eligibility, record use, reverse a use. */
+export function BenefitDetail({ id, lang, onChanged }: { id: string; lang: Locale; onChanged: () => void }) {
+  const t = tr(lang);
+  const store = useGarageStore();
+  const lookups = useMemo(() => buildLookups(store.state, lang), [store.state, lang]);
+  const state = useLoader(() => benefitApi.detail(id), null as Awaited<ReturnType<typeof benefitApi.detail>> | null, (error) => commercialError(error, lang));
+  const detail = state.data;
+  const item = detail?.entitlement;
+  const [on, setOn] = useState(todayIso());
   const [branchId, setBranchId] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [fulfillmentRef, setFulfillmentRef] = useState("");
-  const [eligibility, setEligibility] = useState("");
-  const [reason, setReason] = useState("");
-  const [evidenceRef, setEvidenceRef] = useState("");
+  const [check, setCheck] = useState<Check>(null);
   const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [reversing, setReversing] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
+  const [evidence, setEvidence] = useState("");
+  const canReverse = store.actor?.role === "owner" || store.actor?.role === "branch-manager";
 
-  async function refresh() {
-    const next = await benefitApi.detail(id);
-    setDetail(next);
-    setBranchId((current) => current || next.entitlement.branchIds[0] || "");
-    onChanged();
-  }
-  useEffect(() => { void refresh().catch((error) => setMessage(error instanceof Error ? error.message : String(error))); }, [id]);
+  useEffect(() => { if (item && !branchId) setBranchId(item.branchIds[0] ?? ""); }, [item, branchId]);
+
+  async function refresh() { state.reload(); onChanged(); }
+
   async function evaluate() {
+    setBusy(true); setMessage("");
     try {
       const result = await benefitApi.evaluate({ entitlementId: id, on, branchId });
-      setEligibility(result.state === "eligible" ? t("Eligible under the accepted policy.", "مؤهل وفق السياسة المقبولة.") : `${result.state}: ${result.reasons.join(", ")}`);
-    } catch (error) { setEligibility(error instanceof Error ? error.message : String(error)); }
+      setCheck({ state: result.state, reasons: "reasons" in result ? result.reasons : [] });
+    } catch (error) { setCheck(null); setMessage(commercialError(error, lang)); } finally { setBusy(false); }
   }
   async function redeem() {
-    if (!detail) return;
+    if (!item) return;
+    setBusy(true); setMessage("");
     try {
-      const result = await benefitApi.redeem({ entitlementId: id, quantity, on, branchId, fulfillmentRef, expectedRevision: detail.entitlement.revision, idempotencyKey: crypto.randomUUID() });
+      const result = await benefitApi.redeem({ entitlementId: id, quantity, on, branchId, fulfillmentRef: fulfillmentRef.trim(), expectedRevision: item.revision, idempotencyKey: crypto.randomUUID() });
+      setFulfillmentRef(""); setCheck(null);
+      setMessage(result.remaining === null ? t("Use recorded.", "تم تسجيل الاستخدام.") : t(`Use recorded. ${result.remaining} left.`, `تم تسجيل الاستخدام. المتبقي ${result.remaining}.`));
       await refresh();
-      setMessage(`${t("Redemption recorded. Remaining", "تم تسجيل الاستفادة. المتبقي")}: ${result.remaining ?? t("policy evaluated", "يحدد بالسياسة")}`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
+    } catch (error) { setMessage(commercialError(error, lang)); } finally { setBusy(false); }
   }
-  async function reverse(redemptionId: string) {
+  async function reverse() {
+    if (!reversing) return;
+    setBusy(true); setMessage("");
     try {
-      await benefitApi.reverse({ redemptionId, reason, evidenceRef, idempotencyKey: crypto.randomUUID() });
+      await benefitApi.reverse({ redemptionId: reversing, reason: reason.trim(), evidenceRef: evidence.trim(), idempotencyKey: crypto.randomUUID() });
+      setReversing(null); setReason(""); setEvidence("");
+      setMessage(t("Use reversed. History is kept.", "تم عكس الاستخدام. يبقى السجل محفوظاً."));
       await refresh();
-      setMessage(t("Reversal recorded without deleting fulfillment history.", "تم تسجيل العكس دون حذف سجل التنفيذ."));
-    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
+    } catch (error) { setMessage(commercialError(error, lang)); } finally { setBusy(false); }
   }
-  const item = detail?.entitlement;
-  return <section className="panel section-gap" dir={lang === "ar" ? "rtl" : "ltr"}>
-    <h2>{t("Benefit detail", "تفاصيل المنفعة")}</h2>
-    {item && <>
-      <p><strong>{item.benefit.id}</strong> · {t("version", "الإصدار")} {item.benefit.version} · {item.status}</p>
-      <p>{t("Accepted source quote", "عرض السعر المقبول المصدر")}: {item.sourceQuote.quoteId} / {item.sourceQuote.revision}</p>
-      <p>{t("Customer / vehicle", "العميل / المركبة")}: {item.customerId} / {item.vehicleId}</p>
-      <p>{t("Activation", "التفعيل")}: {detail.promise.activationTrigger} · {t("Responsible team", "الفريق المسؤول")}: {item.responsibleTeamId ?? "—"}</p>
-      <p>{t("Transfer / cancellation / expiry", "النقل / الإلغاء / الانتهاء")}: {detail.promise.transferRule} / {detail.promise.cancellationRule} / {JSON.stringify(detail.promise.expiryRule)}</p>
-      <p>{detail.promise.eligibilityRule[lang]}</p>
-      <p>{t("Approved limit", "الحد المعتمد")}: {item.limit.state === "approved" ? JSON.stringify(item.limit.value) : `${item.limit.state}: ${item.limit.missing.join(", ")}`}</p>
-      <h3>{t("Evaluate and fulfill", "التقييم والتنفيذ")}</h3>
-      <label>{t("Date", "التاريخ")}<input type="date" value={on} onChange={(event) => setOn(event.target.value)} /></label>
-      <label>{t("Branch", "الفرع")}<select value={branchId} onChange={(event) => setBranchId(event.target.value)}>{item.branchIds.map((branch) => <option key={branch} value={branch}>{branch}</option>)}</select></label>
-      <label>{t("Quantity", "الكمية")}<input type="number" min="1" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label>
-      <label>{t("Fulfillment reference", "مرجع التنفيذ")}<input value={fulfillmentRef} onChange={(event) => setFulfillmentRef(event.target.value)} /></label>
-      <button className="btn" type="button" onClick={() => void evaluate()}>{t("Check eligibility", "فحص الأهلية")}</button>
-      <button className="btn btn-primary" type="button" disabled={item.status !== "active"} onClick={() => void redeem()}>{t("Record fulfillment", "تسجيل التنفيذ")}</button>
-      {eligibility && <p role="status">{eligibility}</p>}
-      <h3>{t("Immutable fulfillment history", "سجل التنفيذ غير القابل للحذف")}</h3>
-      <label>{t("Reversal reason", "سبب العكس")}<input value={reason} onChange={(event) => setReason(event.target.value)} /></label>
-      <label>{t("Protected evidence reference", "مرجع الدليل المحمي")}<input placeholder="private:benefits/..." value={evidenceRef} onChange={(event) => setEvidenceRef(event.target.value)} /></label>
-      <ul>{detail.history.map((entry) => <li key={entry.id}>{entry.on_date} · {entry.quantity} · {entry.branch_id} · {entry.fulfillment_ref} · {entry.reversed ? t("reversed", "معكوس") : <button className="btn" type="button" onClick={() => void reverse(entry.id)}>{t("Reverse", "عكس")}</button>}</li>)}</ul>
-    </>}
-    {message && <p role="status">{message}</p>}
-  </section>;
+
+  if (state.loading && !detail) return <Skeleton rows={5} label={t("Loading", "جارٍ التحميل")} />;
+  if (state.error && !detail) return <EmptyState variant="error" title={t("Could not load this benefit", "تعذر تحميل هذه المنفعة")} text={state.error} action={<button type="button" className="btn" onClick={state.reload}>{t("Retry", "إعادة المحاولة")}</button>} />;
+  if (!detail || !item) return null;
+
+  const customer = lookups.customer(item.customerId);
+  const vehicle = lookups.vehicle(item.vehicleId);
+  const used = detail.history.filter((entry) => !entry.reversed).reduce((sum, entry) => sum + entry.quantity, 0);
+  const total = totalUses(item.limit);
+  const date = (iso: string) => dateLabel(iso, lang);
+  const active = item.status === "active";
+
+  return <div className="qo-stack">
+    <div className="qo-row between"><StatusBadge status={item.status} lang={lang} domain="benefit" /><span className="qo-muted">{limitText(item.limit, lang)}{total !== null && ` · ${t(`${used} used`, `${used} مستخدم`)}`}</span></div>
+    <dl className="qo-kv">
+      <dt>{t("Customer", "العميل")}</dt><dd>{customer ? <RecordRef type="customer" id={customer.id} label={customer.name} /> : "—"}</dd>
+      <dt>{t("Vehicle", "المركبة")}</dt><dd>{vehicle ? <RecordRef type="vehicle" id={vehicle.vehicle.id} label={vehicle.vehicle.plate} subtitle={vehicle.vehicle.makeModel} /> : "—"}</dd>
+      <dt>{t("From quote", "من عرض السعر")}</dt><dd><RecordRef type="quote" id={item.sourceQuote.quoteId} label={`${t("Quote", "عرض سعر")} · ${customer?.name ?? ""}`} mode="link" /></dd>
+    </dl>
+    <p>{detail.promise.eligibilityRule[lang]}</p>
+
+    {active && <FormSection title={t("Use this benefit", "استخدام المنفعة")}>
+      <Field label={t("Date", "التاريخ")} required><input className="field-input" type="date" value={on} onChange={(event) => { setOn(event.target.value); setCheck(null); }} /></Field>
+      <Field label={t("Branch", "الفرع")} required>
+        <select className="field-select" value={branchId} onChange={(event) => { setBranchId(event.target.value); setCheck(null); }}>
+          {item.branchIds.map((branch) => <option key={branch} value={branch}>{lookups.branchName(branch) || t("Branch", "فرع")}</option>)}
+        </select>
+      </Field>
+      <Field label={t("Quantity", "الكمية")} required><input className="field-input" type="number" min={1} step={1} value={quantity} onChange={(event) => setQuantity(Math.max(1, Math.floor(Number(event.target.value) || 1)))} /></Field>
+      <Field label={t("Job or visit note", "ملاحظة الزيارة أو العمل")} required hint={t("What was provided, e.g. wash on 12 Nov", "ما الذي تم تقديمه، مثل غسيل في 12 نوفمبر")}><input className="field-input" value={fulfillmentRef} onChange={(event) => setFulfillmentRef(event.target.value)} /></Field>
+      <div className="qo-row" style={{ gridColumn: "1 / -1" }}>
+        <button type="button" className="btn" disabled={busy || !branchId} onClick={() => void evaluate()}>{t("Check eligibility", "افحص الأهلية")}</button>
+        <button type="button" className="btn btn-primary" disabled={busy || !branchId || !fulfillmentRef.trim()} onClick={() => void redeem()}>{t("Record use", "سجّل الاستخدام")}</button>
+      </div>
+    </FormSection>}
+    {check && <div className="qo-inline-result" aria-live="polite"><StatusBadge status={check.state} lang={lang} domain="benefit" />{check.reasons.length > 0 && <ul>{check.reasons.map((reasonItem, index) => <li key={index}>{reasonText(reasonItem, lang)}</li>)}</ul>}</div>}
+    {message && <p role="status" className="qo-muted">{message}</p>}
+
+    <Collapsible title={t("Terms", "الشروط")}>
+      <dl className="qo-kv">
+        <dt>{t("Starts", "يبدأ")}</dt><dd>{(activationLabels[detail.promise.activationTrigger] ?? activationLabels.accepted)[lang]}</dd>
+        <dt>{t("Expiry", "الانتهاء")}</dt><dd>{expiryText(detail.promise.expiryRule, lang, date)}</dd>
+        <dt>{t("Transfer", "النقل")}</dt><dd>{(transferLabels[detail.promise.transferRule] ?? transferLabels["review-required"])[lang]}</dd>
+        <dt>{t("If cancelled", "عند الإلغاء")}</dt><dd>{(cancellationLabels[detail.promise.cancellationRule] ?? cancellationLabels["review-required"])[lang]}</dd>
+      </dl>
+    </Collapsible>
+
+    <Collapsible title={t("Use history", "سجل الاستخدام")} count={detail.history.length} defaultOpen={detail.history.length > 0}>
+      {detail.history.length === 0 ? <p className="qo-muted">{t("Not used yet.", "لم تُستخدم بعد.")}</p>
+        : <ul className="qo-history">{detail.history.map((entry) => <li key={entry.id}>
+            <strong>{date(entry.on_date)}</strong>
+            <span>× {entry.quantity}</span>
+            <span className="qo-muted">{lookups.branchName(entry.branch_id)}</span>
+            <span>{entry.fulfillment_ref}</span>
+            {entry.reversed ? <StatusBadge status="cancelled" lang={lang} domain="benefit" label={t("Reversed", "معكوس")} />
+              : canReverse && <button type="button" className="btn btn-sm btn-danger" onClick={() => setReversing(entry.id)}>{t("Reverse", "عكس")}</button>}
+          </li>)}</ul>}
+    </Collapsible>
+
+    <ConfirmDialog open={reversing !== null} danger lang={lang} title={t("Reverse this use?", "عكس هذا الاستخدام؟")} body={t("The use stays in the history marked as reversed.", "يبقى الاستخدام في السجل مع علامة معكوس.")}
+      confirmLabel={t("Reverse", "عكس")} onCancel={() => setReversing(null)} onConfirm={() => void reverse()} busy={busy}
+      confirmDisabled={!reason.trim() || !isProtectedRef(evidence)} disabledReason={t("Add a reason and a proof reference starting with private:", "أضف السبب ومرجع إثبات يبدأ بـ private:")}>
+      <Field label={t("Reason", "السبب")} required><input className="field-input" value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
+      <Field label={t("Proof reference", "مرجع الإثبات")} required hint="private:…"><input className="field-input" value={evidence} onChange={(event) => setEvidence(event.target.value)} /></Field>
+    </ConfirmDialog>
+  </div>;
 }
+
+export { benefitName };

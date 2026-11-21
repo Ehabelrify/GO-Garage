@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
-import {
-  AlertTriangle, ArrowRightLeft, Check, MessageSquareText, RefreshCw,
-  Send, ShieldCheck, UserRound, Wrench,
-} from "lucide-react";
+import { hasCapability } from "../../shared/capabilities";
+import { ArrowLeft, ArrowRightLeft, Check, MessageSquareText, RefreshCw, Send, UserRound } from "lucide-react";
 import type { BranchId, GarageRole, GarageState } from "@garage/domain";
 import type { BranchName, Lang, Translator } from "../../shared/ui";
 import { useGarageStore } from "../../shared/store";
+import {
+  Collapsible, ConfirmDialog, EmptyState, FilterBar, Notice, PageHeader, RecordRef, Skeleton, StatusBadge,
+} from "../../shared/components";
+import {
+  consentView, eventTitle, filterConversations, inboxFiltersActive, resolveRelatedRecords,
+  type ConversationStatus, type InboxFilters, type InboxScope,
+} from "./inbox-model";
 import "./WhatsAppSimulationPage.css";
 
-type ConversationStatus = "open" | "pending" | "resolved";
 type MessageKind = "customer" | "reply" | "bot" | "internal-note";
 type InboxBranchId = BranchId | "all";
 interface Conversation {
@@ -93,8 +97,9 @@ export function WhatsAppSimulationPage(props: WhatsAppSimulationPageProps) {
 function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }: WhatsAppSimulationPageProps) {
   const rtl = lang === "ar";
   const msg = (en: string, ar: string) => t(en, ar);
-  const currentUserId = useGarageStore().actor?.userId;
-  const staffAllowed = role === "owner" || role === "branch-manager" || role === "receptionist";
+  const actorNow = useGarageStore().actor;
+  const currentUserId = actorNow?.userId;
+  const staffAllowed = hasCapability(actorNow, "whatsapp.use") || role === "owner";
   const [branchOptions,setBranchOptions]=useState<Array<{id:InboxBranchId;label:{en:string;ar:string}}>>(()=>state.branches.map(branch=>({id:branch.id,label:{en:String(branch.name),ar:String(branch.nameAr??branch.name)}})));
   const inboxBranchName=(id:InboxBranchId)=>branchOptions.find(branch=>branch.id===id)?.label[lang]??(id==="all"?msg("All branches","كل الفروع"):branchName(id));
   const [branchId, setBranchId] = useState<InboxBranchId>(() => {
@@ -104,7 +109,10 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const scopeKey = selectedId ? `${branchId}:${selectedId}` : null;
-  const [filter, setFilter] = useState<"all" | ConversationStatus>("all");
+  const [filters, setFilters] = useState<InboxFilters>({ status: "all", scope: "all", query: "" });
+  const [pane, setPane] = useState<"list" | "thread">("list");
+  const [confirm, setConfirm] = useState<"handoff" | "resolve" | null>(null);
+  const [consent, setConsent] = useState<{ status?: string; expiresAt?: string | null } | null>(null);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState("");
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -124,6 +132,7 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
     activeSelectionRef.current = `${branchId}:${id}`;
     detailRequestRef.current += 1;
     setSelectedId(id);
+    setPane("thread");
   };
   const chooseBranch = (id: InboxBranchId) => {
     activeSelectionRef.current = null;
@@ -131,10 +140,6 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
     detailRequestRef.current += 1;
     setBranchId(id);
   };
-  const roleLabel = role === "owner" ? msg("Owner", "المالك")
-    : role === "branch-manager" ? msg("Branch manager", "مدير الفرع")
-      : role === "receptionist" ? msg("Receptionist", "موظف الاستقبال")
-        : msg("Technician", "فني");
 
   const loadList = async (id: InboxBranchId) => {
     const requestId = ++listRequestRef.current;
@@ -146,8 +151,12 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
       );
       if (requestId !== listRequestRef.current || id !== branchId) return false;
       setConversations(result.conversations);
-      setSelectedId((current) => current && result.conversations.some((item) => item.id === current)
-        ? current : result.conversations[0]?.id ?? null);
+      // ?record=<conversationId> deep link (record registry) wins on first load.
+      const linked = new URLSearchParams(window.location.search).get("record");
+      setSelectedId((current) => linked && !current && result.conversations.some((item) => item.id === linked)
+        ? linked
+        : current && result.conversations.some((item) => item.id === current)
+          ? current : result.conversations[0]?.id ?? null);
       return true;
     } catch (error) {
       if (requestId !== listRequestRef.current || id !== branchId) return false;
@@ -225,12 +234,25 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId, role,selectedId,conversations]);
 
+  const related = resolveRelatedRecords(state, detail?.conversation.id === selectedId ? detail?.conversation.relatedBookingId : null);
+  const consentCustomerId = related?.customer?.id;
+  const consentSimulation = detail?.conversation.simulation;
+  useEffect(() => {
+    setConsent(null);
+    if (!consentCustomerId || !consentSimulation) return;
+    let alive = true;
+    request<{ consent: { status?: string; expiresAt?: string | null } }>(
+      `/api/whatsapp/consents?channelId=whatsapp-simulation&customerId=${encodeURIComponent(consentCustomerId)}&purpose=service`,
+    ).then((result) => { if (alive) setConsent(result.consent); }).catch(() => { if (alive) setConsent(null); });
+    return () => { alive = false; };
+  }, [consentCustomerId, consentSimulation, selectedId]);
+
   useEffect(() => {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
   }, [detail?.messages.length]);
 
   const branchConversations = branchId==="all"?conversations:conversations.filter((item) => item.branchId === branchId);
-  const filteredConversations = branchConversations.filter((item) => filter === "all" || item.status === filter);
+  const filteredConversations = filterConversations(branchConversations, filters, currentUserId);
   const selectedDetail = detail?.conversation.id === selectedId && (branchId==="all"||detail.conversation.branchId === branchId) ? detail : null;
   const selectedConversation = selectedDetail?.conversation ?? branchConversations.find((item) => item.id === selectedId);
   const formatTime = (value: string) => {
@@ -240,6 +262,8 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
   };
   const statusLabel = (status: ConversationStatus) => status === "open"
     ? msg("Open", "مفتوحة") : status === "pending" ? msg("Pending", "معلّقة") : msg("Resolved", "تم الحل");
+  const isMine = !!selectedConversation && selectedConversation.assignedUserId === currentUserId;
+  const consentState = consentView(consent);
   const refresh = async (id = selectedId) => {
     await loadList(branchId);
     if (id) await loadDetail(id);
@@ -254,8 +278,8 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
       });
       await refresh(selectedId);
       if (activeSelectionRef.current === scopeKey) notify(action === "handoff"
-        ? msg("Simulated handoff recorded in the branch inbox.", "تم تسجيل تحويل تجريبي في صندوق وارد الفرع.")
-        : msg("Conversation updated in simulated data.", "تم تحديث المحادثة في البيانات التجريبية."));
+        ? msg("Handed off to staff.", "تم التحويل لموظف.")
+        : msg("Conversation updated.", "تم تحديث المحادثة."));
     } catch (error) {
       setDetailError(error instanceof Error ? error.message : msg("Could not update the conversation.", "تعذر تحديث المحادثة."));
     } finally { setBusy(""); }
@@ -290,177 +314,167 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
       setText("");
       await refresh(selectedId);
       if (activeSelectionRef.current === scopeKey) notify(composerKind === "internal-note"
-        ? msg("Internal note saved; it is not a customer reply.", "تم حفظ الملاحظة الداخلية؛ دي مش رد للعميل.")
-        : msg("Reply added to this inbox. Provider delivery is off.", "اتضاف الرد لصندوق الوارد. إرسال واتساب الفعلي متوقف."));
+        ? msg("Internal note saved.", "تم حفظ الملاحظة الداخلية.")
+        : msg("Reply saved. Not sent: provider delivery is off.", "تم حفظ الرد ولم يُرسل: الإرسال متوقف."));
     } catch (error) {
       setDetailError(error instanceof Error ? error.message : msg("Could not add this message.", "تعذر إضافة الرسالة."));
     } finally { setBusy(""); }
   };
 
+  const scopes: Array<{ value: InboxScope; label: string }> = [
+    { value: "all", label: msg("All", "الكل") }, { value: "mine", label: msg("Mine", "محادثاتي") },
+    { value: "unassigned", label: msg("Unassigned", "غير معيّنة") }, { value: "unread", label: msg("Unread", "غير مقروءة") },
+  ];
+  const clearFilters = () => setFilters({ status: "all", scope: "all", query: "" });
+  const blocked = !!busy;
+  const personName = (member: StaffOption) => `${member.name} · ${member.role === "owner" ? msg("Owner", "المالك") : member.role === "branch-manager" ? msg("Branch manager", "مدير الفرع") : msg("Receptionist", "موظف الاستقبال")}`;
+  const confirmCopy = confirm === "handoff"
+    ? { title: msg("Hand off to staff?", "تحويل المحادثة لموظف؟"), body: msg("The conversation is marked for a human to take over.", "ستُعلَّم المحادثة ليتولاها موظف."), label: msg("Hand off", "تحويل") }
+    : { title: msg("Resolve this conversation?", "حل هذه المحادثة؟"), body: msg("You can reopen it later.", "يمكنك إعادة فتحها لاحقاً."), label: msg("Resolve", "حل") };
+  const isSimulated = selectedConversation ? selectedConversation.simulation : true;
+
+  const actionButtons = selectedConversation && staffAllowed ? <div className="wa-actions">
+    {!isMine && <button className="btn btn-primary btn-sm" type="button" disabled={blocked} onClick={() => void performAction("claim")}><UserRound size={14} aria-hidden="true" />{msg("Claim", "استلام")}</button>}
+    <button className="btn btn-sm" type="button" disabled={blocked} onClick={() => setConfirm("handoff")}><ArrowRightLeft size={14} aria-hidden="true" />{msg("Hand off", "تحويل")}</button>
+    {selectedConversation.unreadCount > 0 && <button className="btn btn-sm" type="button" disabled={blocked} onClick={() => void performAction("mark-read")}><Check size={14} aria-hidden="true" />{msg("Mark read", "مقروءة")}</button>}
+    {selectedConversation.status !== "open" && <button className="btn btn-sm" type="button" disabled={blocked} onClick={() => void performAction("reopen")}>{msg("Reopen", "إعادة فتح")}</button>}
+    {selectedConversation.status !== "pending" && <button className="btn btn-sm" type="button" disabled={blocked} onClick={() => void performAction("pending")}>{msg("Pending", "تعليق")}</button>}
+    {selectedConversation.status !== "resolved" && <button className="btn btn-sm" type="button" disabled={blocked} onClick={() => setConfirm("resolve")}>{msg("Resolve", "حل")}</button>}
+  </div> : null;
+
   return <div className="wa-page" dir={rtl ? "rtl" : "ltr"}>
-    <div className="page-heading">
-      <div>
-        <div className="eyebrow">{msg("STAFF MESSAGING WORKSPACE", "مساحة رسائل الفريق")}</div>
-        <h1>{msg("WhatsApp staff inbox", "صندوق وارد واتساب للفريق")}</h1>
-        <p className="subtitle">{msg(
-          "Review conversations, manage ownership and keep staff notes separate from customer replies.",
-          "راجع المحادثات وحدد المسؤولية وافصل ملاحظات الفريق عن ردود العملاء.",
-        )}</p>
-      </div>
-      <div className="wa-heading-side">
-        <span className="wa-state-chip">{msg("Provider disconnected", "مزود الخدمة غير متصل")}</span>
-        <span className="wa-role-chip"><UserRound size={14} />{roleLabel}</span>
-      </div>
-    </div>
+    <PageHeader
+      title={msg("Inbox", "صندوق الوارد")}
+      meta={<><StatusBadge status="simulated" domain="message" lang={lang} label={msg("Delivery off", "الإرسال متوقف")} /><span className="wa-meta">{inboxBranchName(branchId)}</span></>}
+      actions={<>
+        <label className="sr-only" htmlFor="wa-branch">{msg("Branch", "الفرع")}</label>
+        <select id="wa-branch" className="wa-branch-select" value={branchId} onChange={(event) => chooseBranch(event.target.value as InboxBranchId)}>
+          {branchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branch.label[lang]}</option>)}
+        </select>
+        <button className="btn" type="button" onClick={() => void refresh()} aria-label={msg("Refresh", "تحديث")}><RefreshCw size={15} aria-hidden="true" /></button>
+      </>}
+    />
+    <Notice tone="info">{msg("Provider delivery is off. Replies and notes are saved here only and are not sent to customers.", "الإرسال عبر واتساب متوقف. تُحفظ الردود والملاحظات هنا فقط ولا تصل للعملاء.")}</Notice>
 
-    <section className="wa-safety" aria-label={msg("Simulation notice", "تنبيه المحاكاة")}>
-      <span className="wa-safety-mark"><ShieldCheck size={18} /></span>
-      <div>
-        <strong>{msg("PROVIDER DISCONNECTED — no customer delivery", "مزود واتساب غير متصل — لا توجد رسائل للعملاء")}</strong>
-        <p>{msg(
-          "This staff workspace is separate from the public customer demo. Messages are not delivered through WhatsApp while the provider is disconnected.",
-          "مساحة الفريق منفصلة عن العرض العام للعميل. الرسائل مش بتوصل عن طريق واتساب ومزود الخدمة غير متصل.",
-        )}</p>
-      </div>
-      <div className="wa-safety-meta"><span>{msg("Branch workspace", "مساحة الفرع")}</span><strong>{inboxBranchName(branchId)}</strong></div>
-    </section>
-
-    <div className="wa-workspace">
-      <section className="wa-card wa-inbox" aria-label={msg("Staff conversation inbox", "صندوق وارد محادثات الفريق")}>
-        <header className="wa-inbox-head">
-          <div className="wa-inbox-title">
-            <h2>{msg("Staff inbox", "صندوق وارد الفريق")}</h2>
-            <span className="wa-count">{branchConversations.length}</span>
-          </div>
-          <div className="wa-branch-control">
-            <label htmlFor="wa-branch">{msg("Branch ownership", "مسؤولية الفرع")}</label>
-            <select id="wa-branch" value={branchId} onChange={(event) => chooseBranch(event.target.value as InboxBranchId)}>
-              {branchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branch.label[lang]}</option>)}
-            </select>
-          </div>
-        </header>
-        <div className="wa-toolbar" aria-label={msg("Filter conversations", "تصفية المحادثات")}>
-          {(["all", "open", "pending", "resolved"] as const).map((item) =>
-            <button type="button" key={item} className={`wa-filter ${filter === item ? "active" : ""}`} onClick={() => setFilter(item)}>
-              {item === "all" ? msg("All", "الكل") : statusLabel(item)}
-            </button>)}
-        </div>
-        {listError && <div className="wa-error" role="alert">{listError}<button className="wa-secondary" type="button" onClick={() => void loadList(branchId)}><RefreshCw size={13} />{msg("Retry", "إعادة المحاولة")}</button></div>}
-        {listLoading && branchConversations.length === 0
-          ? <div className="wa-skeleton" aria-label={msg("Loading conversations", "تحميل المحادثات")}><i /><i /><i /></div>
-          : filteredConversations.length ? <div className="wa-conversation-list">
-              {filteredConversations.map((conversation) => <button
-                type="button"
-                className={`wa-conversation-item ${selectedId === conversation.id ? "selected" : ""}`}
-                key={conversation.id}
-                onClick={() => chooseConversation(conversation.id)}
-                aria-current={selectedId === conversation.id ? "true" : undefined}
-              >
-                <span className="wa-avatar">{conversation.customerLabel.trim().slice(0, 1) || "S"}</span>
-                <span className="wa-list-main">
-                  <span className="wa-list-top"><strong>{conversation.customerLabel}</strong><time>{formatTime(conversation.updatedAt)}</time></span>
-                  <span className="wa-preview">{conversation.preview}</span>
-                  <span className="wa-list-foot">
-                    <span className={`wa-status ${conversation.status}`}>{statusLabel(conversation.status)}</span>
-                    <span>{conversation.assignedTo || msg("Unassigned", "غير معيّن")}</span>
-                    {conversation.unreadCount > 0 && <span className="wa-unread" aria-label={`${conversation.unreadCount} ${msg("unread", "غير مقروءة")}`}>{conversation.unreadCount}</span>}
-                  </span>
+    <div className={`wa-workspace pane-${pane}`}>
+      <section className="wa-list-pane" aria-label={msg("Conversations", "المحادثات")}>
+        <FilterBar
+          lang={lang}
+          search={{ value: filters.query, onChange: (query) => setFilters((c) => ({ ...c, query })), placeholder: msg("Search conversations", "ابحث في المحادثات") }}
+          filters={[
+            { key: "scope", label: msg("Show", "عرض"), value: filters.scope, options: scopes, onChange: (value) => setFilters((c) => ({ ...c, scope: value as InboxScope })) },
+            { key: "status", label: msg("Status", "الحالة"), value: filters.status, options: [
+              { value: "all", label: msg("All statuses", "كل الحالات") }, { value: "open", label: statusLabel("open") },
+              { value: "pending", label: statusLabel("pending") }, { value: "resolved", label: statusLabel("resolved") },
+            ], onChange: (value) => setFilters((c) => ({ ...c, status: value as InboxFilters["status"] })) },
+          ]}
+          onClear={clearFilters}
+          resultCount={filteredConversations.length}
+        />
+        {listError && <EmptyState variant="error" title={listError} action={<button className="btn btn-sm" type="button" onClick={() => void loadList(branchId)}>{msg("Retry", "إعادة المحاولة")}</button>} />}
+        {!listError && listLoading && branchConversations.length === 0 && <Skeleton rows={5} label={msg("Loading conversations", "تحميل المحادثات")} />}
+        {!listError && !listLoading && branchConversations.length === 0 && <EmptyState title={msg("No conversations yet", "لا توجد محادثات بعد")} text={msg("New customer messages will appear here.", "ستظهر رسائل العملاء الجديدة هنا.")} />}
+        {!listError && branchConversations.length > 0 && filteredConversations.length === 0 && inboxFiltersActive(filters) &&
+          <EmptyState variant="no-results" title={msg("No matching conversations", "لا توجد محادثات مطابقة")} action={<button className="btn btn-sm" type="button" onClick={clearFilters}>{msg("Clear filters", "مسح التصفية")}</button>} />}
+        {filteredConversations.length > 0 && <ul className="wa-conversation-list">
+          {filteredConversations.map((conversation) => <li key={conversation.id}>
+            <button type="button" className={`wa-conversation-item ${selectedId === conversation.id ? "selected" : ""}`} onClick={() => chooseConversation(conversation.id)} aria-current={selectedId === conversation.id ? "true" : undefined}>
+              <span className="wa-avatar" aria-hidden="true">{conversation.customerLabel.trim().slice(0, 1) || "?"}</span>
+              <span className="wa-list-main">
+                <span className="wa-list-top"><strong><bdi>{conversation.customerLabel}</bdi></strong><time>{formatTime(conversation.updatedAt)}</time></span>
+                <span className="wa-preview">{conversation.preview}</span>
+                <span className="wa-list-foot">
+                  <StatusBadge status={conversation.status} lang={lang} label={statusLabel(conversation.status)} />
+                  <span>{conversation.assignedTo || msg("Unassigned", "غير معيّنة")}</span>
+                  {conversation.unreadCount > 0 && <span className="wa-unread" aria-label={`${conversation.unreadCount} ${msg("unread", "غير مقروءة")}`}>{conversation.unreadCount}</span>}
                 </span>
-              </button>)}
-        </div> : !listError && <div className="wa-list-empty">{msg("No conversations are available in this branch view.", "لا توجد محادثات متاحة في عرض الفرع ده.")}</div>}
+              </span>
+            </button>
+          </li>)}
+        </ul>}
       </section>
 
-      <section className="wa-card wa-chat" aria-label={msg("Conversation and transcript", "المحادثة وسجلها")}>
+      <section className="wa-thread-pane" aria-label={msg("Conversation", "المحادثة")}>
         {selectedConversation ? <>
           <header className="wa-chat-head">
-            <div className="wa-contact">
-              <span className="wa-contact-mark"><MessageSquareText size={17} /></span>
-              <div className="wa-contact-copy">
-                <strong>{selectedConversation.customerLabel}</strong>
-                <small>{selectedConversation.simulation ? msg("Fictional contact · no phone number", "جهة اتصال افتراضية · من غير رقم موبايل") : msg("Operational contact · protected details", "جهة اتصال تشغيلية · بيانات محمية")} · {inboxBranchName(selectedConversation.branchId)}</small>
-              </div>
+            <button type="button" className="btn btn-quiet btn-sm wa-back" onClick={() => setPane("list")} aria-label={msg("Back to conversations", "العودة إلى المحادثات")}><ArrowLeft size={16} aria-hidden="true" /></button>
+            <div className="wa-contact-copy">
+              <strong><bdi>{selectedConversation.customerLabel}</bdi></strong>
+              <small>{inboxBranchName(selectedConversation.branchId)} · {selectedConversation.assignedTo || msg("Unassigned", "غير معيّنة")}</small>
             </div>
-            <div className="wa-chat-head-meta">
-              <span className="wa-sim-chip">{msg("SIMULATED", "محاكاة")}</span>
-              <span className={`wa-status ${selectedConversation.status}`}>{statusLabel(selectedConversation.status)}</span>
-            </div>
+            <StatusBadge status={selectedConversation.status} lang={lang} label={statusLabel(selectedConversation.status)} />
           </header>
-          {detailError && <div className="wa-error-inline" role="alert">{detailError} <button type="button" className="wa-secondary" onClick={() => selectedId && void loadDetail(selectedId)}>{msg("Retry", "إعادة المحاولة")}</button></div>}
+          {actionButtons}
+          {detailError && <div className="wa-error-inline" role="alert">{detailError} <button type="button" className="btn btn-sm" onClick={() => selectedId && void loadDetail(selectedId)}>{msg("Retry", "إعادة المحاولة")}</button></div>}
           <div className="wa-thread" ref={threadRef} role="log" aria-live="polite" aria-relevant="additions text">
-            {detailLoading ? <div className="wa-skeleton"><i /><i /><i /></div>
+            {detailLoading ? <Skeleton rows={4} label={msg("Loading conversation", "تحميل المحادثة")} />
               : selectedDetail?.messages.length ? selectedDetail.messages.map((message) => <article className={`wa-message ${message.kind}`} key={message.id}>
                 {message.kind === "internal-note" && <span className="wa-kind-tag">{msg("Internal note · staff only", "ملاحظة داخلية · للفريق فقط")}</span>}
-                {message.kind === "customer" && <span className="wa-kind-tag">{msg("Simulated customer message", "رسالة عميل تجريبية")}</span>}
-                {message.kind === "reply" && <span className="wa-kind-tag">{msg("Simulated staff reply", "رد موظف تجريبي")}</span>}
-                {message.kind === "bot" && <span className="wa-kind-tag">{msg("Simulated bot reply", "رد آلي تجريبي")}</span>}
+                {message.kind === "bot" && <span className="wa-kind-tag">{msg("Automated reply", "رد آلي")}</span>}
                 <p>{message.text}</p>
-                <div className="wa-message-meta"><time>{formatTime(message.createdAt)}</time><strong>{message.authorLabel}</strong></div>
-              </article>) : !detailLoading && <div className="wa-thread-empty">
-                <span className="wa-thread-empty-mark"><MessageSquareText size={19} /></span>
-                <strong>{msg("A clear, accountable transcript", "سجل محادثة واضح ومسؤول")}</strong>
-                <p>{msg("Customer messages, staff replies and staff-only notes are kept visibly separate.", "رسائل العميل وردود الفريق والملاحظات الداخلية ظاهرة كأنواع منفصلة.")}</p>
-              </div>}
+                <div className="wa-message-meta"><strong>{message.authorLabel}</strong><time>{formatTime(message.createdAt)}</time></div>
+              </article>) : <EmptyState title={msg("No messages yet", "لا توجد رسائل بعد")} />}
           </div>
           {staffAllowed ? <form className="wa-composer" onSubmit={submitMessage}>
-            <label className="wa-field">
-              <span>{msg("Entry type", "نوع الإدخال")}</span>
-              <select value={composerKind} onChange={(event) => setComposerKind(event.target.value as MessageKind)}>
-            <option value="reply">{msg("Staff reply", "رد موظف")}</option>
-                <option value="internal-note">{msg("Internal note · staff only", "ملاحظة داخلية · للفريق فقط")}</option>
+            {!isMine && <p className="wa-composer-note">{msg("Claim this conversation to reply.", "استلم المحادثة للرد عليها.")}</p>}
+            <div className="wa-composer-row">
+              <label className="sr-only" htmlFor="wa-kind">{msg("Entry type", "نوع الإدخال")}</label>
+              <select id="wa-kind" value={composerKind} onChange={(event) => setComposerKind(event.target.value as MessageKind)} disabled={!isMine}>
+                <option value="reply">{msg("Reply", "رد")}</option>
+                <option value="internal-note">{msg("Internal note", "ملاحظة داخلية")}</option>
               </select>
-            </label>
-            <label className="wa-field">
-              <span className="sr-only">{msg("Message text", "نص الرسالة")}</span>
-              <textarea rows={2} value={text} onChange={(event) => setText(event.target.value)} placeholder={composerKind === "internal-note" ? msg("Add context for staff only…", "أضف تفاصيل للفريق فقط…") : msg("Write a simulated entry…", "اكتب إدخالاً تجريبياً…")} />
-            </label>
-            <button className="wa-primary" type="submit" disabled={!text.trim() || busy === "message" || selectedConversation.assignedUserId !== currentUserId}><Send size={14} />{busy === "message" ? msg("Saving…", "جاري الحفظ…") : composerKind === "internal-note" ? msg("Add internal note", "أضف ملاحظة داخلية") : msg("Send reply", "إرسال الرد")}</button>
-            <span className="wa-composer-note">{composerKind === "internal-note"
-              ? msg("Internal notes are staff-only and never displayed as customer replies.", "الملاحظات الداخلية للفريق فقط ومش بتظهر كردود للعميل.")
-              : msg("Development data only. Nothing is delivered to a customer.", "بيانات تطوير فقط. مافيش حاجة بتوصل للعميل.")}</span>
-            {selectedConversation.assignedUserId !== currentUserId && <span className="wa-composer-note">{msg("Claim or assign this conversation to yourself before sending a staff reply or note.", "استلم المحادثة أو أسندها لنفسك قبل إرسال رد أو ملاحظة للفريق.")}</span>}
-          </form> : <div className="wa-permission"><Wrench size={14} /> {msg("Technician access is excluded from this inbox. Owner, branch manager and receptionist roles can manage the simulated journey.", "صلاحية الفني غير متاحة لصندوق الوارد. المالك ومدير الفرع وموظف الاستقبال يقدروا يديروا الرحلة التجريبية.")}</div>}
-        </> : <div className="wa-chat-empty">
-          <div><MessageSquareText size={23} /><strong>{msg("Select a conversation", "اختار محادثة")}</strong><p>{msg("Choose an item from the staff inbox to review its transcript and ownership.", "اختار محادثة من صندوق وارد الفريق لمراجعة السجل والمسؤولية.")}</p></div>
-        </div>}
+              <label className="sr-only" htmlFor="wa-text">{msg("Message text", "نص الرسالة")}</label>
+              <textarea id="wa-text" rows={2} value={text} disabled={!isMine} onChange={(event) => setText(event.target.value)} placeholder={composerKind === "internal-note" ? msg("Note for staff only", "ملاحظة للفريق فقط") : isSimulated ? msg("Write a reply (saved here, not sent)", "اكتب رداً (يُحفظ هنا ولا يُرسل)") : msg("Write a reply", "اكتب رداً")} />
+              <button className="btn btn-primary" type="submit" disabled={!text.trim() || busy === "message" || !isMine}><Send size={14} aria-hidden="true" />{busy === "message" ? msg("Saving…", "جارٍ الحفظ…") : composerKind === "internal-note" ? msg("Add note", "إضافة ملاحظة") : msg("Send", "إرسال")}</button>
+            </div>
+          </form> : null}
+        </> : <EmptyState icon={MessageSquareText} title={msg("Select a conversation", "اختر محادثة")} />}
       </section>
 
-      <aside className="wa-side">
-        <section className="wa-card wa-side-card" aria-labelledby="wa-control-title">
-          <div className="wa-panel-head"><div><h2 id="wa-control-title">{msg("Ownership & status", "المسؤولية والحالة")} </h2><p>{msg("Actions are recorded in the branch simulation.", "الإجراءات بتتسجل في محاكاة الفرع.")}</p></div><ArrowRightLeft size={16} /></div>
-          {selectedConversation && <>
-            <div className="wa-status-actions">
-              <button className="wa-action" type="button" disabled={!staffAllowed || !!busy} onClick={() => void performAction("claim")}><UserRound size={13} />{msg("Claim / assign to me", "استلم / عيّن لنفسي")}</button>
-              <button className="wa-action" type="button" disabled={!staffAllowed || !!busy} onClick={() => void performAction("handoff")}><ArrowRightLeft size={13} />{msg("Human handoff", "تحويل لموظف")}</button>
-              {selectedConversation.unreadCount > 0 && <button className="wa-action" type="button" disabled={!staffAllowed || !!busy} onClick={() => void performAction("mark-read")}><Check size={13} />{msg("Mark as read", "تحديد كمقروءة")}</button>}
-              {selectedConversation.status !== "open" && <button className="wa-action" type="button" disabled={!staffAllowed || !!busy} onClick={() => void performAction("reopen")}>{msg("Reopen", "إعادة فتح")}</button>}
-              {selectedConversation.status !== "pending" && <button className="wa-action" type="button" disabled={!staffAllowed || !!busy} onClick={() => void performAction("pending")}>{msg("Set pending", "تعليق")}</button>}
-              {selectedConversation.status !== "resolved" && <button className="wa-action" type="button" disabled={!staffAllowed || !!busy} onClick={() => void performAction("resolve")}>{msg("Resolve", "حل المحادثة")}</button>}
+      <aside className="wa-context-pane" aria-label={msg("Customer context", "بيانات العميل")}>
+        {selectedConversation ? <>
+          <Collapsible title={msg("Customer", "العميل")} defaultOpen>
+            <div className="wa-context-stack">
+              {related?.customer ? <RecordRef type="customer" id={related.customer.id} label={related.customer.name} /> : <span><bdi>{selectedConversation.customerLabel}</bdi></span>}
+              {related?.vehicle && <RecordRef type="vehicle" id={related.vehicle.id} label={related.vehicle.plate} subtitle={related.vehicle.makeModel} />}
+              {related && <RecordRef type="booking" id={related.bookingId} label={`${msg("Booking", "حجز")} ${related.bookingLabel}`} />}
+              {related?.quote && <RecordRef type="quote" id={related.quote.id} label={`${msg("Quote", "عرض سعر")} v${related.quote.revision}`} />}
+              {!related && <p className="wa-muted">{msg("No linked booking yet.", "لا يوجد حجز مرتبط بعد.")}</p>}
+              <div className="wa-consent"><StatusBadge status={consentState} domain="consent" lang={lang} /></div>
             </div>
-            <div className="wa-context-row"><span>{msg("Assigned to", "مسندة إلى")}</span><strong>{selectedConversation.assignedTo || msg("Unassigned", "غير معيّن")}</strong></div>
-            {role !== "receptionist" && <label className="wa-field wa-assignee-select">
-              <span>{msg("Assign to branch staff", "إسناد لموظف الفرع")}</span>
-              <select
-                value={selectedConversation.assignedUserId ?? ""}
-                disabled={!!busy}
-                onChange={(event) => void assignConversation(event.target.value)}
-              >
-                <option value="">{msg("Unassigned", "غير معيّن")}</option>
-                {staff.map((member) => <option key={member.userId} value={member.userId}>{member.name} · {member.role === "owner" ? msg("Owner", "المالك") : member.role === "branch-manager" ? msg("Branch manager", "مدير الفرع") : msg("Receptionist", "موظف الاستقبال")}</option>)}
-              </select>
-              {staffError && <small className="wa-error-inline" role="alert">{staffError}</small>}
-            </label>}
-            {!staffAllowed && <p className="wa-permission">{msg("Technicians are excluded. These controls are available to Owner, branch manager and receptionist.", "الفنيون غير مشمولين. الإجراءات متاحة للمالك ومدير الفرع وموظف الاستقبال.")}</p>}
-          </>}
-          {!selectedConversation && <p className="wa-list-empty">{msg("Select a conversation to see its ownership controls.", "اختار محادثة لعرض إجراءات المسؤولية.")}</p>}
-        </section>
-
-        <section className="wa-card wa-side-card" aria-labelledby="wa-events-title">
-          <div className="wa-panel-head"><div><h2 id="wa-events-title">{msg("Accountability log", "سجل المسؤولية")}</h2><p>{msg("Conversation events and acting staff.", "أحداث المحادثة والموظف المسؤول.")}</p></div><AlertTriangle size={16} /></div>
-          {detailLoading ? <div className="wa-skeleton"><i /><i /><i /></div>
-              : selectedDetail?.events.length ? <ol className="wa-events">{selectedDetail.events.map((event) => <li className="wa-event" key={event.id}><span className="wa-event-dot" /><div><strong>{event.eventType}</strong><p>{event.details}</p><time>{formatTime(event.createdAt)} · {event.actorLabel}</time></div></li>)}</ol>
-              : <p className="wa-list-empty">{msg("No recorded events for this conversation.", "مفيش أحداث مسجلة للمحادثة دي.")}</p>}
-        </section>
+          </Collapsible>
+          {staffAllowed && <Collapsible title={msg("Ownership", "المسؤولية")} defaultOpen>
+            <div className="wa-context-stack">
+              <span>{msg("Assigned to", "مسندة إلى")}: <strong>{selectedConversation.assignedTo || msg("Nobody", "لا أحد")}</strong></span>
+              {role !== "receptionist" && <label className="wa-assign">
+                <span>{msg("Assign to", "إسناد إلى")}</span>
+                <select value={selectedConversation.assignedUserId ?? ""} disabled={blocked} onChange={(event) => void assignConversation(event.target.value)}>
+                  <option value="">{msg("Unassigned", "غير معيّنة")}</option>
+                  {staff.map((member) => <option key={member.userId} value={member.userId}>{personName(member)}</option>)}
+                </select>
+                {staffError && <small className="wa-error-inline" role="alert">{staffError}</small>}
+              </label>}
+            </div>
+          </Collapsible>}
+          <Collapsible title={msg("Activity", "النشاط")} count={selectedDetail?.events.length}>
+            {detailLoading ? <Skeleton rows={3} /> : selectedDetail?.events.length
+              ? <ol className="wa-events">{selectedDetail.events.map((event) => <li className="wa-event" key={event.id}><strong>{eventTitle(event.eventType, lang)}</strong><p>{event.details}</p><time>{formatTime(event.createdAt)} · {event.actorLabel}</time></li>)}</ol>
+              : <p className="wa-muted">{msg("No activity yet.", "لا يوجد نشاط بعد.")}</p>}
+          </Collapsible>
+        </> : <p className="wa-muted">{msg("Select a conversation to see context.", "اختر محادثة لعرض البيانات.")}</p>}
       </aside>
     </div>
+
+    {!staffAllowed && <p className="wa-muted">{msg("Your role has read access only.", "دورك للقراءة فقط.")}</p>}
+    <ConfirmDialog
+      open={confirm !== null}
+      lang={lang}
+      title={confirmCopy.title}
+      body={confirmCopy.body}
+      confirmLabel={confirmCopy.label}
+      busy={blocked}
+      onCancel={() => setConfirm(null)}
+      onConfirm={() => { const action = confirm; setConfirm(null); if (action) void performAction(action); }}
+    />
   </div>;
 }
