@@ -136,6 +136,16 @@ Audit records should be append-only for ordinary users. Corrections should creat
 - The development seed contains fictional customer records. Do not enter production customer data into the development workspace.
 - The first Owner email must be configured before use. Production deployment, backup/restore testing, and staff session policies remain outstanding.
 
+## 10.1 Invite-only access and hardening (21 November 2026; in source, unverified at runtime)
+
+- No sign-up and no user creation. The Owner pre-approves a work email, role and branches; a first verified Google sign-in must match that email (`auth/membership-match.ts`), otherwise the account is refused and receives no data. Magic-link invites are future work.
+- Capabilities (`bookings.manage`, `customers.read`, `whatsapp.use`, `transport.coordinate`, `warranty.*`, `catalogue.manage`, `finance.view`, `settings.manage`, `staff.manage`) default per role and may be overridden per user by the Owner, except `settings.manage` and `staff.manage`, which are Owner-only. Overrides never apply to Owners or demo identities. The web receives the effective list as a display hint only; every route still checks on the server.
+- Server hardening in `apps/server/index.ts`: security headers (helmet; CSP not yet tuned), rate limiting on public verification, webhook and auth paths, trusted-proxy setting. Webhook bodies are schema-validated.
+- Relations lookups (search, Customer/Vehicle 360, warranty resolve) require `customers.read` or `warranty.view`, are branch-scoped, hide archived records from non-owners, mask phones in search results and omit contact details for demo identities.
+- Owner archive/restore/hard-delete is audited in an append-only table.
+- The login-page role widget (`GARAGE_ROLE_WIDGET_ENABLED`, requires `SESSION_SECRET`) signs in as a seeded demo identity with that role's real RBAC and shares the main database. It must be disabled and the dummy data purged before go-live. This supersedes the earlier "isolated demo layer" wording for the pre-launch period only.
+- Not production-ready: migrations 0026/0027 and the seed are unrun, none of this has been exercised against a database, and the section 9 checklist is still open.
+
 ## 11. WhatsApp simulation boundary
 
 - The development inbox stores only fictional simulation conversations and messages; conversation records are scoped to a branch and technicians are denied by the server.

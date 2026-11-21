@@ -17,6 +17,19 @@ and the [Phase 1 tracker](docs/testing/PHASE_1_ISSUES_TRACKER.md). Do not replac
 persisted operations with a simplified demo. Feature approval does not approve
 advertised prices or unverified business rules.
 
+**Access model (21 Nov 2026, [design](docs/superpowers/specs/2026-11-21-production-hardening-and-access-design.md)):**
+access is invite-only. There is no sign-up and no user creation: the Owner
+pre-approves a work email, role and branches (`staff_memberships.status='invited'`,
+migration `0026`); the first verified Google sign-in must match, and unknown
+emails are refused. Per-user capability overrides sit on top of role defaults
+(`apps/server/features/auth/authz.ts` is the authority; the server also sends the
+effective list to the web as a display hint). The login-page role widget signs in
+as a seeded demo identity with that role's real RBAC and is controlled by
+`GARAGE_ROLE_WIDGET_ENABLED` (the older `GARAGE_DEMO_AUTH_ENABLED` still works);
+turn it off at go-live. Pre-launch dummy data lives in the main database and is
+purged at go-live with `apps/server/purge-demo.ts`. Neither the seed nor the
+purge, nor migrations 0026/0027, has been run anywhere.
+
 Garage OS is a role-based operations app for Go Stores. It currently uses
 React/Vite, Express, PostgreSQL, Clerk, and the private workspace
 `@garage/domain`. Arabic/RTL and English/LTR are supported. The Owner's
@@ -40,9 +53,15 @@ approved business policy. Do not describe the application as production-ready.
   styles; `apps/web/src/shared/` contains client state, shared UI, and global
   styles.
 - `apps/server/index.ts` is the Replit-facing server composition entry.
-- `apps/server/features/auth/`, `operations/`, `warranty/`, `whatsapp/`, and
-  `seed/` contain server features; `apps/server/infrastructure/database/` and
-  `infrastructure/storage/` contain infrastructure.
+- `apps/server/features/auth/`, `commercial/`, `finance/`, `operations/`,
+  `owner-records/`, `relations/`, `special-requests/`, `warranty/`, `whatsapp/`, and `seed/` contain
+  server features (`relations/` = global search, Customer/Vehicle 360, warranty
+  resolve; `owner-records/` = Owner soft-archive/restore/audit; `seed/` also holds
+  the bilingual dummy-data generator and the go-live purge plan);
+  `apps/server/infrastructure/database/` and `infrastructure/storage/` contain
+  infrastructure. Web shared UI (RecordRef, DetailDrawer, DataTable, TabBar,
+  StatusBadge, capability helper) lives in `apps/web/src/shared/`; record
+  labels and previews are registered in `apps/web/src/app/record-registry.tsx`.
 - `packages/domain/src/` owns shared TypeScript types and pure domain rules.
 - `artifacts/mockup-sandbox/` is separate from the production app.
 
@@ -103,8 +122,9 @@ been verified.
   [security/privacy](docs/engineering/SECURITY_PRIVACY.md),
   [acceptance tests](docs/engineering/ACCEPTANCE_TESTS.md),
   [automations](docs/engineering/AUTOMATIONS.md),
-  [WhatsApp](docs/engineering/WHATSAPP_SPEC.md), and
-  [warranty evidence storage](docs/engineering/WARRANTY_EVIDENCE_STORAGE.md).
+  [WhatsApp](docs/engineering/WHATSAPP_SPEC.md),
+  [warranty evidence storage](docs/engineering/WARRANTY_EVIDENCE_STORAGE.md), and
+  [migrations](docs/engineering/MIGRATIONS.md). CI: `.github/workflows/ci.yml`.
 - Operations: [delivery plan](docs/operations/DELIVERY_PLAN.md),
   [decisions](docs/operations/DECISIONS.md), and
   [project log](docs/operations/PROJECT_LOG.md).

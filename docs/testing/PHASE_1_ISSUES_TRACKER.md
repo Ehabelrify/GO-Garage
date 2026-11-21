@@ -1,11 +1,11 @@
 # Garage OS — Phase 1 Issues Tracker
 
-**Created / last updated:** 15 November 2026 / 17 November 2026
+**Created / last updated:** 15 November 2026 / 21 November 2026
 **Purpose:** Single working tracker for Phase 1 defects, investigation, implementation handoff, and retesting.  
 **Initial intake:** 25 entries: 7 code-review findings, 15 UI-test findings, and 3 engineering follow-ups.  
-**Current intake:** 44 entries: the original 25, 6 user-feedback/discovery follow-ups, 6 cross-industry research improvements, and 7 approved business/product additions recorded on 16 November 2026.
-**Next available ID:** `P1-045`
-**Current ownership:** 2 entries remain Open/Unassigned and 42 entries are Ready for retest after implementation. Ready entries are P1-001–P1-029 and P1-032–P1-044. No runtime retests were performed.
+**Current intake:** 55 entries (44 below plus 6 hardening/UI entries P1-045–P1-050 and 5 Wave 2.5 entries P1-051–P1-055 recorded 21 November 2026): the original 25, 6 user-feedback/discovery follow-ups, 6 cross-industry research improvements, and 7 approved business/product additions recorded on 16 November 2026.
+**Next available ID:** `P1-056`
+**Current ownership:** 2 entries remain Open/Unassigned and 53 entries are Ready for retest after implementation. Ready entries are P1-001–P1-029 and P1-032–P1-055. No runtime retests were performed; P1-045–P1-055 were additionally never run against a database (migrations 0026-0029 and the seed are unapplied).
 
 ## Sources and application context
 
@@ -86,6 +86,17 @@ Garage OS uses React/Vite, Express, PostgreSQL, Clerk, and `@garage/domain`. It 
 | [P1-042](#p1-042) | Approved Go Stores research additions | Included benefits and aftercare entitlement redemption | Medium | P2 | Ready for retest | Reported |
 | [P1-043](#p1-043) | Approved Go Stores research additions | Vehicle transport and VIP service coordination | Medium | P2 | Ready for retest | Reported |
 | [P1-044](#p1-044) | Approved Go Stores research additions | Promotion qualification, referral and multi-car redemption | Medium | P2 | Ready for retest | Reported |
+| [P1-045](#p1-045) | Production hardening and access (21 Nov 2026) | Server hardening: headers, rate limits, webhook validation, CI | High | P1 | Ready for retest | Source |
+| [P1-046](#p1-046) | Production hardening and access (21 Nov 2026) | Invite-only access, capability overrides, role widget flag | High | P1 | Ready for retest | Source |
+| [P1-047](#p1-047) | Production hardening and access (21 Nov 2026) | UI/UX consolidation: merged pages, shared components, capability-gated UI | Medium | P2 | Ready for retest | Source |
+| [P1-048](#p1-048) | Production hardening and access (21 Nov 2026) | Bilingual dummy-data seeder and go-live purge | Medium | P2 | Ready for retest | Source |
+| [P1-049](#p1-049) | Production hardening and access (21 Nov 2026) | Interlinked records: global search, Customer/Vehicle 360, warranty QR resolve | Medium | P2 | Ready for retest | Source |
+| [P1-050](#p1-050) | Production hardening and access (21 Nov 2026) | Owner record control: soft archive, restore, audit | Medium | P2 | Ready for retest | Source |
+| [P1-051](#p1-051) | Wave 2.5 (21 Nov 2026) | Customer purchases section in Customer and Vehicle 360 | Medium | P2 | Ready for retest | Source |
+| [P1-052](#p1-052) | Wave 2.5 (21 Nov 2026) | Special requests: records, owner review and reply | High | P2 | Ready for retest | Source |
+| [P1-053](#p1-053) | Wave 2.5 (21 Nov 2026) | Purge plan and docs for purchases and special requests | Low | P3 | Ready for retest | Source |
+| [P1-054](#p1-054) | Wave 2.5 (21 Nov 2026) | Warranty invoice panel rework and selectable currency (EGP / SAR / USD) | High | P2 | Ready for retest | Source |
+| [P1-055](#p1-055) | Wave 2.5 (21 Nov 2026) | Owner price editing in the Catalogue: versioned, history, publish diff | High | P2 | Ready for retest | Source |
 
 ## Technical issue details
 
@@ -1177,6 +1188,169 @@ The user approved all recommendations and valuable additions derived from the Go
 **Implementation / retest:** None recorded / Not performed.
 
 
+<a id="p1-045"></a>
+
+### P1-045 — Server hardening: headers, rate limits, webhook validation, CI
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-21; user direction ([design](../superpowers/specs/2026-11-21-production-hardening-and-access-design.md)).
+**Area:** Server composition / CI.
+**Evidence:** Source (implementation present; not executed against a database).
+
+**Acceptance:** Limits return 429 with a generic body; webhook bodies that fail validation are rejected; CI runs typecheck, tests and build; limits and header behavior verified against a running server behind the real proxy.
+
+**Implementation — 2026-11-21:** Security headers (helmet, CSP not yet tuned), rate limiting on public verification, webhook and auth paths, trusted-proxy setting, schema-validated provider webhook body, `.gitignore` and `.github/workflows/ci.yml`, migration-ordering documentation.
+
+**Retest:** Not performed; no database was available. Migrations `0026` and `0027` are unapplied; the seed and purge have never run. Not production-ready.
+
+<a id="p1-046"></a>
+
+### P1-046 — Invite-only access, capability overrides, role widget flag
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-21; user direction ([design](../superpowers/specs/2026-11-21-production-hardening-and-access-design.md)).
+**Area:** Auth / membership / Settings.
+**Evidence:** Source (implementation present; not executed against a database).
+
+**Acceptance:** Unknown email refused with no data; matching email claims its membership once; overrides change server decisions and are ignored for Owners and demo identities; the widget works only with the flag and `SESSION_SECRET`; disabling the flag removes it.
+
+**Implementation — 2026-11-21:** Owner pre-approval of email, role and branches (migration `0026`); first Google sign-in must match, unknown emails refused; no sign-up route; per-user capability overrides on top of role defaults with Owner-only capabilities fixed; effective capabilities included in the bootstrap actor for the web; `GARAGE_ROLE_WIDGET_ENABLED` flag for the login-page role widget (older flag still honored); Staff and permissions in Settings.
+
+**Retest:** Not performed; no database was available. Migrations `0026` and `0027` are unapplied; the seed and purge have never run. Not production-ready.
+
+<a id="p1-047"></a>
+
+### P1-047 — UI/UX consolidation: merged pages, shared components, capability-gated UI
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-21; user direction ([design](../superpowers/specs/2026-11-21-production-hardening-and-access-design.md)).
+**Area:** Web app shell and feature pages.
+**Evidence:** Source (implementation present; not executed against a database).
+
+**Acceptance:** Each role sees its menu; merged tabs and old URLs resolve; capability overrides show or hide Finance, Catalogue and write actions; layouts verified at 360, 768 and 1280 px in Arabic/RTL and English/LTR (not yet done).
+
+**Implementation — 2026-11-21:** Consolidated navigation (Quotes and offers with Reservations/Benefits/Promotions tabs, Bookings with Transport, Settings with Staff and permissions and the Warranty policy manager); old URLs redirect to the merged tab; Finance reachable by anyone with `finance.view` and Catalogue by `catalogue.manage`; shared PageHeader/DataTable/DetailDrawer/FilterBar/StatusBadge/RecordRef components; one record registry for labels, previews and deep links; MSA Arabic copy pass; unused legacy CSS removed.
+
+**Retest:** Not performed; no database was available. Migrations `0026` and `0027` are unapplied; the seed and purge have never run. Not production-ready.
+
+<a id="p1-048"></a>
+
+### P1-048 — Bilingual dummy-data seeder and go-live purge
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-21; user direction ([design](../superpowers/specs/2026-11-21-production-hardening-and-access-design.md)).
+**Area:** Seed / go-live.
+**Evidence:** Source (implementation present; not executed against a database).
+
+**Acceptance:** Seed runs twice without duplicates; every view and tab shows data; the purge leaves a clean launch database and is verified on a disposable copy first.
+
+**Implementation — 2026-11-21:** Idempotent bilingual (Arabic and English) generator for both branches with about 12 months of history across modules, and a purge plan and script (`apps/server/purge-demo.ts`) to clear dummy data before launch.
+
+**Retest:** Not performed; no database was available. Migrations `0026` and `0027` are unapplied; the seed and purge have never run. Not production-ready.
+
+<a id="p1-049"></a>
+
+### P1-049 — Interlinked records: global search, Customer/Vehicle 360, warranty QR resolve
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-21; user direction ([design](../superpowers/specs/2026-11-21-production-hardening-and-access-design.md)).
+**Area:** Relations API and web (search, Customers).
+**Evidence:** Source (implementation present; not executed against a database).
+
+**Acceptance:** Search by name, phone, plate, quote or warranty code returns only in-scope records; 360 sections hide what the actor cannot see; QR scan opens the warranty with its vehicle and customer; edit and add-vehicle respect branch scope.
+
+**Implementation — 2026-11-21:** Read-only relations API (`/api/search`, `/api/customers/:id/360`, `/api/vehicles/:id/360`, `/api/warranties/resolve`) with branch and capability scoping; RecordRef links with side-drawer previews; Customer and Vehicle pages; customer edit and add-vehicle endpoints (`PATCH /api/customers/:id`, `POST /api/customers/:id/vehicles`); messaging consent state in the customer 360 payload; read endpoints for quoting staff (`/api/catalogue/available-packages`, `/api/catalogue/vehicle-selection/:vehicleId`, `/api/commercial-policies/active/quote-acceptance`).
+
+**Retest:** Not performed; no database was available. Migrations `0026` and `0027` are unapplied; the seed and purge have never run. Not production-ready.
+
+<a id="p1-050"></a>
+
+### P1-050 — Owner record control: soft archive, restore, audit
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-21; user direction ([design](../superpowers/specs/2026-11-21-production-hardening-and-access-design.md)).
+**Area:** Owner records.
+**Evidence:** Source (implementation present; not executed against a database).
+
+**Acceptance:** Archive hides a record everywhere except for the Owner; restore reverses it; the audit trail rejects update and delete; non-owners cannot archive.
+
+**Implementation — 2026-11-21:** Soft archive of customers, vehicles, quotes, reservations, catalogue packages/grades and policies via `record_archives`, with restore and an append-only `owner_record_audit` trail (migration `0027`); archived records are hidden from lists and search.
+
+**Retest:** Not performed; no database was available. Migrations `0026` and `0027` are unapplied; the seed and purge have never run. Not production-ready.
+
+<a id="p1-051"></a>
+
+### P1-051 — Customer purchases section (Customer and Vehicle 360)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-21; user direction (Wave 2.5).
+**Area:** Relations, Customer/Vehicle 360.
+**Evidence:** Source (implementation present; not executed against a database).
+
+**Acceptance:** Each customer and vehicle shows what was bought (item, quantity, amount in its own currency, date) with links to the source quote, booking, job, warranty and invoice; no purchase is entered twice; branch scope and archive filtering apply.
+
+**Implementation — 2026-11-21:** Read model view `customer_purchases` (migration `0028`) over accepted quotes plus quote-less delivered jobs; `purchases` section in both 360 payloads and UI (Money component, RecordRefs). Seed data needs no extra rows because it derives from seeded accepted quotes.
+
+**Retest:** Not performed; no database was available. Migration `0028` is unapplied (as are `0026`/`0027`); the seed and purge have never run. Not production-ready.
+
+<a id="p1-052"></a>
+
+### P1-052 — Special requests: records, owner review and reply
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-21; user direction (Wave 2.5).
+**Area:** Special requests, Customers.
+**Evidence:** Source and mocked-pool unit tests only; no database run.
+
+**Acceptance:** Staff with `bookings.manage` create a free-text request for a customer vehicle with a date; only holders of `special-requests.review` (owner by default, grantable) accept (price, currency, duration, available-from required), decline or ask for information with a reason, through a confirmation dialog; internal owner notes are never part of the customer-visible reply; history is append-only; role-preview (demo) sessions cannot write.
+
+**Implementation — 2026-11-21:** Tables `special_requests` and `special_request_events` (migration `0028`), `/api/special-requests` routes, review capability, Special requests tab on the Customers page, create drawer from Customer 360, special-requests section in 360 payloads, `special-request` record type, about 15 bilingual seed requests, purge plan entries. Source column `staff`|`customer-app` keeps the table ready for the customer app; nullable `quote_id` is the hook for W2.6 quote generation.
+
+**Retest:** Not performed; no database was available. Migration `0028` is unapplied (as are `0026`/`0027`); the seed and purge have never run. Not production-ready.
+
+<a id="p1-053"></a>
+
+### P1-053 — Purge plan, migration and data-model documentation for purchases and special requests
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-21; user direction (Wave 2.5).
+**Area:** Data safety, documentation.
+**Evidence:** Source and seed unit test (purge plan covers every seeded table).
+
+**Acceptance:** The go-live purge removes seeded special requests and their history; `MIGRATIONS.md` and `DATA_MODEL.md` describe `0028`.
+
+**Implementation — 2026-11-21:** Purge steps for `special_request_events` and `special_requests`; docs updated.
+
+**Retest:** Not performed; no database was available. Migration `0028` is unapplied (as are `0026`/`0027`); the seed and purge have never run. Not production-ready.
+
+
+### P1-054 — Warranty invoice panel rework and selectable currency (EGP / SAR / USD)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-21; user direction (Wave 2.5).
+**Area:** Warranty, invoices, currency.
+**Evidence:** Source and mocked unit tests only (`packages/domain/src/currencies.test.ts`, `apps/server/features/commercial/catalogue-price.test.ts` invoice-currency cases).
+
+**Acceptance:** The panel uses the shared form patterns (sections, fields, collapsible tax/payment, status badge, confirm dialog) and shows no raw ids. The currency is chosen per invoice from one central list (code, English/Arabic name, symbol, minor-unit exponent, order) so a new currency is a one-line change; the server rejects unsupported codes, rejects lines naming another currency, and locks the currency once a payment amount exists. Amounts show with the proper symbol; totals never mix currencies. The default comes from the active approved finance definition when it names a supported currency, otherwise EGP. Issued/immutability rules and stored currency of existing records are untouched; the earlier "currency pending owner approval" wording is replaced by the selection.
+
+**Implementation — 2026-11-21:** `packages/domain/src/currencies.ts` (EGP, SAR, USD); migration `0029` adds `warranty_invoice_drafts.currency` (default `EGP`, shape CHECK only, so new currencies need no migration); `warranty-invoices.ts` (`invoiceCurrencyProblem`, `defaultInvoiceCurrency`), `PUT /api/warranties/:id/invoice-draft` validation with audit text naming the currency, bootstrap exposes `currency`; `WarrantyInvoicePanel.tsx` rebuilt. Changing the currency never converts amounts and asks for confirmation when amounts exist. Finance reporting still excludes draft invoices (`draft-value` stays unavailable), so no cross-currency total exists.
+
+**Retest:** Not performed; no database was available. Migration `0029` is unapplied; no browser check of layout, RTL or print was done. Not production-ready.
+
+### P1-055 — Owner price editing in the Catalogue
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-21; user direction (Wave 2.5).
+**Area:** Catalogue, commercial policy.
+**Evidence:** Source and mocked-pool unit tests (`catalogue-price.test.ts`, `price-logic.test.ts`).
+
+**Acceptance:** A user with `catalogue.manage` can edit the price and tax of any non-retired package or add-on (sedan/SUV per grade, roof, heat film, VKool, interior nano, Glass Guard, panorama, per-m² film) from the Catalogue list or detail. Each edit saves a new draft version carrying the proposed price (non-negative integer minor units), tax and effective date; published versions are never edited in place. Currency must be on the central list and price and tax must share it. Publishing opens a confirmation showing old to new price, change, tax, effective date and reason, and still needs a protected evidence reference and reason. A price-history section shows who, when, old to new price. Seeded prices carry the label "Example data, not approved policy".
+
+**Implementation — 2026-11-21:** `POST /api/catalogue/price-drafts`, `GET /api/catalogue/price-history/:packageId`; `catalogue-price.ts` (validation, price-change builder, pricing-policy value); `publishPackageVersion` turns a price-edit draft into an approved, activated `catalogue-pricing` policy plus the new published version (effective date applied, tax and work-aggregation rules kept from the previous version or chosen from approved ones) with policy audit rows; `price_change` jsonb column (migration `0029`); `PriceEditor.tsx`, `price-logic.ts`, publish diff in `CataloguePage.tsx`. This resolves the earlier gap that package price, tax and work settings had no editor or endpoint.
+
+**Retest:** Not performed; no database was available. The publish path inserts policy rows and has only been exercised through mocks. Migration `0029` is unapplied. Not production-ready.
+
+
 ## Change log
 
 | Date | Change | Runtime verification |
@@ -1208,3 +1382,6 @@ The user approved all recommendations and valuable additions derived from the Go
 | 2026-11-16 | Implemented C11 transport coordination, private contact isolation, provider capacity, and custody history; advanced P1-043 to Ready for retest | Retest not performed; migration not applied; no provider message or policy activated |
 | 2026-11-17 | Implemented C12 append-only operational finance, approved definitions, source adapters, report/drill-down pipeline, and deposit-event linkage; advanced P1-034 and completed P1-039 dependency synchronization to Ready for retest | Retest not performed; migrations not applied; no financial policy or event activated |
 | 2026-11-17 | Completed allowed C13 source integration with commercial action projections, quote environment scoping, and migration/rollback runbook | Journey tests, migration/restore rehearsal, builds, browser checks, and domain review not performed by user direction |
+| 2026-11-21 | Recorded P1-045–P1-050 for production hardening, invite-only access, UI/UX consolidation (navigation, record registry, capability-gated UI), dummy-data seeder and purge, interlinked records and owner archive; advanced next ID to P1-051 | Source only; no database available, migrations 0026/0027 and seed unrun, no browser or runtime retests |
+| 2026-11-21 | Recorded P1-051–P1-053 (purchases section, special requests with owner review and reply, purge/docs); migration 0028 written, not applied | Source and mocked tests only; no database, browser or runtime retest |
+| 2026-11-21 | Recorded P1-054 (warranty invoice panel rework and selectable EGP/SAR/USD currency) and P1-055 (Owner price editing in the Catalogue); migration 0029 written, not applied; advanced next ID to P1-056 | Source and mocked tests only; no database, no browser or print check, no runtime retests |

@@ -34,6 +34,15 @@ drafts. Warranty public verification is implemented behind an Owner-controlled
 setting; do not enable it until the approved fields and customer-facing policy
 are confirmed.
 
+Access is invite-only (no sign-up): the Owner pre-approves a work email, role
+and branches, and staff sign in with Google. The login page also offers a role
+widget (flag `GARAGE_ROLE_WIDGET_ENABLED`) that signs in as a seeded demo identity
+with that role's real permissions; it and the dummy data are for the pre-launch
+period only. The 21 November 2026 hardening, access, UI consolidation, seed-data,
+Customer 360 and owner-archive work is implemented in source but has not been run
+against a database: migrations 0026/0027 and the seed are unrun, and the app is
+not production-ready.
+
 The WhatsApp inbox is a development simulator only; provider delivery is
 disabled. The Replit workflow can enable separate development demo identities,
 which are not production authentication. General inventory, accounting/POS,
@@ -68,7 +77,7 @@ variable at production or a shared Replit database.
 | Product | [PRD](docs/product/PRD.md), [design system](docs/product/DESIGN_SYSTEM.md), [Owner meeting playbook](docs/product/OWNER_MEETING_PLAYBOOK.md), [decisions and assumptions](docs/product/DECISIONS_AND_ASSUMPTIONS.md) |
 | Business research | [Sourced Go Stores facts](docs/product/GO_STORES_FACTS_2026-11-16.md), [business and owner meeting dossier](docs/product/GO_STORES_MEETING_DOSSIER_2026-11-16.md) — dated evidence and advertised claims; not approved operating policy |
 | Accepted scope and planning | [Product direction and releases](docs/product/PRODUCT_DIRECTION_AND_RELEASES.md), [full Phase 1 planning handover](docs/operations/PHASE_1_FULL_PLAN_HANDOVER.md) |
-| Engineering | [Architecture](docs/engineering/ARCHITECTURE.md), [data model](docs/engineering/DATA_MODEL.md), [security and privacy](docs/engineering/SECURITY_PRIVACY.md), [acceptance tests](docs/engineering/ACCEPTANCE_TESTS.md), [automations](docs/engineering/AUTOMATIONS.md), [WhatsApp specification](docs/engineering/WHATSAPP_SPEC.md), [warranty evidence storage](docs/engineering/WARRANTY_EVIDENCE_STORAGE.md) |
+| Engineering | [Architecture](docs/engineering/ARCHITECTURE.md), [data model](docs/engineering/DATA_MODEL.md), [security and privacy](docs/engineering/SECURITY_PRIVACY.md), [acceptance tests](docs/engineering/ACCEPTANCE_TESTS.md), [automations](docs/engineering/AUTOMATIONS.md), [WhatsApp specification](docs/engineering/WHATSAPP_SPEC.md), [warranty evidence storage](docs/engineering/WARRANTY_EVIDENCE_STORAGE.md), [migrations](docs/engineering/MIGRATIONS.md) |
 | Operations | [Delivery plan](docs/operations/DELIVERY_PLAN.md), [decisions register](docs/operations/DECISIONS.md), [project log](docs/operations/PROJECT_LOG.md) |
 | Current-state report | [Repository assessment and quick analysis](docs/reports/REPOSITORY_ASSESSMENT.md) |
 | Testing reports | [Phase 1 issues tracker](docs/testing/PHASE_1_ISSUES_TRACKER.md), [repository code review](docs/testing/REPOSITORY_CODE_REVIEW.md), [UI test report](docs/testing/GARAGE_OS_UI_TEST_REPORT.md), [original UI report PDF](docs/testing/Garage_OS_UI_Test_Report.pdf) |
