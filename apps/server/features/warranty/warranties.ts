@@ -32,7 +32,7 @@ import {
   isWarrantyVerificationTokenFormat,
   normalizeWarrantyVerificationFields,
 } from "./warranty-verification";
-import { ensureWarrantyInvoiceDraft } from "./warranty-invoices";
+import { ensureWarrantyInvoiceDraft, invoiceCurrencyProblem } from "./warranty-invoices";
 import { issueCoverageInTransaction, retirePolicyVersion, duplicatePolicyDraft, WarrantyIssuanceError } from "./issuance-service";
 import { commercialContext } from "../commercial/policy-service";
 
@@ -71,10 +71,12 @@ const policyBodySchema = z.object({
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const verificationFieldSchema = z.enum(["service", "status", "startDate", "expiresOn", "branch", "coverage"]);
 const invoiceDraftInputSchema = z.object({
+  currency: z.string().regex(/^[A-Z]{3}$/).optional(),
   items: z.array(z.object({
     description: z.string().trim().min(1).max(240),
     quantity: z.number().min(0.01).max(10000),
     unitAmount: z.number().min(0).max(1_000_000_000).nullable(),
+    currency: z.string().regex(/^[A-Z]{3}$/).optional(),
   })).min(1).max(50),
   taxRatePercent: z.number().min(0).max(100).nullable(),
   paidAmount: z.number().min(0).max(1_000_000_000),
@@ -746,11 +748,19 @@ warrantyRouter.put("/:warrantyId/invoice-draft", async (req, res) => {
     );
     if (!warranty.rowCount) return { error: "missing" as const };
     if (!canViewWarrantyRecords(currentActor, warranty.rows[0].branch_id)) return { error: "forbidden" as const };
-    const invoice = await client.query<{ id: string; paid_amount: string; payment_method: string | null }>(
-      "SELECT id, paid_amount, payment_method FROM warranty_invoice_drafts WHERE warranty_id = $1 FOR UPDATE",
+    const invoice = await client.query<{ id: string; paid_amount: string; payment_method: string | null; currency: string }>(
+      "SELECT id, paid_amount, payment_method, currency FROM warranty_invoice_drafts WHERE warranty_id = $1 FOR UPDATE",
       [req.params.warrantyId],
     );
     if (!invoice.rowCount) return { error: "invoice" as const };
+    const currencyProblem = invoiceCurrencyProblem({
+      requested: parsed.data.currency,
+      stored: invoice.rows[0].currency,
+      lines: parsed.data.items,
+      paymentEntered: Number(invoice.rows[0].paid_amount) > 0,
+    });
+    if (currencyProblem) return { error: "currency" as const, code: currencyProblem };
+    const nextCurrency = parsed.data.currency ?? invoice.rows[0].currency;
     const paymentChanged = Number(invoice.rows[0].paid_amount) !== parsed.data.paidAmount ||
       invoice.rows[0].payment_method !== parsed.data.paymentMethod;
 
@@ -773,7 +783,7 @@ warrantyRouter.put("/:warrantyId/invoice-draft", async (req, res) => {
     await client.query(
       `UPDATE warranty_invoice_drafts
        SET tax_rate_percent = $2, paid_amount = $3, payment_method = $4,
-           notes = $5, updated_by = $6, updated_at = now(),
+           notes = $5, updated_by = $6, updated_at = now(), currency = $8,
            payment_recorded_at = CASE WHEN $7 THEN CASE WHEN $3::numeric > 0 THEN now() ELSE NULL END ELSE payment_recorded_at END,
            payment_recorded_by = CASE WHEN $7 THEN CASE WHEN $3::numeric > 0 THEN $6 ELSE NULL END ELSE payment_recorded_by END
        WHERE id = $1`,
@@ -785,12 +795,13 @@ warrantyRouter.put("/:warrantyId/invoice-draft", async (req, res) => {
         parsed.data.notes,
         currentActor.userId,
         paymentChanged,
+        nextCurrency,
       ],
     );
     await addAuditEvent(client, {
       warrantyId: req.params.warrantyId,
       action: "invoice-draft-updated",
-      details: `Draft invoice updated with ${parsed.data.items.length} line item(s); no final invoice was issued.`,
+      details: `Draft invoice updated with ${parsed.data.items.length} line item(s) in ${nextCurrency}${nextCurrency !== invoice.rows[0].currency ? ` (currency changed from ${invoice.rows[0].currency})` : ""}; no final invoice was issued.`,
       actorUserId: currentActor.userId,
     });
     if (paymentChanged) {
@@ -806,6 +817,14 @@ warrantyRouter.put("/:warrantyId/invoice-draft", async (req, res) => {
   if ("error" in result) {
     if (result.error === "missing") return routeError(res, 404, "WARRANTY_NOT_FOUND", "Warranty record not found.");
     if (result.error === "forbidden") return routeError(res, 403, "ROLE_FORBIDDEN", "This warranty is outside your role or branch access.");
+    if (result.error === "currency") {
+      const messages = {
+        UNSUPPORTED_CURRENCY: "Choose a currency from the supported list.",
+        MIXED_CURRENCY: "Every line must use the invoice currency; totals never mix currencies.",
+        CURRENCY_LOCKED: "The currency cannot change once a payment amount has been entered.",
+      } as const;
+      return routeError(res, 400, result.code, messages[result.code]);
+    }
     return routeError(res, 404, "INVOICE_DRAFT_NOT_FOUND", "Create a draft invoice before editing it.");
   }
   res.json(result);
@@ -814,6 +833,7 @@ warrantyRouter.put("/:warrantyId/invoice-draft", async (req, res) => {
 warrantyRouter.post("/:warrantyId/void", async (req, res) => {
   const currentActor = actor(req);
   if (!canVoidWarranty(currentActor)) return routeError(res, 403, "ROLE_FORBIDDEN", "Only the Owner can void a warranty.");
+  if (currentActor.isDemo) return routeError(res, 403, "DEMO_ACTION_DISABLED", "Voiding a warranty is unavailable in a temporary demo session.");
   const parsed = z.object({ reason: z.string().trim().min(3).max(1000) }).safeParse(req.body);
   if (!parsed.success) return routeError(res, 400, "VOID_REASON_REQUIRED", "Enter a reason before voiding this warranty.");
 

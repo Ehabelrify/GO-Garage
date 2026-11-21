@@ -6,6 +6,7 @@ import type { GarageActor } from "../auth/authz";
 import type { BookingActor } from "../operations/booking-service";
 import { commercialContext, type ExecutionContext } from "./policy-service";
 import { QuoteError } from "./quote-service";
+import { staffHasCapabilityForBranch } from "../auth/staff-capability";
 
 type AcceptedRow = { branch_id: string; customer_id: string; vehicle_id: string; current_revision: number; accepted_revision: number | null; accepted_snapshot: AcceptedQuoteSnapshot };
 export async function acceptedQuoteInTransaction(client: PoolClient, ref: QuoteVersionRef, branchId: string, customerId: string, vehicleId: string): Promise<AcceptedQuoteSnapshot> {
@@ -24,9 +25,7 @@ export async function prepareQuotedWork(context: ExecutionContext, actor: Garage
   const result = await pool.query<AcceptedRow>(`SELECT h.branch_id,h.customer_id,h.vehicle_id,h.current_revision,h.accepted_revision,e.accepted_snapshot
     FROM quote_heads h JOIN quote_acceptance_events e ON e.quote_id=h.id AND e.revision=$2 WHERE h.id=$1 AND h.environment_id=$3 AND e.environment_id=$3`, [ref.quoteId, ref.revision,context.environmentId]);
   const row = result.rows[0];
-  const membership = await pool.query<{role:string; branch_ids:string[]}>("SELECT role,branch_ids FROM staff_memberships WHERE clerk_user_id=$1 AND status='active'", [actor.userId]);
-  const staff = membership.rows[0];
-  if (!row || !staff || !["owner","branch-manager","receptionist"].includes(staff.role) || (staff.role !== "owner" && !staff.branch_ids.includes(row.branch_id)))
+  if (!row || !await staffHasCapabilityForBranch(pool, actor.userId, "bookings.manage", row.branch_id))
     throw new QuoteError(404, "QUOTE_NOT_FOUND", "Accepted quote not found.");
   const quote = await withTransaction(client => acceptedQuoteInTransaction(client, ref, row.branch_id, row.customer_id, row.vehicle_id));
   return { quote, components: quote.work };
@@ -36,9 +35,7 @@ export async function attachAcceptedQuoteInTransaction(client: PoolClient, _cont
   const booking = await client.query<{branch_id:string;customer_id:string;vehicle_id:string}>("SELECT branch_id,customer_id,vehicle_id FROM bookings WHERE id=$1", [input.bookingId]);
   const row = booking.rows[0];
   if (!row) throw new QuoteError(404, "BOOKING_NOT_FOUND", "Booking not found.");
-  const membership = await client.query<{role:string;branch_ids:string[]}>("SELECT role,branch_ids FROM staff_memberships WHERE clerk_user_id=$1 AND status='active'", [actor.userId]);
-  const staff = membership.rows[0];
-  if (!staff || !["owner","branch-manager","receptionist"].includes(staff.role) || (staff.role !== "owner" && !staff.branch_ids.includes(row.branch_id))) throw new QuoteError(404,"BOOKING_NOT_FOUND","Booking not found.");
+  if (!await staffHasCapabilityForBranch(client, actor.userId, "bookings.manage", row.branch_id)) throw new QuoteError(404,"BOOKING_NOT_FOUND","Booking not found.");
   await attachConfirmedQuoteSnapshot(client,input,row);
 }
 export async function attachConfirmedQuoteSnapshot(client:PoolClient,input:{bookingId:string;ref:QuoteVersionRef},row?:{branch_id:string;customer_id:string;vehicle_id:string}):Promise<void> {

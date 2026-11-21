@@ -11,9 +11,12 @@ import type { Branch, BranchId, Booking, JobStage, Locale, Service } from "@gara
 import {
   canClaimWhatsAppConversation,
   canReplyToWhatsAppConversation,
+  hasCapability,
+  canAccessBranch,
   type GarageActor,
 } from "../auth/authz";
 import { actorFor } from "../auth/auth";
+import { loadStaffActor } from "../auth/staff-capability";
 import { pool, withTransaction } from "../../infrastructure/database/db";
 import { dateOnlyFromSql } from "../../infrastructure/database/date-only";
 import { reserveConfirmedBooking, rescheduleConfirmedBooking, cancelConfirmedBooking } from "../operations/booking-service";
@@ -24,7 +27,6 @@ import { customerConsentRouter } from "./consent-routes";
 
 const router = Router();
 router.use("/consents", customerConsentRouter);
-const allowedRoles = ["owner", "branch-manager", "receptionist"];
 
 function id(prefix: string) {
   return `${prefix}-${randomUUID()}`;
@@ -201,7 +203,7 @@ function currentActor(req: Request, res: Response) {
     responseError(res, 401, "SIGN_IN_REQUIRED", "Sign in to continue.");
     return null;
   }
-  if (!allowedRoles.includes(current.role)) {
+  if (!hasCapability(current, "whatsapp.use")) {
     responseError(res, 403, "ROLE_FORBIDDEN", "This action is not available to your role.");
     return null;
   }
@@ -213,7 +215,7 @@ const conversationMode=()=>process.env.GARAGE_DATASET_CLASS==="operational"?"ope
 router.get("/status", async (req, res) => {
   const actor = actorFor(req);
   if (!actor) return responseError(res, 401, "SIGN_IN_REQUIRED", "Sign in to continue.");
-  if (!allowedRoles.includes(actor.role)) return responseError(res, 403, "ROLE_FORBIDDEN", "This action is not available to your role.");
+  if (!hasCapability(actor, "whatsapp.use")) return responseError(res, 403, "ROLE_FORBIDDEN", "This action is not available to your role.");
   const centralMembership=await loadInboxMembership(actor.userId);
   res.json({
     mode: conversationMode(),
@@ -489,15 +491,10 @@ router.post("/conversations/:conversationId/action", async (req, res) => {
     if (action === "claim" || action === "assign") {
       const targetUserId = action === "claim" ? actor.userId : (parsed.data.userId ?? actor.userId);
       if (action === "assign" && targetUserId !== actor.userId && actor.role === "receptionist") return "forbidden" as const;
-      const member = await client.query(
-        `SELECT 1 FROM staff_memberships
-         WHERE clerk_user_id = $1 AND role IN ('owner', 'branch-manager', 'receptionist')
-           AND status = 'active'
-           AND (role = 'owner' OR $2 = ANY(branch_ids))`,
-        [targetUserId, conversation.branch_id],
-      );
+      const targetStaff = await loadStaffActor(targetUserId, client);
+      const member = !!targetStaff && hasCapability(targetStaff, "whatsapp.use") && canAccessBranch(targetStaff, conversation.branch_id);
       const central=await loadInboxMembership(targetUserId,client);
-      if (!member.rowCount&&central?.status!=="active") return "assignee" as const;
+      if (!member&&!(central?.status==="active"&&targetStaff&&hasCapability(targetStaff,"whatsapp.use"))) return "assignee" as const;
       if (action === "claim" && !canClaimWhatsAppConversation(actor, current.assigned_user_id)) return "already-assigned" as const;
       if (action === "assign" && current.assigned_user_id && current.assigned_user_id !== targetUserId && actor.role === "receptionist") return "forbidden" as const;
       await client.query("UPDATE whatsapp_conversations SET assigned_user_id = $2,version=version+1, updated_at = now() WHERE id = $1", [conversation.id, targetUserId]);

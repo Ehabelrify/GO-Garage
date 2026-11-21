@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import type { WorkComponent } from "@garage/domain";
 import { dateOnlyFromSql } from "../../infrastructure/database/date-only";
 import type { BookingActor } from "./booking-service";
+import { staffHasCapabilityForBranch } from "../auth/staff-capability";
 
 export type CapacityComponent = { serviceId: string; bayType: string; requiredMinutes: number };
 export type AvailableSlot = { dropoffDate: string; dropoffTime: string; expectedPickupDate: string };
@@ -24,9 +25,7 @@ export function validLocalTime(date: string, time: string, timezone: string): bo
 
 export async function bookingAuthority(client: PoolClient, actor: BookingActor, branchId: string): Promise<boolean> {
   if (actor.kind !== "staff") return false;
-  const result = await client.query<{role:string;branch_ids:string[]}>("SELECT role,branch_ids FROM staff_memberships WHERE clerk_user_id=$1 AND status='active'", [actor.userId]);
-  const row = result.rows[0];
-  return !!row && ["owner","branch-manager","receptionist"].includes(row.role) && (row.role === "owner" || row.branch_ids.includes(branchId));
+  return staffHasCapabilityForBranch(client, actor.userId, "bookings.manage", branchId);
 }
 
 export async function lockAvailability(client: PoolClient, branchId: string, dates: string[], bayTypes: string[]): Promise<void> {

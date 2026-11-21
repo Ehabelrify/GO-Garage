@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { actorFor } from "../auth/auth";
+import { hasCapability } from "../auth/authz";
 import { canActorAccessInboxBranch } from "./inbox-access";
 import { pool, withTransaction } from "../../infrastructure/database/db";
 
@@ -89,7 +90,7 @@ customerConsentRouter.put("/", async (req, res, next) => {
   try {
     const actor = actorFor(req);
     if (!actor) return res.status(401).json({ code: "SIGN_IN_REQUIRED" });
-    if (!["owner", "branch-manager", "receptionist"].includes(actor.role)) {
+    if (!hasCapability(actor, "whatsapp.use")) {
       return res.status(403).json({ code: "ROLE_FORBIDDEN" });
     }
     const parsed = consentUpdate.safeParse(req.body);

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { staffHasCapabilityForBranch } from "../auth/staff-capability";
 import type { PoolClient } from "pg";
 import { configuredNumber, configuredServiceHours } from "@garage/domain";
 import type { Branch, BranchId, Service } from "@garage/domain";
@@ -41,11 +42,7 @@ export async function reserveConfirmedBooking(client: PoolClient, actor: Booking
   await client.query("SELECT pg_advisory_xact_lock_shared(hashtext('booking-capacity-settings'))");
 
   if (actor.kind === "staff") {
-    const membership = await client.query<{ role: string; branch_ids: string[] }>(
-      "SELECT role, branch_ids FROM staff_memberships WHERE clerk_user_id = $1 AND status = 'active'", [actor.userId]);
-    const row = membership.rows[0];
-    if (!row || !["owner", "branch-manager", "receptionist"].includes(row.role) ||
-        (row.role !== "owner" && !row.branch_ids.includes(input.branchId))) return { status: "forbidden", code: "ROLE_FORBIDDEN" };
+    if (!await staffHasCapabilityForBranch(client, actor.userId, "bookings.manage", input.branchId)) return { status: "forbidden", code: "ROLE_FORBIDDEN" };
   } else {
     // Confirmation evidence is resolved from persisted simulator state, never a caller assertion.
     if (!actor.channelId || !input.confirmationRef || input.confirmationRef !== actor.confirmationId) {

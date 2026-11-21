@@ -16,12 +16,12 @@ afterEach(() => {
 
 describe("development demo access", () => {
   it("is disabled unless explicitly enabled with a session secret", () => {
-    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("GARAGE_ROLE_WIDGET_ENABLED", "");
     vi.stubEnv("GARAGE_DEMO_AUTH_ENABLED", "");
     vi.stubEnv("SESSION_SECRET", "test-only-secret");
     expect(isDemoAuthEnabled()).toBe(false);
 
-    vi.stubEnv("GARAGE_DEMO_AUTH_ENABLED", "true");
+    vi.stubEnv("GARAGE_ROLE_WIDGET_ENABLED", "true");
     vi.stubEnv("SESSION_SECRET", "");
     expect(isDemoAuthEnabled()).toBe(false);
 
@@ -29,11 +29,26 @@ describe("development demo access", () => {
     expect(isDemoAuthEnabled()).toBe(true);
   });
 
-  it("cannot be enabled in production even when the development flag is set", () => {
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("GARAGE_DEMO_AUTH_ENABLED", "true");
+  it("accepts either the new widget flag or the legacy demo flag", () => {
     vi.stubEnv("SESSION_SECRET", "test-only-secret");
+    vi.stubEnv("GARAGE_ROLE_WIDGET_ENABLED", "");
+    vi.stubEnv("GARAGE_DEMO_AUTH_ENABLED", "true");
+    expect(isDemoAuthEnabled()).toBe(true);
+    vi.stubEnv("GARAGE_DEMO_AUTH_ENABLED", "");
+    vi.stubEnv("GARAGE_ROLE_WIDGET_ENABLED", "true");
+    expect(isDemoAuthEnabled()).toBe(true);
+    vi.stubEnv("GARAGE_ROLE_WIDGET_ENABLED", "yes");
     expect(isDemoAuthEnabled()).toBe(false);
+  });
+
+  it("works on the live app (NODE_ENV=production) only when explicitly flagged", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("SESSION_SECRET", "test-only-secret");
+    vi.stubEnv("GARAGE_ROLE_WIDGET_ENABLED", "");
+    vi.stubEnv("GARAGE_DEMO_AUTH_ENABLED", "");
+    expect(isDemoAuthEnabled()).toBe(false);
+    vi.stubEnv("GARAGE_ROLE_WIDGET_ENABLED", "true");
+    expect(isDemoAuthEnabled()).toBe(true);
   });
 
   it("exposes only the fixed temporary role identities", () => {

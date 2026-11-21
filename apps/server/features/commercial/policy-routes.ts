@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { actorFor } from "../auth/auth";
-import { activateCommercialPolicy, approveCommercialPolicy, commercialContext, commercialPolicyReview, CommercialPolicyError, getCommercialPolicy, proposeCommercialPolicy } from "./policy-service";
+import { activateCommercialPolicy, approveCommercialPolicy, commercialContext, commercialPolicyReview, CommercialPolicyError, getActiveQuoteAcceptance, getCommercialPolicy, proposeCommercialPolicy } from "./policy-service";
 
 export const commercialPolicyRouter = Router();
 const id = z.string().regex(/^[a-z-]+:[A-Za-z0-9_-]+$/);
@@ -12,6 +12,9 @@ function error(res: import("express").Response, failure: unknown) {
   if (failure instanceof CommercialPolicyError) return res.status(failure.status).json({ code: failure.code, message: failure.message });
   throw failure;
 }
+commercialPolicyRouter.get("/active/quote-acceptance", async (req, res, next) => {
+  try { res.json(await getActiveQuoteAcceptance(actorFor(req)!)); } catch (failure) { try { error(res, failure); } catch (unknown) { next(unknown); } }
+});
 commercialPolicyRouter.get("/:id/review", async (req, res, next) => {
   try { res.json(await commercialPolicyReview(actorFor(req)!, req.params.id)); } catch (failure) { try { error(res, failure); } catch (unknown) { next(unknown); } }
 });

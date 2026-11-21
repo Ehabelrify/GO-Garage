@@ -1,8 +1,9 @@
 import type { NextFunction, Request, Response } from "express";
 import { clerkClient, getAuth } from "@clerk/express";
 import { withTransaction, pool } from "../../infrastructure/database/db";
-import { isGarageRole, type GarageActor, type GarageRole } from "./authz";
+import { isGarageRole, sanitizeOverrides, type CapabilityOverrides, type GarageActor, type GarageRole } from "./authz";
 import { findDemoActor, hasActiveRealOwner } from "./demo-auth";
+import { normalizeEmail } from "./membership-match";
 
 export interface RequestWithActor extends Request {
   actor?: GarageActor;
@@ -15,16 +16,13 @@ interface MembershipRow {
   full_name: string;
   role: GarageRole;
   branch_ids: string[];
-  status: "active" | "inactive";
-}
-
-function normalizeEmail(value: string) {
-  return value.trim().toLowerCase();
+  status: "active" | "inactive" | "invited";
+  permissions: CapabilityOverrides | null;
 }
 
 async function findMembership(userId: string): Promise<MembershipRow | undefined> {
   const result = await pool.query<MembershipRow>(
-    `SELECT clerk_user_id, email, full_name, role, branch_ids, status
+    `SELECT clerk_user_id, email, full_name, role, branch_ids, status, permissions
      FROM staff_memberships WHERE clerk_user_id = $1`,
     [userId],
   );
@@ -63,27 +61,21 @@ async function provisionFromVerifiedIdentity(userId: string): Promise<Membership
     return findMembership(userId);
   }
 
-  const invitedRole = user.publicMetadata.garageRole;
-  const invitedBranchIds = user.publicMetadata.garageBranchIds;
-  if (!isGarageRole(invitedRole) || invitedRole === "owner" || !Array.isArray(invitedBranchIds)) {
-    return undefined;
-  }
-  const branchIds = [...new Set(invitedBranchIds.filter((value): value is string => typeof value === "string"))];
-  if (!branchIds.length) return undefined;
-
-  const branches = await pool.query<{ id: string }>(
-    "SELECT id FROM branches WHERE id = ANY($1::text[])",
-    [branchIds],
+  // Invite-only: the verified email must match an owner pre-approved row
+  // (status 'invited'). Claiming binds the Clerk user id to that row; role and
+  // branches come only from the row, never from client or Clerk metadata.
+  const claimed = await pool.query<{ clerk_user_id: string }>(
+    `UPDATE staff_memberships
+        SET clerk_user_id = $1,
+            full_name = CASE WHEN $3 <> '' THEN $3 ELSE full_name END,
+            status = 'active',
+            updated_at = now()
+      WHERE status = 'invited' AND role <> 'owner' AND lower(email) = $2
+        AND NOT EXISTS (SELECT 1 FROM staff_memberships WHERE lower(email) = $2 AND status = 'active')
+      RETURNING clerk_user_id`,
+    [userId, normalizedEmail, fullName],
   );
-  if (branches.rowCount !== branchIds.length) return undefined;
-
-  await pool.query(
-    `INSERT INTO staff_memberships
-       (clerk_user_id, email, full_name, role, branch_ids, status)
-     VALUES ($1, $2, $3, $4, $5::text[], 'active')
-     ON CONFLICT (clerk_user_id) DO NOTHING`,
-    [userId, email, fullName, invitedRole, branchIds],
-  );
+  if (!claimed.rowCount) return undefined;
   return findMembership(userId);
 }
 
@@ -95,6 +87,7 @@ function toActor(row: MembershipRow): GarageActor | undefined {
     name: row.full_name || row.email,
     role: row.role,
     branchIds: row.branch_ids ?? [],
+    permissions: sanitizeOverrides(row.role, row.permissions),
   };
 }
 
@@ -123,7 +116,7 @@ export async function requireMembership(
     if (!actor) {
       res.status(403).json({
         code: "ACCESS_PENDING",
-        message: "Your account is not assigned to a Garage OS role yet.",
+        message: "This Google account is not approved for Garage OS. Ask the owner to add your work email, then sign in again.",
       });
       return;
     }

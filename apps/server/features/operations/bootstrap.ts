@@ -6,7 +6,7 @@ import type {
   WarrantyInvoiceDraftItem, WarrantyPolicy, WarrantyQrPrintEvent, WarrantyRecord,
   WarrantyVerificationField,
 } from "@garage/domain";
-import { allowedBranchIds, canReadCustomers, canViewWarrantyRecords, type GarageActor } from "../auth/authz";
+import { allowedBranchIds, canReadCustomers, canViewWarrantyRecords, effectiveCapabilities, type GarageActor } from "../auth/authz";
 import { pool } from "../../infrastructure/database/db";
 import { dateOnlyFromSql } from "../../infrastructure/database/date-only";
 import { normalizeWarrantyVerificationFields } from "../warranty/warranty-verification";
@@ -215,6 +215,7 @@ export async function loadGarageBootstrap(actor: GarageActor) {
          FROM customers c
          JOIN customer_branches cb ON cb.customer_id = c.id
          WHERE cb.branch_id = ANY($1::text[])
+           AND NOT EXISTS (SELECT 1 FROM record_archives ra WHERE ra.entity_kind = 'customer' AND ra.entity_id = c.id)
          ORDER BY c.name`,
         [branchIds],
       );
@@ -406,12 +407,12 @@ export async function loadGarageBootstrap(actor: GarageActor) {
     const warrantyIds = warranties.map((warranty) => warranty.id);
     if (warrantyIds.length) {
       const invoiceResult = await pool.query<{
-        id: string; warranty_id: string; branch_id: string; tax_rate_percent: string | null;
+        id: string; warranty_id: string; branch_id: string; currency: string; tax_rate_percent: string | null;
         paid_amount: string; payment_method: WarrantyInvoiceDraft["paymentMethod"];
         payment_recorded_at: Date | null; payment_recorded_by: string | null;
         notes: string; created_at: Date; updated_at: Date;
       }>(
-        `SELECT invoice.id, invoice.warranty_id, invoice.branch_id, invoice.tax_rate_percent,
+        `SELECT invoice.id, invoice.warranty_id, invoice.branch_id, invoice.currency, invoice.tax_rate_percent,
                 invoice.paid_amount, invoice.payment_method, invoice.payment_recorded_at,
                 CASE WHEN recorder.clerk_user_id IS NULL THEN NULL
                      ELSE COALESCE(recorder.full_name, recorder.email) END AS payment_recorded_by,
@@ -455,6 +456,7 @@ export async function loadGarageBootstrap(actor: GarageActor) {
         warrantyId: invoice.warranty_id,
         branchId: invoice.branch_id as BranchId,
         status: "draft",
+        currency: invoice.currency,
         taxRatePercent: invoice.tax_rate_percent === null ? null : Number(invoice.tax_rate_percent),
         paidAmount: Number(invoice.paid_amount),
         paymentMethod: invoice.payment_method,
@@ -632,5 +634,5 @@ export async function loadGarageBootstrap(actor: GarageActor) {
     warrantyAuditEvents,
   };
 
-  return { actor, state };
+  return { actor: { ...actor, capabilities: effectiveCapabilities(actor) }, state };
 }

@@ -30,10 +30,16 @@ export class DemoAuthError extends Error {
   }
 }
 
+/**
+ * The login-page role widget is controlled only by explicit environment flags
+ * (no NODE_ENV gate) so it can run on the live app and be switched off at
+ * go-live with one setting. GARAGE_DEMO_AUTH_ENABLED is the legacy alias.
+ * A SESSION_SECRET is always required to sign the session cookie.
+ */
 export function isDemoAuthEnabled() {
-  return process.env.NODE_ENV !== "production" &&
-    process.env.GARAGE_DEMO_AUTH_ENABLED === "true" &&
-    Boolean(process.env.SESSION_SECRET);
+  const flagged = process.env.GARAGE_ROLE_WIDGET_ENABLED === "true" ||
+    process.env.GARAGE_DEMO_AUTH_ENABLED === "true";
+  return flagged && Boolean(process.env.SESSION_SECRET);
 }
 
 export function listDemoAccounts() {

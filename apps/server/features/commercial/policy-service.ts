@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Configured, PolicyRef } from "@garage/domain";
 import { pool, withTransaction } from "../../infrastructure/database/db";
-import type { GarageActor } from "../auth/authz";
+import { canAccessBranch, hasCapability, type GarageActor } from "../auth/authz";
 
 export type ExecutionContext = Readonly<{ mode: "operational" | "scenario"; environmentId: string }>;
 // Created once during server startup. HTTP input cannot select a dataset.
@@ -57,10 +57,10 @@ function familyFor(id: string): PolicyFamily {
   return family;
 }
 function owner(actor: GarageActor) {
-  if (actor.role !== "owner") throw new CommercialPolicyError(403, "ROLE_FORBIDDEN", "Only the Owner can manage commercial policy.");
+  if (!hasCapability(actor, "catalogue.manage")) throw new CommercialPolicyError(403, "ROLE_FORBIDDEN", "Catalogue and policy management permission is required.");
 }
 function scope(actor: GarageActor, branchId: string | null) {
-  if (branchId && actor.role !== "owner" && !actor.branchIds.includes(branchId)) throw new CommercialPolicyError(404, "POLICY_NOT_FOUND", "Policy not found.");
+  if (branchId && !canAccessBranch(actor, branchId)) throw new CommercialPolicyError(404, "POLICY_NOT_FOUND", "Policy not found.");
 }
 function parseValue(family: PolicyFamily, value: unknown): unknown {
   const result = schemas[family].safeParse(value);
@@ -123,4 +123,19 @@ export async function commercialPolicyReview(actor: GarageActor, id: string) {
   const versions = await pool.query<Row>("SELECT * FROM commercial_policy_versions WHERE policy_id = $1 ORDER BY version DESC", [id]);
   const active = await pool.query<{ version: number }>("SELECT version FROM commercial_policy_active WHERE policy_id = $1", [id]);
   return { activeVersion: active.rows[0]?.version ?? null, versions: versions.rows.map((row) => ({ version: row.version, state: row.state, value: row.value, branchId: row.branch_id, approvedBy: row.approved_by, approvedAt: row.approved_at, reason: row.reason, hasProtectedEvidence: Boolean(row.evidence_ref) })) };
+}
+
+/** Active approved quote-acceptance rule (tax + validity) for quoting staff. Read-only; no id needs to be known. */
+export async function getActiveQuoteAcceptance(actor: GarageActor): Promise<Configured<unknown>> {
+  if (!hasCapability(actor, "catalogue.manage") && !hasCapability(actor, "bookings.manage")) throw new CommercialPolicyError(403, "ROLE_FORBIDDEN", "Quoting permission is required.");
+  const active = await pool.query<{ policy_id: string }>("SELECT policy_id FROM commercial_policy_active WHERE policy_id LIKE 'quote-acceptance:%' ORDER BY policy_id");
+  const approved: Array<Configured<unknown> & { state: "approved" }> = [];
+  for (const row of active.rows) {
+    const policy = await getCommercialPolicy(commercialContext, actor, row.policy_id);
+    if (policy.state === "approved") approved.push(policy);
+  }
+  // A tax-treatment policy shares the family and points at itself; the acceptance rule points at another policy.
+  const rule = approved.find((policy) => (policy.value as { taxTreatment?: { id?: string } }).taxTreatment?.id !== policy.policy.id) ?? approved[0];
+  if (rule) return rule;
+  return { state: "unconfigured", missing: ["approved quote-acceptance policy"] };
 }

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { actorFor } from "../auth/auth";
 import { commercialContext } from "./policy-service";
-import { CatalogueError, classifyVehicle, getEligiblePackages, listGradeVersions, listPackageVersions, listVehicleCategories, publishGradeVersion, publishPackageVersion, retireGradeVersion, retirePackageVersion, saveGradeDraft, savePackageDraft, saveVehicleCategory } from "./catalogue-service";
+import { CatalogueError, classifyVehicle, getEligiblePackages, getVehicleSelection, listAvailablePackages, listGradeVersions, listPackageVersions, listPackagePriceHistory, listVehicleCategories, publishGradeVersion, publishPackageVersion, retireGradeVersion, retirePackageVersion, saveGradeDraft, savePackageDraft, savePriceDraft, saveVehicleCategory } from "./catalogue-service";
 
 export const catalogueRouter = Router();
 function respondError(res: import("express").Response, next: import("express").NextFunction, error: unknown) {
@@ -11,6 +11,8 @@ function respondError(res: import("express").Response, next: import("express").N
   next(error);
 }
 catalogueRouter.get("/versions", async (req, res, next) => { try { res.json(await listPackageVersions(actorFor(req)!)); } catch (e) { respondError(res,next,e); } });
+catalogueRouter.get("/available-packages", async (req, res, next) => { try { res.json(await listAvailablePackages(actorFor(req)!)); } catch (e) { respondError(res,next,e); } });
+catalogueRouter.get("/vehicle-selection/:vehicleId", async (req, res, next) => { try { res.json(await getVehicleSelection(actorFor(req)!, req.params.vehicleId)); } catch (e) { respondError(res,next,e); } });
 catalogueRouter.get("/grades", async (req, res, next) => { try { res.json(await listGradeVersions(actorFor(req)!)); } catch (e) { respondError(res,next,e); } });
 catalogueRouter.get("/categories", async (req, res, next) => { try { res.json(await listVehicleCategories(actorFor(req)!)); } catch (e) { respondError(res,next,e); } });
 catalogueRouter.post("/categories", async (req, res, next) => { try { res.status(201).json(await saveVehicleCategory(actorFor(req)!,req.body)); } catch (e) { respondError(res,next,e); } });
@@ -38,6 +40,10 @@ catalogueRouter.post("/eligible", async (req, res, next) => {
   const parsed = z.object({ branchId: z.string().min(1), vehicle: z.object({ vehicleId: z.string().min(1), model: z.string().min(1), categoryId: z.string().nullable() }).strict(), serviceIntent: z.string().min(1) }).strict().safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ code: "INVALID_SELECTION", message: "Branch, vehicle and service are required." });
   try { res.json(await getEligiblePackages(commercialContext,actorFor(req)!,parsed.data)); } catch (e) { respondError(res,next,e); }
+});
+catalogueRouter.get("/price-history/:packageId", async (req, res, next) => { try { res.json(await listPackagePriceHistory(actorFor(req)!, req.params.packageId)); } catch (e) { respondError(res,next,e); } });
+catalogueRouter.post("/price-drafts", async (req, res, next) => {
+  try { res.status(201).json(await savePriceDraft(commercialContext,actorFor(req)!,req.body)); } catch (e) { respondError(res,next,e); }
 });
 catalogueRouter.post("/drafts", async (req, res, next) => {
   const parsed = z.object({ package: z.unknown(), expectedRevision: z.number().int().nonnegative() }).strict().safeParse(req.body);

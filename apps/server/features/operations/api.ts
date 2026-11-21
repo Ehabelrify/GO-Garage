@@ -5,9 +5,10 @@ import { z } from "zod";
 import { initialState } from "../seed/seed-data";
 import { canTransitionJob, checkBookingCapacity, configuredNumber, configuredServiceHours } from "@garage/domain";
 import type { Branch, BranchId, Booking, Service } from "@garage/domain";
-import { canAccessBranch, canManageBookings, canManageSettings, canManageStaff, type GarageRole } from "../auth/authz";
+import { canAccessBranch, canAccessJob, canManageBookings, canManageSettings, canManageStaff, capabilities, ownerOnlyCapabilities, roleDefaultCapabilities, sanitizeOverrides, type GarageRole } from "../auth/authz";
 import { requireMembership, actorFor } from "../auth/auth";
 import { loadGarageBootstrap } from "./bootstrap";
+import { customerPatchSchema, customerVehicleSchema, normalizePhone, splitMakeModel } from "./customer-edit";
 import { pool, withTransaction } from "../../infrastructure/database/db";
 import { dateOnlyFromSql } from "../../infrastructure/database/date-only";
 import { reserveConfirmedBooking, rescheduleConfirmedBooking, cancelConfirmedBooking, type BookingReservationResult } from "./booking-service";
@@ -34,6 +35,9 @@ import { benefitRouter } from "../commercial/benefit-routes";
 import { transportRouter } from "../commercial/transport-routes";
 import { financeRouter } from "../finance/finance-routes";
 import { workQueueRouter } from "./work-queue-routes";
+import { relationsRouter } from "../relations/relations-routes";
+import { ownerRecordsRouter } from "../owner-records/owner-records";
+import { specialRequestsRouter } from "../special-requests/special-requests-routes";
 import { BenefitError, materializeBenefitsInTransaction } from "../commercial/benefit-service";
 import { lockReservationForJobDelivery, redeemReservationOnJobDelivery } from "../commercial/reservation-service";
 import { commercialContext } from "../commercial/policy-service";
@@ -267,6 +271,9 @@ router.use("/benefits", benefitRouter);
 router.use("/transport", transportRouter);
 router.use("/finance", financeRouter);
 router.use("/work-queues", workQueueRouter);
+router.use("/owner/records", ownerRecordsRouter);
+router.use("/special-requests", specialRequestsRouter);
+router.use(relationsRouter);
 router.use("/warranties", warrantyRouter);
 router.use("/whatsapp", createWhatsAppRouter());
 
@@ -382,6 +389,55 @@ router.post("/customers", async (req, res) => {
     throw error;
   }
   res.status(201).json({ ok: true, customerId, vehicleId });
+});
+
+/** Customer in one of the actor's branches and not archived (owners see all branches). */
+async function editableCustomer(currentActor: ReturnType<typeof actor>, customerId: string) {
+  const found = await pool.query<{ id: string }>(
+    `SELECT c.id FROM customers c
+      WHERE c.id=$1
+        AND ($2 OR EXISTS (SELECT 1 FROM customer_branches cb WHERE cb.customer_id=c.id AND cb.branch_id = ANY($3::text[])))
+        AND NOT EXISTS (SELECT 1 FROM record_archives ra WHERE ra.entity_kind='customer' AND ra.entity_id=c.id)`,
+    [customerId, currentActor.role === "owner", currentActor.branchIds],
+  );
+  return found.rowCount === 1;
+}
+
+router.patch("/customers/:id", async (req, res) => {
+  const currentActor = actor(req);
+  if (!canManageBookings(currentActor)) return forbidden(res);
+  const parsed = customerPatchSchema.safeParse(req.body);
+  if (!parsed.success) return routeError(res, 400, "INVALID_CUSTOMER", "Check the customer details.");
+  const normalizedPhone = normalizePhone(parsed.data.phone);
+  if (!normalizedPhone) return routeError(res, 400, "INVALID_PHONE", "Enter a valid phone number.");
+  if (!await editableCustomer(currentActor, req.params.id)) return routeError(res, 404, "CUSTOMER_NOT_FOUND", "Customer not found.");
+  try {
+    await pool.query(
+      "UPDATE customers SET name=$2, phone=$3, phone_normalized=$4, preferred_language=$5 WHERE id=$1",
+      [req.params.id, parsed.data.name, parsed.data.phone, normalizedPhone, parsed.data.language],
+    );
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
+      return routeError(res, 409, "DUPLICATE_PHONE", "A customer with this phone number already exists.");
+    }
+    throw error;
+  }
+  res.json({ ok: true, customerId: req.params.id });
+});
+
+router.post("/customers/:id/vehicles", async (req, res) => {
+  const currentActor = actor(req);
+  if (!canManageBookings(currentActor)) return forbidden(res);
+  const parsed = customerVehicleSchema.safeParse(req.body);
+  if (!parsed.success) return routeError(res, 400, "INVALID_VEHICLE", "Check the vehicle details.");
+  if (!await editableCustomer(currentActor, req.params.id)) return routeError(res, 404, "CUSTOMER_NOT_FOUND", "Customer not found.");
+  const { make, model, year } = splitMakeModel(parsed.data.makeModel);
+  const vehicleId = makeId("vehicle");
+  await pool.query(
+    "INSERT INTO vehicles (id, customer_id, make, model, year, plate) VALUES ($1, $2, $3, $4, $5, $6)",
+    [vehicleId, req.params.id, make, model, year, parsed.data.plate],
+  );
+  res.status(201).json({ ok: true, vehicleId });
 });
 
 const bookingInputSchema = z.object({
@@ -689,8 +745,7 @@ router.patch("/jobs/:jobId/stage", async (req, res) => {
     );
     const job = jobResult.rows[0];
     if (!job) return "record" as const;
-    if (!canAccessBranch(currentActor, job.branch_id)) return "forbidden" as const;
-    if (currentActor.role === "technician" && job.assigned_user_id !== currentActor.userId) return "forbidden" as const;
+    if (!canAccessJob(currentActor, { branchId: job.branch_id, assignedUserId: job.assigned_user_id })) return "forbidden" as const;
     if (parsed.data.nextStage === "delivered" && job.stage === "delivered") return "ok" as const;
     if (!canTransitionJob(job.stage as Parameters<typeof canTransitionJob>[0], parsed.data.nextStage as Parameters<typeof canTransitionJob>[1])) {
       return "transition" as const;
@@ -792,8 +847,8 @@ router.get("/staff", async (req, res) => {
   if (currentActor.role !== "owner" && currentActor.role !== "branch-manager") return forbidden(res);
   const members = currentActor.role === "owner"
     ? await pool.query(
-      `SELECT clerk_user_id AS "userId", email, full_name AS name, role, branch_ids AS "branchIds", status, created_at AS "createdAt"
-       FROM staff_memberships ORDER BY created_at`,
+      `SELECT clerk_user_id AS "userId", email, full_name AS name, role, branch_ids AS "branchIds", status, permissions, created_at AS "createdAt"
+       FROM staff_memberships WHERE status <> 'invited' ORDER BY created_at`,
     )
     : await pool.query(
       `SELECT clerk_user_id AS "userId", '' AS email, full_name AS name, role, branch_ids AS "branchIds", status
@@ -802,28 +857,22 @@ router.get("/staff", async (req, res) => {
        ORDER BY full_name`,
       [currentActor.branchIds],
     );
-  if (currentActor.role !== "owner") {
-    return res.json({ members: members.rows, invitations: [] });
+  if (currentActor.role !== "owner" || currentActor.isDemo) {
+    return res.json({ members: members.rows, invitations: [], capabilities: { all: capabilities, ownerOnly: ownerOnlyCapabilities, roleDefaults: roleDefaultCapabilities } });
   }
-  if (currentActor.isDemo) return res.json({ members: members.rows, invitations: [] });
-  const invitations = await clerkClient.invitations.getInvitationList({ limit: 100, orderBy: "-created_at" });
-  const pendingInvitations = invitations.data
-    .filter((invitation) => invitation.publicMetadata?.garageRole && !invitation.revoked)
-    .map((invitation) => ({
-      id: invitation.id,
-      email: invitation.emailAddress,
-      role: invitation.publicMetadata?.garageRole,
-      branchIds: invitation.publicMetadata?.garageBranchIds ?? [],
-      status: invitation.status,
-      createdAt: new Date(invitation.createdAt).toISOString(),
-    }));
-  res.json({ members: members.rows, invitations: pendingInvitations });
+  const pending = await pool.query(
+    `SELECT clerk_user_id AS id, email, role, branch_ids AS "branchIds", status, created_at AS "createdAt"
+     FROM staff_memberships WHERE status = 'invited' ORDER BY created_at DESC`,
+  );
+  res.json({ members: members.rows, invitations: pending.rows, capabilities: { all: capabilities, ownerOnly: ownerOnlyCapabilities, roleDefaults: roleDefaultCapabilities } });
 });
 
+// Invite-only pre-approval: stores a pending membership for a Google work email.
+// The first verified Google sign-in with that email claims it (see auth.ts).
 router.post("/staff/invitations", async (req, res) => {
   const currentActor = actor(req);
   if (!canManageStaff(currentActor)) return forbidden(res);
-  if (currentActor.isDemo) return routeError(res, 403, "DEMO_ACTION_DISABLED", "Live Clerk invitations are unavailable in a temporary demo session.");
+  if (currentActor.isDemo) return routeError(res, 403, "DEMO_ACTION_DISABLED", "Staff pre-approval is unavailable in a temporary demo session.");
   const parsed = z.object({
     email: z.string().trim().email().max(254),
     role: z.enum(inviteRoles),
@@ -831,7 +880,8 @@ router.post("/staff/invitations", async (req, res) => {
   }).safeParse(req.body);
   if (!parsed.success) return routeError(res, 400, "INVALID_INVITATION", "Enter an email, role, and branch access.");
 
-  const { email, role, branchIds } = parsed.data;
+  const { role, branchIds } = parsed.data;
+  const email = parsed.data.email.toLowerCase();
   const uniqueBranchIds = [...new Set(branchIds)];
   const knownBranches = await pool.query<{ id: string }>(
     "SELECT id FROM branches WHERE id = ANY($1::text[])",
@@ -840,36 +890,55 @@ router.post("/staff/invitations", async (req, res) => {
   if (knownBranches.rowCount !== uniqueBranchIds.length) {
     return routeError(res, 400, "INVALID_BRANCH", "Choose branches that exist in Garage OS.");
   }
-  const forwardedHost = req.headers["x-forwarded-host"];
-  const host = (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost)?.split(",")[0]?.trim() ?? req.get("host");
-  if (!host) return routeError(res, 400, "INVITE_UNAVAILABLE", "The sign-in address could not be created.");
-  const forwardedProto = req.headers["x-forwarded-proto"];
-  const protocol = (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto)?.split(",")[0]?.trim() ?? req.protocol;
-  const invitation = await clerkClient.invitations.createInvitation({
-    emailAddress: email.toLowerCase(),
-    redirectUrl: `${protocol}://${host}/sign-in`,
-    publicMetadata: {
-      garageRole: role,
-      garageBranchIds: uniqueBranchIds,
-      invitedBy: currentActor.userId,
-    },
-  });
-  res.status(201).json({
-    id: invitation.id,
-    email: invitation.emailAddress,
-    role,
-    branchIds: uniqueBranchIds,
-    status: invitation.status,
-    createdAt: new Date(invitation.createdAt).toISOString(),
-  });
+  const existing = await pool.query(
+    "SELECT 1 FROM staff_memberships WHERE lower(email) = $1 AND status IN ('active', 'invited')",
+    [email],
+  );
+  if (existing.rowCount) return routeError(res, 409, "EMAIL_ALREADY_APPROVED", "This email already has access or a pending approval.");
+  const id = `invited:${randomUUID()}`;
+  const created = await pool.query<{ createdAt: string }>(
+    `INSERT INTO staff_memberships (clerk_user_id, email, full_name, role, branch_ids, status, invited_by)
+     VALUES ($1, $2, '', $3, $4::text[], 'invited', $5)
+     RETURNING created_at AS "createdAt"`,
+    [id, email, role, uniqueBranchIds, currentActor.userId],
+  );
+  res.status(201).json({ id, email, role, branchIds: uniqueBranchIds, status: "invited", createdAt: created.rows[0].createdAt });
 });
 
 router.delete("/staff/invitations/:invitationId", async (req, res) => {
   const currentActor = actor(req);
   if (!canManageStaff(currentActor)) return forbidden(res);
-  if (currentActor.isDemo) return routeError(res, 403, "DEMO_ACTION_DISABLED", "Live Clerk invitations are unavailable in a temporary demo session.");
-  await clerkClient.invitations.revokeInvitation(req.params.invitationId);
+  if (currentActor.isDemo) return routeError(res, 403, "DEMO_ACTION_DISABLED", "Staff pre-approval is unavailable in a temporary demo session.");
+  const removed = await pool.query(
+    "DELETE FROM staff_memberships WHERE clerk_user_id = $1 AND status = 'invited'",
+    [req.params.invitationId],
+  );
+  if (!removed.rowCount) return routeError(res, 404, "INVITATION_NOT_FOUND", "Pending approval not found.");
   res.json({ ok: true });
+});
+
+// Owner edits another user's capability overrides. Server-side sanitised; owners and
+// demo identities are never editable; owner-only capabilities cannot be granted.
+router.put("/staff/:userId/permissions", async (req, res) => {
+  const currentActor = actor(req);
+  if (!canManageStaff(currentActor)) return forbidden(res);
+  if (currentActor.isDemo) return routeError(res, 403, "DEMO_ACTION_DISABLED", "Staff changes are unavailable in a temporary demo session.");
+  if (req.params.userId === currentActor.userId) return routeError(res, 409, "CANNOT_EDIT_SELF", "Your own permissions cannot be edited.");
+  const parsed = z.object({ permissions: z.record(z.string(), z.boolean()) }).safeParse(req.body);
+  if (!parsed.success) return routeError(res, 400, "INVALID_PERMISSIONS", "Send a set of capability switches.");
+  const target = await pool.query<{ role: GarageRole }>(
+    "SELECT role FROM staff_memberships WHERE clerk_user_id = $1 AND status = 'active'",
+    [req.params.userId],
+  );
+  if (!target.rowCount) return routeError(res, 404, "MEMBER_NOT_FOUND", "Team member not found.");
+  if (target.rows[0].role === "owner") return routeError(res, 409, "OWNER_NOT_EDITABLE", "Owner permissions cannot be changed.");
+  if (req.params.userId.startsWith("demo-")) return routeError(res, 409, "DEMO_NOT_EDITABLE", "Demo identities keep fixed role permissions.");
+  const permissions = sanitizeOverrides(target.rows[0].role, parsed.data.permissions);
+  await pool.query(
+    "UPDATE staff_memberships SET permissions = $2::jsonb, updated_at = now() WHERE clerk_user_id = $1",
+    [req.params.userId, JSON.stringify(permissions)],
+  );
+  res.json({ ok: true, permissions });
 });
 
 router.delete("/staff/:userId", async (req, res) => {

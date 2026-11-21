@@ -12,6 +12,7 @@ import {
   canOpenWarrantyClaim,
   canReviewWarrantyClaim,
   canUseWhatsAppInbox,
+  effectiveCapabilities,
   canClaimWhatsAppConversation,
   canReplyToWhatsAppConversation,
   type GarageActor,
@@ -107,5 +108,59 @@ describe("role and branch access", () => {
     expect(canReviewWarrantyClaim(manager, "branch-a", "branch-manager")).toBe(true);
     expect(canReviewWarrantyClaim(manager, "branch-b", "branch-manager")).toBe(false);
     expect(canReviewWarrantyClaim(receptionist, "branch-a", "branch-manager")).toBe(false);
+  });
+});
+
+import { hasCapability, roleDefaultCapabilities, sanitizeOverrides, capabilities } from "./authz";
+
+describe("per-user capability resolution", () => {
+  const withPerms = (role: GarageActor["role"], permissions: GarageActor["permissions"], extra: Partial<GarageActor> = {}) =>
+    ({ ...actor(role, ["branch-a"]), permissions, ...extra });
+
+  it("uses role defaults when there are no overrides", () => {
+    expect(hasCapability(actor("branch-manager", ["a"]), "warranty.issue")).toBe(true);
+    expect(hasCapability(actor("branch-manager", ["a"]), "settings.manage")).toBe(false);
+    expect(hasCapability(actor("technician", ["a"]), "bookings.manage")).toBe(false);
+  });
+
+  it("layers grants and revocations on role defaults", () => {
+    expect(hasCapability(withPerms("receptionist", { "warranty.issue": true }), "warranty.issue")).toBe(true);
+    expect(canIssueWarranty(withPerms("receptionist", { "warranty.issue": true }), "branch-a")).toBe(true);
+    expect(canIssueWarranty(withPerms("receptionist", { "warranty.issue": true }), "branch-b")).toBe(false);
+    expect(canManageBookings(withPerms("branch-manager", { "bookings.manage": false }))).toBe(false);
+    expect(canReadCustomers(withPerms("technician", { "customers.read": true }))).toBe(true);
+  });
+
+  it("never lets overrides grant owner-only capabilities or touch owners and demo identities", () => {
+    expect(hasCapability(withPerms("branch-manager", { "settings.manage": true, "staff.manage": true }), "staff.manage")).toBe(false);
+    expect(canManageSettings(withPerms("receptionist", { "settings.manage": true }))).toBe(false);
+    expect(hasCapability(withPerms("owner", { "bookings.manage": false }), "bookings.manage")).toBe(true);
+    expect(hasCapability(withPerms("receptionist", { "warranty.issue": true }, { isDemo: true }), "warranty.issue")).toBe(false);
+  });
+
+  it("sanitises stored overrides", () => {
+    expect(sanitizeOverrides("receptionist", { "warranty.issue": true, "bookings.manage": true, "staff.manage": true, bogus: true, "warranty.view": "yes" }))
+      .toEqual({ "warranty.issue": true });
+    expect(sanitizeOverrides("owner", { "bookings.manage": false })).toEqual({});
+    expect(sanitizeOverrides("technician", null)).toEqual({});
+  });
+
+  it("special-requests.review is owner-default, grantable to a manager, and never to demo identities", () => {
+    expect(hasCapability(withPerms("owner", {}), "special-requests.review")).toBe(true);
+    expect(hasCapability(withPerms("branch-manager", {}), "special-requests.review")).toBe(false);
+    expect(hasCapability(withPerms("branch-manager", { "special-requests.review": true }), "special-requests.review")).toBe(true);
+    expect(hasCapability({ role: "branch-manager", isDemo: true, permissions: { "special-requests.review": true } }, "special-requests.review")).toBe(false);
+  });
+  it("owner holds every capability by default", () => {
+    expect([...roleDefaultCapabilities.owner].sort()).toEqual([...capabilities].sort());
+  });
+
+  it("lists effective capabilities with overrides applied", () => {
+    expect(effectiveCapabilities(withPerms("owner", {}))).toEqual([...capabilities]);
+    expect(effectiveCapabilities(withPerms("technician", {}))).toEqual([]);
+    const manager = effectiveCapabilities(withPerms("branch-manager", { "finance.view": false, "catalogue.manage": true }));
+    expect(manager).not.toContain("finance.view");
+    expect(manager).toContain("catalogue.manage");
+    expect(effectiveCapabilities(withPerms("receptionist", { "warranty.issue": true }, { isDemo: true }))).not.toContain("warranty.issue");
   });
 });
