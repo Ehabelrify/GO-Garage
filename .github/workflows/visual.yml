@@ -1,0 +1,137 @@
+name: Visual checks
+
+# Boots the app against a disposable Postgres, signs in as each demo role, and screenshots every workspace page
+# (en/ar, 360/768/1280). Playwright and axe-core are installed ONLY here (scripts/visual/package.json), never locally.
+# Docs: docs/engineering/VISUAL_CHECKS.md
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visual-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  visual:
+    name: Screenshots, overflow, API and a11y checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: garage_visual
+          POSTGRES_PASSWORD: garage_visual  # pragma: allowlist secret
+          POSTGRES_DB: garage_visual
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U garage_visual -d garage_visual"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Throwaway service container only.
+      DATABASE_URL: postgresql://garage_visual:garage_visual@localhost:5432/garage_visual  # pragma: allowlist secret
+      PORT: "5000"
+      BASE_URL: http://127.0.0.1:5000
+      OUT_DIR: ${{ github.workspace }}/visual-output
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Apply migrations
+        run: npm run db:migrate
+
+      - name: Seed the scenario dataset (fixed clock)
+        run: npm run db:seed:dev
+        env:
+          GARAGE_SEED_NOW: "2026-11-21T10:00:00Z"
+          GARAGE_DATASET_CLASS: scenario
+
+      - name: Start the app
+        run: |
+          mkdir -p "$OUT_DIR"
+          nohup npm run dev > "$OUT_DIR/server.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/server.pid"
+          for i in $(seq 1 90); do
+            if curl -fsS "$BASE_URL/api/health" > /dev/null 2>&1; then echo "Server is up after ${i}s"; exit 0; fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/server.pid")" 2>/dev/null; then echo "Server exited early"; cat "$OUT_DIR/server.log"; exit 1; fi
+            sleep 1
+          done
+          echo "Server did not become healthy"; cat "$OUT_DIR/server.log"; exit 1
+        env:
+          NODE_ENV: development
+          GARAGE_DATASET_CLASS: scenario
+          GARAGE_ROLE_WIDGET_ENABLED: "true"
+          SESSION_SECRET: ci-only-visual-session-secret  # pragma: allowlist secret
+          # Clearly fake Clerk values: the server needs a syntactically valid secret/publishable key to start its
+          # middleware, and the browser Clerk script is stubbed by scripts/visual/run.mjs. No network call to Clerk.
+          CLERK_SECRET_KEY: sk_live_ci_only_not_a_real_key_000000000000  # pragma: allowlist secret
+          CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsuY2ktb25seS5pbnZhbGlkJA  # pragma: allowlist secret
+          VITE_CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsuY2ktb25seS5pbnZhbGlkJA  # pragma: allowlist secret
+          # One CI IP loads hundreds of pages; lift the per-minute API cap for this run only.
+          GARAGE_API_RATE_LIMIT: "100000"
+
+      - name: Install visual tooling (CI only)
+        working-directory: scripts/visual
+        run: npm install --no-audit --no-fund --no-package-lock
+
+      - name: Install Chromium
+        working-directory: scripts/visual
+        run: npx playwright install --with-deps chromium
+
+      - name: Run visual checks
+        id: visual
+        working-directory: scripts/visual
+        run: node run.mjs
+        env:
+          FIXED_NOW: "2026-11-21T10:00:00Z"
+
+      - name: Job summary
+        if: always()
+        run: |
+          if [ -f "$OUT_DIR/report.md" ]; then
+            head -c 900000 "$OUT_DIR/report.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Visual run produced no report.md (see the server log artifact)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Stop the app
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/server.pid" ]; then kill "$(cat "$RUNNER_TEMP/server.pid")" 2>/dev/null || true; fi
+
+      - name: Upload report and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-checks-${{ github.run_number }}
+          path: |
+            visual-output/report.md
+            visual-output/report.json
+            visual-output/screenshots
+            visual-output/pdfs
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-server-log-${{ github.run_number }}
+          path: visual-output/server.log
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,0 +1,11 @@
+{
+  "name": "garage-visual-checks",
+  "private": true,
+  "version": "0.0.0",
+  "description": "CI-only visual check tooling. Installed only inside the GitHub Actions runner (.github/workflows/visual.yml); never installed locally and not part of the root workspaces.",
+  "type": "module",
+  "dependencies": {
+    "axe-core": "4.10.3",
+    "playwright": "1.52.0"
+  }
+}
