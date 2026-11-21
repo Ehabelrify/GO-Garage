@@ -207,6 +207,8 @@ export interface WarrantyInvoiceDraft {
   warrantyId: string;
   branchId: BranchId;
   status: "draft";
+  /** ISO currency code from the central list (see currencies.ts). */
+  currency: string;
   taxRatePercent: number | null;
   paidAmount: number;
   paymentMethod: WarrantyInvoicePaymentMethod | null;
@@ -219,10 +221,14 @@ export interface WarrantyInvoiceDraft {
 }
 
 export interface WarrantyInvoiceDraftInput {
+  /** Omitted keeps the stored currency. Must be on the central list. */
+  currency?: string;
   items: Array<{
     description: string;
     quantity: number;
     unitAmount: number | null;
+    /** Optional; when present it must equal the invoice currency (totals never mix currencies). */
+    currency?: string;
   }>;
   taxRatePercent: number | null;
   paidAmount: number;

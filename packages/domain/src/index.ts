@@ -10,3 +10,4 @@ export * from "./reporting";
 export * from "./qualification";
 export * from "./reservations";
 export * from "./warranty-terms";
+export * from "./currencies";

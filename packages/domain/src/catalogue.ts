@@ -12,6 +12,23 @@ export type ScopeItem = { id: string; serviceId: string; gradeVersion: PolicyRef
 export type WorkComponent = { id: string; serviceId: string; scopeItemIds: string[]; occupancyRule: PolicyRef };
 export type BilingualName = { ar: string; en: string };
 export type GradeVersion = { ref: PolicyRef; revision: number; name: BilingualName; thicknessMicrometres: number | null; provenance: string; approval: ApprovalEvidence | null; state: "draft" | "published" | "retired" };
+/** Owner price edit carried by a draft until it is published. Money is in minor units. */
+export type PackagePriceChange = {
+  price: Money; tax: Money; effectiveFrom: string; reason: string;
+  /** Approved tax rule (chosen, or kept from the previous version); required to publish. */
+  taxRule: PolicyRef | null;
+  /** Approved work-aggregation rule and mode (chosen, or kept from the previous version); required to publish. */
+  aggregation: { rule: PolicyRef; mode: "sum" | "max" } | null;
+  previous: { price: Money | null; tax: Money | null };
+};
+/** One row of an Owner-facing price history (names, never ids). Amounts in minor units. */
+export type PackagePriceHistoryEntry = {
+  version: number; state: "draft" | "published" | "retired"; price: Money | null; tax: Money | null;
+  /** For a price-edit draft: the price it would replace. */
+  previousPrice: Money | null; previousTax: Money | null;
+  effectiveFrom: string | null; createdByName: string; createdAt: string; approvedByName: string | null; approvedAt: string | null; reason: string;
+  isPriceEdit: boolean;
+};
 export type PackageVersion = {
   ref: PolicyRef; revision: number; kind: "package" | "standalone";
   name: BilingualName; vehicleCategoryIds: string[]; vehicleModels: string[];
@@ -21,4 +38,6 @@ export type PackageVersion = {
   workAggregation: Configured<{ rule: PolicyRef; mode: "sum" | "max" }>;
   provenance: string; approval: ApprovalEvidence | null;
   state: "draft" | "published" | "retired";
+  /** Present only on a price-edit draft. */
+  priceChange?: PackagePriceChange | null;
 };
