@@ -4,12 +4,10 @@ name: Visual checks
 # (en/ar, 360/768/1280). Playwright and axe-core are installed ONLY here (scripts/visual/package.json), never locally.
 # Docs: docs/engineering/VISUAL_CHECKS.md
 
+# Manual only (Actions tab -> "Visual checks" -> Run workflow). It takes 25-35 minutes and uses Actions minutes, so it
+# is started on purpose after UI changes, not on every push.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
 
 permissions:
   contents: read

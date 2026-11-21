@@ -35,7 +35,7 @@ The app wraps everything in `ClerkProvider` and the server mounts `clerkMiddlewa
   This is the only server code change; the variable is unset everywhere else.
 
 ## Running it
-- Automatically on every push/PR to `main`.
+- Manually only: Actions tab -> "Visual checks" -> Run workflow (it takes 25-35 minutes). It no longer runs on push or pull request. Run it after every UI change.
 - Manually: Actions tab > "Visual checks" > Run workflow, or `GH_HOST=github.com gh workflow run visual.yml`.
 - Narrow a run (edit the step env or use `workflow_dispatch` on a branch): `ROLES`, `LOCALES`, `WIDTHS`, `ONLY_PAGES`, `SKIP_FLOWS=true`,
   `CONCURRENCY` are read by `run.mjs`.
