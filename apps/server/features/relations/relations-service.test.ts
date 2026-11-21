@@ -71,3 +71,28 @@ describe("relations API authorization", () => {
     expect((view.customer as { phone: string | null }).phone).toBeNull();
   });
 });
+
+describe("section query parameters", () => {
+  it("never binds more parameters than a section query references (PostgreSQL rejects the extra ones)", async () => {
+    vi.mocked(pool.query).mockClear();
+    const owner = actor("owner");
+    await customer360(owner, "c1").catch(() => undefined);
+    await vehicle360(owner, "v1").catch(() => undefined);
+    const mismatches = vi.mocked(pool.query).mock.calls
+      .map(([sql, params]) => ({ sql: String(sql), count: Array.isArray(params) ? (params as unknown[]).length : 0 }))
+      .filter(({ sql, count }) => {
+        const highest = Math.max(0, ...[...sql.matchAll(/\$(\d+)/g)].map((m) => Number(m[1])));
+        return count > 0 && count !== highest;
+      });
+    expect(mismatches.map((m) => `${m.count} params for: ${m.sql.slice(0, 80)}`)).toEqual([]);
+  });
+});
+
+describe("paramsFor", () => {
+  it("trims the shared parameter list to the highest placeholder used", async () => {
+    const { paramsFor } = await import("./relations-service");
+    expect(paramsFor("SELECT 1 WHERE a=$1", ["a", "b", "c", "d"])).toEqual(["a"]);
+    expect(paramsFor("SELECT 1 WHERE a=$1 AND b=$3", ["a", "b", "c", "d"])).toEqual(["a", "b", "c"]);
+    expect(paramsFor("SELECT 1 WHERE a=$1 AND b=$4", ["a", "b", "c", "d"])).toEqual(["a", "b", "c", "d"]);
+  });
+});

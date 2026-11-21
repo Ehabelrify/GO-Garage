@@ -199,10 +199,21 @@ const customRequestsSpec: SectionSpec = {
   }),
 };
 
+/**
+ * PostgreSQL rejects a bind with more parameters than the statement references ("bind message supplies 4 parameters,
+ * but prepared statement requires 3"). Section queries share one parameter list, so trim it to the highest $n used.
+ */
+export function paramsFor<T>(sql: string, all: T[]): T[] {
+  let highest = 0;
+  for (const match of sql.matchAll(/\$(\d+)/g)) highest = Math.max(highest, Number(match[1]));
+  return all.slice(0, highest);
+}
+
 async function loadSection(spec: SectionSpec, subject: "customer_id" | "vehicle_id", subjectId: string, actor: GarageActor): Promise<Section> {
   if (!can(actor, spec.capability)) return restrictedSection();
   const { owner, branchIds } = scopeOf(actor);
-  const result = await pool.query<Record<string, unknown>>(spec.sql(subject), [subjectId, owner, branchIds, commercialContext.environmentId]);
+  const sql = spec.sql(subject);
+  const result = await pool.query<Record<string, unknown>>(sql, paramsFor(sql, [subjectId, owner, branchIds, commercialContext.environmentId]));
   return { count: result.rows.length ? Number(result.rows[0].total) : 0, items: result.rows.map(spec.map) };
 }
 

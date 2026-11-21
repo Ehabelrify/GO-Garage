@@ -127,7 +127,7 @@ export function DataTable<Row>({
               data-selected={selectedKey === key ? "true" : undefined}
               aria-selected={onRowClick && selectedKey === key ? true : undefined}
               tabIndex={onRowClick ? 0 : undefined}
-              onClick={onRowClick ? () => activate(row) : undefined}
+              onClick={onRowClick ? (event) => { if (!(event.target as HTMLElement).closest("button, a, input, select, textarea")) activate(row); } : undefined}
               onKeyDown={onRowClick ? (event) => onKey(event, row) : undefined}
             >
               {columns.map((column) => <td key={column.key} className={column.numeric ? "num" : undefined}>
@@ -148,8 +148,18 @@ export function DataTable<Row>({
             <span className={`data-card-value${column.mono ? " mono" : ""}`}>{column.render(row)}</span>
           </div>)}
         </>;
+        // A card may contain interactive children (RecordRef chips are buttons), so the card itself must not be a
+        // <button>: nested buttons are invalid HTML and break keyboard and screen-reader use. Mirror the table row instead.
         return onRowClick
-          ? <div role="listitem" key={key}><button type="button" className="data-card clickable" onClick={() => activate(row)}>{body}</button></div>
+          ? <div
+              role="listitem"
+              className="data-card clickable"
+              key={key}
+              data-selected={selectedKey === key ? "true" : undefined}
+              tabIndex={0}
+              onClick={(event) => { if (!(event.target as HTMLElement).closest("button, a, input, select, textarea")) activate(row); }}
+              onKeyDown={(event) => onKey(event, row)}
+            >{body}</div>
           : <div role="listitem" className="data-card" key={key}>{body}</div>;
       })}
     </div>}

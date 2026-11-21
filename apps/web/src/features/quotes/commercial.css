@@ -1,5 +1,5 @@
 /* Quotes & offers chain (quotes, reservations, benefits, promotions). Logical properties only. */
-.qo-page { display: grid; gap: 14px; min-width: 0; }
+.qo-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; }
 .qo-stack { display: grid; gap: 12px; min-width: 0; }
 .qo-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; }
 .qo-row.between { justify-content: space-between; }

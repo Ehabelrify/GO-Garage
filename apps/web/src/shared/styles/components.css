@@ -22,7 +22,7 @@
 .search-wrap > svg { position: absolute; inset-inline-start: 11px; top: 50%; transform: translateY(-50%); color: #81918f; pointer-events: none; }
 .search-input { width: 100%; min-height: 42px; padding: 8px 12px; padding-inline-start: 36px; border: 1px solid #cbd7d4; color: var(--ink); background: var(--paper); border-radius: var(--radius); font-size: 14px; }
 
-.table-wrap { overflow-x: auto; border: 1px solid var(--line); background: var(--paper); }
+.table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); background: var(--paper); }
 table { width: 100%; border-collapse: collapse; text-align: start; min-width: 650px; }
 th { color: #5f7476; background: #f2f6f4; font-size: 12px; font-weight: 600; padding: 11px 13px; border-block-end: 1px solid var(--line); white-space: nowrap; text-align: start; }
 td { padding: 12px 13px; border-block-end: 1px solid var(--line-soft); font-size: 13px; vertical-align: middle; }
@@ -32,7 +32,7 @@ tbody tr:hover { background: #f7faf8; }
 .secondary-cell { margin-block-start: 3px; color: var(--muted); font-size: 12px; }
 
 /* DataTable */
-.data-table-wrap { position: relative; }
+.data-table-wrap { position: relative; min-width: 0; max-width: 100%; }
 .data-table-wrap .table-wrap { max-height: var(--data-table-max, none); overflow: auto; }
 .data-table { min-width: 0; }
 .data-table thead th { position: sticky; inset-block-start: 0; z-index: 1; }

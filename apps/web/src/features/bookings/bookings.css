@@ -14,7 +14,7 @@
 .bk-slot:hover { border-color: var(--teal); }
 .bk-slot[aria-checked="true"] { border-color: var(--teal); background: var(--teal); color: #fff; }
 .bk-muted { color: var(--muted); font-size: 13px; margin: 0; }
-.bk-stack { display: grid; gap: 14px; }
+.bk-stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; }
 .bk-history { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .bk-history li { display: grid; gap: 3px; padding-block-end: 8px; border-block-end: 1px solid var(--line-soft); font-size: 13px; }
 .bk-history .bk-arrow { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
