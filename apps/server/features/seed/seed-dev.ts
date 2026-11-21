@@ -1,9 +1,42 @@
 import { initialState } from "./seed-data";
+import { generateDataset } from "./seed-generate";
+import { insertDataset } from "./seed-writer";
 import type { BranchId } from "@garage/domain";
+import type { PoolClient } from "pg";
 import { pool } from "../../infrastructure/database/db";
 
 if (process.env.NODE_ENV === "production") {
   throw new Error("Development sample data cannot be seeded with NODE_ENV=production.");
+}
+
+if (process.env.GARAGE_DATASET_CLASS === "operational") {
+  throw new Error("Sample data cannot be seeded into an operational dataset (GARAGE_DATASET_CLASS=operational).");
+}
+
+/** Extended bilingual 12-month dataset. Idempotent: skipped when the seed marker customer already exists. */
+async function seedExtendedDataset(client: PoolClient) {
+  const marker = await client.query<{ dataset_class: string }>("SELECT dataset_class FROM messaging_environment_marker WHERE singleton = true");
+  if (marker.rows[0]?.dataset_class === "operational") {
+    throw new Error("This database is marked operational; sample data will not be written to it.");
+  }
+  const datasetClass = process.env.GARAGE_DATASET_CLASS;
+  const environmentId = process.env.GARAGE_ENVIRONMENT_ID ?? "default";
+  if (datasetClass === "scenario" && !marker.rows[0]) {
+    await client.query(
+      "INSERT INTO messaging_environment_marker (singleton, dataset_class, environment_id) VALUES (true, 'scenario', $1) ON CONFLICT DO NOTHING",
+      [environmentId],
+    );
+  }
+  const already = await client.query("SELECT 1 FROM customers WHERE id = 'seed-cust-001'");
+  if (already.rowCount) {
+    console.info("Extended bilingual history is already seeded; nothing to do. Run the demo purge first to regenerate it relative to today.");
+    return;
+  }
+  const now = process.env.GARAGE_SEED_NOW ? new Date(process.env.GARAGE_SEED_NOW) : new Date();
+  if (Number.isNaN(now.getTime())) throw new Error("GARAGE_SEED_NOW must be an ISO timestamp.");
+  const { ds } = generateDataset({ now, environmentId, whatsappMode: datasetClass === "scenario" ? "scenario" : "simulation" });
+  const inserted = await insertDataset(client, ds);
+  console.info("Extended bilingual dataset written (rows per table):", JSON.stringify(inserted));
 }
 
 async function seed() {
@@ -309,6 +342,8 @@ async function seed() {
     await client.query(
       "DELETE FROM warranties WHERE id = 'demo-warranty-example'",
     );
+
+    await seedExtendedDataset(client);
 
     await client.query("COMMIT");
     console.info("Development sample branches, staff, services, a provisional warranty draft, settings, customers, bookings, jobs, and inbox scenarios are ready; no sample warranty coverage is issued.");
