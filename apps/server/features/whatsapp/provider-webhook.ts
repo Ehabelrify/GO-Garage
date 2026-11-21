@@ -1,22 +1,60 @@
-import { createHash,createHmac,randomUUID,timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { Router } from "express";
+import { z } from "zod";
 import { withTransaction } from "../../infrastructure/database/db";
 import { isWhatsAppProviderDeliveryEnabled } from "./whatsapp-policy";
 import { confirmJourneyBooking } from "./booking-journey";
 import { parseProviderEventTime } from "./provider-event-time";
 
-export const providerWebhookRouter=Router();
-const deliveryRank:Record<string,number>={accepted:1,"definite-failure":1,delivered:2,read:3};
+export const providerWebhookRouter = Router();
+const deliveryRank: Record<string, number> = { accepted: 1, "definite-failure": 1, delivered: 2, read: 3 };
 
-providerWebhookRouter.post("/events",async(req,res,next)=>{try{
-  if(!isWhatsAppProviderDeliveryEnabled())return res.status(503).json({code:"PROVIDER_DISCONNECTED",message:"Provider delivery is not enabled."});
-  const secret=process.env.WHATSAPP_WEBHOOK_SECRET,signature=String(req.header("x-provider-signature")??""),eventId=String(req.header("x-provider-event-id")??""),channelId=String(req.header("x-provider-channel-id")??""),raw=(req as typeof req&{rawBody?:Buffer}).rawBody;
-  if(!secret||!raw||!eventId||!channelId)return res.status(400).json({code:"INVALID_PROVIDER_EVENT",message:"Provider event metadata is incomplete."});
-  const expected=createHmac("sha256",secret).update(raw).digest("hex"),provided=signature.replace(/^sha256=/,"");
-  if(expected.length!==provided.length||!timingSafeEqual(Buffer.from(expected),Buffer.from(provided)))return res.status(401).json({code:"INVALID_SIGNATURE",message:"Provider signature is invalid."});
-  const body=req.body as{kind?:string;providerMessageId?:string;occurredAt?:string;contactHash?:string;text?:string;confirmationKey?:string},occurred=parseProviderEventTime(body.occurredAt);
-  if(typeof body.kind!=="string"||!occurred)return res.status(400).json({code:"INVALID_PROVIDER_EVENT",message:"Provider event body is invalid or future-dated."});
-  const kind=body.kind;
+// Replay protection: events are deduplicated by (channel, provider event id) in
+// messaging_provider_events, and the HMAC covers the whole body including occurredAt.
+// A max-age check on occurredAt is intentionally NOT applied: legitimate provider retries
+// and delayed deliveries can arrive long after occurredAt, and rejecting them would drop
+// real messages. Future-dated events are already rejected by parseProviderEventTime.
+const providerEventSchema = z.object({
+  kind: z.string(),
+  providerMessageId: z.string().optional(),
+  occurredAt: z.string().optional(),
+  contactHash: z.string().optional(),
+  text: z.string().optional(),
+  confirmationKey: z.string().optional(),
+});
+
+const SIGNATURE_HEX = /^[0-9a-f]{64}$/i;
+
+function signatureMatches(secret: string, raw: Buffer, signatureHeader: string): boolean {
+  const provided = signatureHeader.replace(/^sha256=/, "");
+  if (!SIGNATURE_HEX.test(provided)) return false;
+  const expected = createHmac("sha256", secret).update(raw).digest();
+  return timingSafeEqual(expected, Buffer.from(provided, "hex"));
+}
+
+providerWebhookRouter.post("/events", async (req, res, next) => {
+  try {
+    if (!isWhatsAppProviderDeliveryEnabled()) {
+      return res.status(503).json({ code: "PROVIDER_DISCONNECTED", message: "Provider delivery is not enabled." });
+    }
+    const secret = process.env.WHATSAPP_WEBHOOK_SECRET;
+    const signature = String(req.header("x-provider-signature") ?? "");
+    const eventId = String(req.header("x-provider-event-id") ?? "");
+    const channelId = String(req.header("x-provider-channel-id") ?? "");
+    const raw = (req as typeof req & { rawBody?: Buffer }).rawBody;
+    if (!secret || !raw || !eventId || !channelId) {
+      return res.status(400).json({ code: "INVALID_PROVIDER_EVENT", message: "Provider event metadata is incomplete." });
+    }
+    if (!signatureMatches(secret, raw, signature)) {
+      return res.status(401).json({ code: "INVALID_SIGNATURE", message: "Provider signature is invalid." });
+    }
+    const parsed = providerEventSchema.safeParse(req.body);
+    const occurred = parsed.success ? parseProviderEventTime(parsed.data.occurredAt) : null;
+    if (!parsed.success || !occurred) {
+      return res.status(400).json({ code: "INVALID_PROVIDER_EVENT", message: "Provider event body is invalid or future-dated." });
+    }
+    const body = parsed.data;
+    const kind = body.kind;
   const outcome=await withTransaction(async client=>{
     const channel=(await client.query<{provider:string;status:string}>("SELECT provider,status FROM messaging_channels WHERE id=$1 FOR UPDATE",[channelId])).rows[0];if(!channel||!["sandbox","ready"].includes(channel.status))return "disabled" as const;
     const inserted=await client.query("INSERT INTO messaging_provider_events(provider,channel_id,provider_event_id,event_kind,provider_message_id,payload_digest,occurred_at) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING",[channel.provider,channelId,eventId,kind,body.providerMessageId??null,createHash("sha256").update(raw).digest("hex"),occurred]);if(!inserted.rowCount)return "duplicate" as const;

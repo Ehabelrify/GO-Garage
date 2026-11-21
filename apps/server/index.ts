@@ -1,6 +1,8 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
+import helmet from "helmet";
+import { rateLimit } from "express-rate-limit";
 import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import { createServer as createViteServer } from "vite";
@@ -14,6 +16,47 @@ const port = Number(process.env.PORT ?? 5000);
 const webRoot = fileURLToPath(new URL("../web", import.meta.url));
 const isProduction = process.env.NODE_ENV === "production";
 
+// Rate limits (per client IP, fixed window).
+const RATE_WINDOW_MS = 60_000;
+const API_GENERAL_LIMIT = 300; // requests/min across /api
+const PUBLIC_VERIFY_LIMIT = 30; // requests/min on public warranty verification
+const PROVIDER_WEBHOOK_LIMIT = 120; // requests/min on the WhatsApp provider webhook
+const DEMO_SESSION_LIMIT = 10; // POST /api/demo/session per min
+
+function parseTrustProxy(value: string | undefined): boolean | number | string {
+  if (value === undefined || value.trim() === "") return isProduction ? 1 : false;
+  const v = value.trim();
+  if (v === "true") return true;
+  if (v === "false") return false;
+  if (/^\d+$/.test(v)) return Number(v);
+  return v; // e.g. "loopback" or a CIDR list
+}
+app.set("trust proxy", parseTrustProxy(process.env.TRUST_PROXY));
+
+const limiter = (limit: number, code: string) =>
+  rateLimit({
+    windowMs: RATE_WINDOW_MS,
+    limit,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    handler: (_req, res) => {
+      res.status(429).json({ code, message: "Too many requests. Please try again shortly." });
+    },
+  });
+
+// CSP is disabled: Clerk (frontend API, proxy, telemetry, images) and Vite HMR in dev
+// need broad, deployment-specific allowances, and an incorrect policy would break sign-in.
+// All other helmet protections stay on. Revisit with a tuned CSP once Clerk domains are pinned.
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    hsts: isProduction,
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" }, // Clerk OAuth popups
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  }),
+);
+
 // Clerk's Frontend API proxy must run before body parsing.
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 app.use(express.json({ limit: "1mb", verify: (req,_res,buffer) => { (req as typeof req & {rawBody?:Buffer}).rawBody=Buffer.from(buffer); } }));
@@ -26,6 +69,10 @@ app.use(
   })),
 );
 
+app.use("/api", limiter(API_GENERAL_LIMIT, "RATE_LIMITED"));
+app.use("/api/public/warranty-verification", limiter(PUBLIC_VERIFY_LIMIT, "RATE_LIMITED"));
+app.use("/api/provider/whatsapp", limiter(PROVIDER_WEBHOOK_LIMIT, "RATE_LIMITED"));
+app.post("/api/demo/session", limiter(DEMO_SESSION_LIMIT, "RATE_LIMITED"));
 app.use("/api", createApiRouter());
 app.use((req, res, next) => {
   if (req.path.startsWith("/warranty/verify/")) {
