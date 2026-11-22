@@ -30,5 +30,7 @@ identity, no Replit control point changes, one integrated typecheck + tests + bu
 Integrated typecheck, tests, build; commit per package; update the Phase 2 progress table, Phase 1 log, handoff status board and
 activity log, MIGRATIONS.md and this plan's status below.
 
-## Status
-Plan written 23:10. Packages W1 to W5 dispatched. Results recorded in the Phase 2 tracker progress table.
+## Status (23:35)
+- W1 done, W2 done, W4 done, committed (`b092ffe`, `b123c03`, `0e17c1f`).
+- W5 partly done by hand: `auth/route-rbac.test.ts` (4 tests). Drift guard, demo-actor route tests and the Visual flows for changed drawers are still open.
+- W3 (P2T-010 refresh bus) not started: its agent launch was refused by the permission classifier.
