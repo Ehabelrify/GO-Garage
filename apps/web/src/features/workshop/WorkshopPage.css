@@ -41,3 +41,38 @@
   .ws-tech-head { flex-wrap: wrap; }
   .ws-big-action { min-height: 56px; }
 }
+
+/* Technician extras (U-E): 48-56 px touch targets, one-hand layout at 360 px. */
+.ws-extras { display: grid; gap: 12px; min-width: 0; }
+.ws-report-btn { width: 100%; min-height: 56px; justify-content: center; }
+.ws-issues-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: var(--radius); font-size: var(--fs-label); font-weight: 600; background: var(--tone-danger-bg); color: var(--tone-danger-fg); }
+.ws-issue-form { display: grid; gap: 12px; padding: 12px; border: 1px solid var(--line); background: var(--canvas); min-width: 0; }
+.ws-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.ws-chip { min-height: 48px; padding: 8px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); color: var(--ink); font: inherit; font-size: var(--fs-body); font-weight: 600; cursor: pointer; }
+.ws-chip.on { background: var(--teal); border-color: var(--teal); color: #fff; }
+.ws-chip:focus-visible, .ws-check:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.ws-file-btn { position: relative; min-height: 56px; width: 100%; cursor: pointer; overflow: hidden; }
+.ws-file-btn.is-busy { opacity: .7; }
+.ws-file-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.ws-photo-add { display: grid; gap: 10px; margin-block-end: 10px; }
+.ws-phase { display: grid; gap: 4px; margin-block-start: 8px; }
+.ws-phase-title { margin: 0; font-size: var(--fs-label); color: var(--muted); font-weight: 600; }
+.ws-check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ws-check { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 8px 12px; border: 1px solid var(--line); background: var(--paper); border-radius: var(--radius); cursor: pointer; font-size: var(--fs-body); }
+.ws-check:disabled { cursor: default; opacity: .7; }
+.ws-check.done { background: var(--tone-success-bg); border-color: var(--tone-success-fg); }
+.ws-check-box { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 2px solid var(--muted); border-radius: var(--radius); background: #fff; color: var(--tone-success-fg); }
+.ws-check-text { min-width: 0; overflow-wrap: anywhere; }
+.ws-optional { color: var(--muted); font-size: var(--fs-caption); }
+.ws-ok { color: var(--tone-success-fg); }
+.ws-note-form { display: grid; gap: 8px; margin-block-end: 10px; }
+.ws-note-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ws-photo-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.ws-photo { position: relative; display: block; aspect-ratio: 1; overflow: hidden; border: 1px solid var(--line); background: var(--canvas); }
+.ws-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ws-photo-tag { position: absolute; inset-block-end: 4px; inset-inline-start: 4px; padding: 1px 6px; font-size: var(--fs-caption); font-weight: 600; background: rgba(0, 0, 0, .65); color: #fff; border-radius: var(--radius); }
+.ws-pill-done { background: var(--tone-success-bg); color: var(--tone-success-fg); }
+.ws-issue-row .ws-resolve { display: flex; flex-wrap: wrap; gap: 8px; margin-block-start: 8px; }
+.ws-issue-row .ws-resolve .field-input { flex: 1 1 160px; }
+.ws-gate-list { margin: 0 0 12px; padding-inline-start: 20px; display: grid; gap: 4px; }
+@media (max-width: 760px) { .ws-photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

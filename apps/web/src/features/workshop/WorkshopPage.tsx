@@ -12,6 +12,8 @@ import {
   actionLabelFor, actionsFor, boardCount, boardStages, capColumn, columnTracks, compareJobs, groupByStage, isOverdue,
   matchesJob, technicianCounts, terminalStages, type TechniciansState,
 } from "./workshop-logic";
+import { JobExtras } from "./JobExtras";
+import { asChecklistBlock, techApi, type ChecklistBlock, type OpenIssue } from "./tech-api";
 import "./WorkshopPage.css";
 
 interface WorkshopPageProps extends RecordPageProps { role: GarageRole }
@@ -36,6 +38,9 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
   const [saving, setSaving] = useState("");
   const [confirm, setConfirm] = useState<{ job: Job; target: JobStage } | null>(null);
   const [moving, setMoving] = useState(false);
+  const [openIssues, setOpenIssues] = useState<OpenIssue[]>([]);
+  const [gate, setGate] = useState<{ job: Job; block: ChecklistBlock } | null>(null);
+  const [overrideReason, setOverrideReason] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
@@ -56,6 +61,11 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
       .catch(() => { if (mounted) { setTechnicians([]); setTechState("error"); } });
     return () => { mounted = false; };
   }, [canAssign, reloadKey]);
+
+  const loadIssues = useCallback(() => {
+    void techApi.openIssues().then((result) => { if (result.ok && result.data) setOpenIssues(result.data.issues); });
+  }, []);
+  useEffect(() => { loadIssues(); }, [loadIssues, state.jobs]);
 
   const pickupOf = useCallback((job: Job) => state.bookings.find((b) => b.id === job.bookingId)?.expectedPickup ?? "9999-12-31", [state.bookings]);
   const techName = useCallback((id?: string | null) => {
@@ -89,6 +99,21 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
 
   const doMove = async (job: Job, target: JobStage) => {
     setMoving(true);
+    if (target === "ready") {
+      // The server gates 'ready' on the mandatory checklist; talk to it directly to read the gate response.
+      const reason = gate?.job.id === job.id ? overrideReason.trim() : "";
+      const attempt = await techApi.moveStage(job.id, target, reason || undefined);
+      const block = asChecklistBlock(attempt);
+      if (block) {
+        setMoving(false); setConfirm(null);
+        setGate({ job, block });
+        return;
+      }
+      setMoving(false); setConfirm(null); setGate(null); setOverrideReason("");
+      if (attempt.ok) { await store.refresh(); notify(t("Workshop stage updated.", "تم تحديث مرحلة الشغل.")); }
+      else notify(attempt.code === "INVALID_TRANSITION" ? t("That stage change is not allowed.", "هذا التغيير في المرحلة غير مسموح.") : t("The stage could not be changed. Check your access.", "تعذر تغيير المرحلة. تحقق من صلاحياتك."));
+      return;
+    }
     const result = await store.transitionJob(job.id, target);
     setMoving(false);
     setConfirm(null);
@@ -153,7 +178,7 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
   const shownCount = !isTechnician && view !== "list" ? boardCount(grouped) : jobs.length;
   const header = <PageHeader
     title={isTechnician ? t("My jobs today", "أعمالي اليوم") : t("Workshop", "الورشة")}
-    meta={<span className="top-meta">{shownCount} {t("jobs", "أوامر شغل")}</span>}
+    meta={<><span className="top-meta">{shownCount} {t("jobs", "أوامر شغل")}</span>{openIssues.length > 0 && <span className="ws-issues-badge" role="status">{t("Issues", "المشكلات")} {openIssues.length}</span>}</>}
     tabs={isTechnician ? undefined : <TabBar ariaLabel={t("View", "العرض")} value={view === "list" ? "list" : "board"} onChange={setView}
       tabs={[{ id: "board", label: t("Board", "اللوحة") }, { id: "list", label: t("List", "القائمة") }]} />}
   />;
@@ -208,6 +233,8 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
     return <>
       <div className="ws-sub"><StatusBadge status={open.stage} domain="job" lang={lang} /><span>{branchName(open.branchId)}</span></div>
       {renderActions(open, true)}
+      <JobExtras jobId={open.id} lang={lang} t={t} stage={open.stage} closed={["delivered", "cancelled", "no-show"].includes(open.stage)}
+        isDemo={Boolean(store.actor?.isDemo)} isManager={canAssign} notify={notify} onIssuesChanged={loadIssues} />
       <Collapsible title={t("Linked records", "السجلات المرتبطة")} defaultOpen>
         <dl className="ws-detail-grid">
           <div><dt>{t("Vehicle", "المركبة")}</dt><dd><RecordRef type="vehicle" id={open.vehicleId} label={vehicle?.plate} subtitle={vehicle?.makeModel} /></dd></div>
@@ -285,6 +312,22 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
       title={open ? vehicleLabel(open) : ""} subtitle={open ? customerName(open.customerId) : undefined}>
       {detail()}
     </DetailDrawer>
+
+    <ConfirmDialog open={Boolean(gate)} lang={lang} busy={moving}
+      title={t("Checklist not finished", "قائمة التحقق لم تكتمل")}
+      body={gate ? `${vehicleLabel(gate.job)} · ${customerName(gate.job.customerId)}` : undefined}
+      confirmLabel={gate?.block.canOverride ? t("Mark ready anyway", "تسجيل الجاهزية رغم ذلك") : t("OK", "حسنًا")}
+      confirmDisabled={Boolean(gate?.block.canOverride) && overrideReason.trim().length < 3}
+      disabledReason={gate?.block.canOverride ? t("Write a reason to override.", "اكتب سببًا لتجاوز الشرط.") : undefined}
+      onCancel={() => { setGate(null); setOverrideReason(""); }}
+      onConfirm={() => { if (!gate) return; if (gate.block.canOverride) void doMove(gate.job, "ready"); else { setGate(null); setOverrideReason(""); } }}>
+      {gate && <>
+        <p className="ws-reason">{t("These required steps are still open:", "هذه الخطوات المطلوبة ما زالت مفتوحة:")}</p>
+        <ul className="ws-gate-list">{gate.block.remaining.map((item) => <li key={item.id}>{lang === "ar" ? item.labelAr : item.labelEn}</li>)}</ul>
+        {gate.block.canOverride && <div className="form-field"><label className="field-label" htmlFor="ws-override">{t("Reason to override", "سبب التجاوز")}</label>
+          <input id="ws-override" className="field-input" value={overrideReason} maxLength={500} onChange={(e) => setOverrideReason(e.target.value)} /></div>}
+      </>}
+    </ConfirmDialog>
 
     <ConfirmDialog open={Boolean(confirm)} danger lang={lang} busy={moving}
       title={confirm ? (confirm.target === "cancelled" ? t("Cancel this job?", "إلغاء أمر الشغل؟") : t("Mark as no-show?", "تسجيل عدم الحضور؟")) : ""}
