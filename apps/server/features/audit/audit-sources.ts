@@ -5,12 +5,12 @@
  *
  * Columns: uid, occurred_at, kind, action, actor_id, entity_type, entity_id, branch_id, detail, before_value, after_value, extra.
  * Not included on purpose: system-generated simulated reminders, promotion allocation internals and warranty
- * termination rows (the termination is already audited as a warranty event). Staff invitations and permission edits are
- * not audited by the product yet, so they cannot appear here.
+ * termination rows (the termination is already audited as a warranty event). Staff invitations, permission edits, customer
+ * create/edit and reminder-rule changes come from staff_customer_audit_events (migration 0039).
  */
 export const auditKinds = [
   "settings", "policy", "catalogue", "quote", "warranty", "whatsapp", "job", "owner-record", "availability", "invoice",
-  "special-request", "benefit", "transport", "reservation", "customer-merge", "money", "consent", "staff-access",
+  "special-request", "benefit", "transport", "reservation", "customer-merge", "money", "consent", "staff-access", "customer", "reminder",
 ] as const;
 export type AuditKind = (typeof auditKinds)[number];
 
@@ -151,6 +151,18 @@ export const auditArms: Array<{ table: string; sql: string }> = [
   { table: "messaging_inbox_access_audit", sql: arm({
     from: "messaging_inbox_access_audit e", uid: "'inbox-access:'||e.id", at: "e.occurred_at", kind: "staff-access", action: "'inbox-'||e.action",
     actor: "e.actor_user_id", entityType: "'staff'", entityId: "e.staff_user_id",
+  }) },
+  { table: "staff_customer_audit_events", sql: arm({
+    from: "staff_customer_audit_events e", uid: "'staff-audit:'||e.id", at: "e.created_at", kind: "staff-access", action: "e.action", actor: "e.actor_user_id",
+    entityType: "'staff'", entityId: "e.entity_id", branch: "e.branch_id", detail: "e.summary", where: "e.entity_kind='staff'",
+  }) },
+  { table: "staff_customer_audit_events", sql: arm({
+    from: "staff_customer_audit_events e", uid: "'customer-audit:'||e.id", at: "e.created_at", kind: "customer", action: "e.action", actor: "e.actor_user_id",
+    entityType: "'customer'", entityId: "e.entity_id", branch: "e.branch_id", detail: "e.summary", where: "e.entity_kind='customer'",
+  }) },
+  { table: "staff_customer_audit_events", sql: arm({
+    from: "staff_customer_audit_events e", uid: "'reminder-rule-audit:'||e.id", at: "e.created_at", kind: "reminder", action: "e.action", actor: "e.actor_user_id",
+    entityType: "'reminder-rule'", entityId: "e.entity_id", branch: "e.branch_id", detail: "e.summary", where: "e.entity_kind='reminder-rule'",
   }) },
 ];
 

@@ -1,3 +1,4 @@
+import { recordStaffCustomerAudit } from "../audit/audit-writer";
 export interface QueryRunner {
   query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number | null }>;
 }
@@ -26,5 +27,6 @@ export async function reclaimInvitation(client: QueryRunner, userId: string, nor
             status = 'active', updated_at = now()
       WHERE clerk_user_id = $1 AND status = 'inactive'`,
     [userId, invitation.role, invitation.branch_ids, invitation.permissions, normalizedEmail, fullName]);
+  await recordStaffCustomerAudit(client, { entityKind: "staff", entityId: userId, action: "claimed-invitation", summary: `Invitation claimed as ${String(invitation.role)}`, actorUserId: userId });
   return true;
 }

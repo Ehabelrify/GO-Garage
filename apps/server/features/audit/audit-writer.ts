@@ -23,3 +23,21 @@ export async function recordAuditEvent(client: Queryable, input: JobAuditEventIn
     [`job-audit-${randomUUID()}`, input.jobId, input.action, input.details.slice(0, 500), input.actorUserId],
   );
 }
+
+export interface StaffCustomerAuditInput {
+  entityKind: "staff" | "customer" | "reminder-rule";
+  entityId: string;
+  action: string;
+  branchId?: string | null;
+  /** Names, ids and changed field NAMES only. Never phone numbers, emails or message text. Truncated to 500 characters. */
+  summary: string;
+  actorUserId: string | null;
+}
+
+/** Appends one row to staff_customer_audit_events (migration 0039). Pass the transaction client of the mutation it describes. */
+export async function recordStaffCustomerAudit(client: Queryable, input: StaffCustomerAuditInput): Promise<void> {
+  await client.query(
+    "INSERT INTO staff_customer_audit_events (id, entity_kind, entity_id, action, branch_id, summary, actor_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+    [`sca-${randomUUID()}`, input.entityKind, input.entityId, input.action, input.branchId ?? null, input.summary.slice(0, 500), input.actorUserId],
+  );
+}

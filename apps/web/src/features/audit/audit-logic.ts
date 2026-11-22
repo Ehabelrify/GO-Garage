@@ -40,6 +40,8 @@ export const kindOptions: Array<{ value: string } & Pair> = [
   { value: "money", en: "Money", ar: "الحركات المالية" },
   { value: "consent", en: "Messaging consent", ar: "موافقة المراسلة" },
   { value: "staff-access", en: "Staff access", ar: "صلاحيات الفريق" },
+  { value: "customer", en: "Customer records", ar: "سجلات العملاء" },
+  { value: "reminder", en: "Reminder rules", ar: "قواعد التذكير" },
 ];
 
 const actions: Record<string, Pair> = {

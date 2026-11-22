@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { pool, withTransaction } from "../../infrastructure/database/db";
 import { canAccessBranch, hasCapability, type GarageActor } from "../auth/authz";
+import { recordStaffCustomerAudit } from "../audit/audit-writer";
 import { commercialContext } from "../commercial/policy-service";
 import {
   addDays, bookingCandidate, cairoDate, checkinCandidate, defaultRule, displayStatus, initialState, isReminderKind, leadLimits, mergeRules, quoteCandidate,
@@ -89,6 +90,8 @@ export async function updateRule(actor: GarageActor, kindValue: string, patch: R
         `UPDATE reminder_rules SET enabled = $3, lead_days = $4, auto_send = $5, template_en = $6, template_ar = $7, revision = $8, updated_by = $9, updated_at = now()
          WHERE environment_id = $1 AND kind = $2 AND revision = $10`, [...values, current.revision]);
     if ((written.rowCount ?? 0) !== 1) return fail(409, "REVISION_CONFLICT", "This rule changed. Reload and try again.");
+    const fields = (["enabled", "leadDays", "autoSend", "templateEn", "templateAr"] as const).filter((field) => next[field] !== current[field]);
+    await recordStaffCustomerAudit(client, { entityKind: "reminder-rule", entityId: kind, action: "rule-updated", summary: `Fields changed: ${fields.join(", ") || "none"}; revision ${next.revision}`, actorUserId: actor.userId });
     return { rule: ruleView(next) };
   });
 }

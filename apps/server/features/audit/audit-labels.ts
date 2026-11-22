@@ -21,6 +21,8 @@ export const kindLabels: Record<AuditKind, { en: string; ar: string }> = {
   money: { en: "Money", ar: "الحركات المالية" },
   consent: { en: "Messaging consent", ar: "موافقة المراسلة" },
   "staff-access": { en: "Staff access", ar: "صلاحيات الفريق" },
+  customer: { en: "Customers", ar: "العملاء" },
+  reminder: { en: "Reminder rules", ar: "قواعد التذكير" },
 };
 
 /** Known action names. Anything else falls back to a readable form of the stored word. */
@@ -76,6 +78,12 @@ const actionLabels: Record<string, { en: string; ar: string }> = {
   "inbox-revoked": { en: "Inbox access removed", ar: "إزالة صلاحية صندوق الوارد" },
   "conversation-assigned": { en: "Conversation assigned", ar: "إسناد محادثة" },
   "contact-linked": { en: "Contact linked to customer", ar: "ربط جهة اتصال بعميل" },
+  "invited": { en: "Staff invited", ar: "دعوة عضو فريق" },
+  "invitation-cancelled": { en: "Invitation cancelled", ar: "إلغاء دعوة" },
+  "claimed-invitation": { en: "Invitation claimed", ar: "قبول دعوة" },
+  "permissions-changed": { en: "Permissions changed", ar: "تغيير الصلاحيات" },
+  "access-removed": { en: "Access removed", ar: "إزالة الصلاحية" },
+  "rule-updated": { en: "Rule updated", ar: "تعديل قاعدة" },
   "conversation-created": { en: "Conversation opened", ar: "فتح محادثة" },
 };
 
@@ -103,7 +111,7 @@ export const entityTypeLabels: Record<string, { en: string; ar: string }> = {
   job: { en: "Job", ar: "أمر شغل" }, branch: { en: "Branch", ar: "فرع" }, invoice: { en: "Invoice", ar: "فاتورة" },
   "special-request": { en: "Special request", ar: "طلب خاص" }, benefit: { en: "Benefit", ar: "منفعة" },
   transport: { en: "Transport", ar: "نقل" }, reservation: { en: "Reservation", ar: "حجز مؤجل" },
-  customer: { en: "Customer", ar: "عميل" }, "money-event": { en: "Money entry", ar: "حركة مالية" }, staff: { en: "Staff member", ar: "عضو فريق" },
+  customer: { en: "Customer", ar: "عميل" }, "reminder-rule": { en: "Reminder rule", ar: "قاعدة تذكير" }, "money-event": { en: "Money entry", ar: "حركة مالية" }, staff: { en: "Staff member", ar: "عضو فريق" },
 };
 
 export function entityTypeLabel(type: string, lang: AuditLang): string {
