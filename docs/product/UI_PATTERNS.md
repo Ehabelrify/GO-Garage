@@ -102,3 +102,31 @@ Pickers (`CustomerVehiclePicker`, `QuotePicker`, `PolicyPicker`) and the Custome
 | `Esc` | Close drawer, dialog or menu (existing focus trap) |
 
 Tests: `shared/list-tools.test.ts` (selection, saved-view storage, CSV escaping, shortcut matching).
+
+## Brand (GO Stores identity applied 22 Nov 2026; concept pending Maher approval)
+The logo is a concept built by Codex from social references. Maher must approve it and original vector files replace the
+files in `apps/web/public/brand/` (same file names, drop-in). Plan: `docs/superpowers/plans/2026-11-22-brand-identity-application-plan.md`.
+
+| Token (tokens.css) | Value | Role |
+|---|---|---|
+| `--brand-graphite` / `--sidebar` / `--ink` | `#17191D` | Sidebar, toasts, body text, secondary button outline |
+| `--brand-graphite-soft` / `--sidebar-soft` | `#2A2E33` | Sidebar and mobile-nav hover |
+| `--brand-warm-white` / `--canvas` | `#F6F4EF` | Page background, active nav pill, nav text |
+| `--brand-surface` / `--paper` | `#FFFFFF` | Cards, tables, drawers, dialogs |
+| `--brand-red` / `--teal` | `#C82127` | Primary button, links, active-nav marker, loading bar (names `--teal*` are internal, rename later) |
+| `--brand-red-dark` / `--teal-dark` | `#98171B` | Primary hover |
+| `--brand-red-tint` / `--teal-soft` | `#FBEDEE` | Light red tint (rare) |
+| `--brand-gold` | `#F3B61F` | Fills with graphite text, focus ring, tab underline, selected markers; never text on light |
+| `--brand-gold-text` | `#8A5A00` | Gold-coloured text on white (5.9:1) |
+| `--brand-gold-tint` + `--brand-gold-ink` | `#FFF4D6` + `#7A4F0E` | In-progress, selected rows/chips, `premium` tone |
+| `--brand-line` / `--line` | `#D6D4CF` | Borders |
+| `--brand-muted` / `--muted` | `#676B70` | Secondary text; `--caption-muted` `#585D62` for 12px captions |
+| `--red` (danger) | `#B42318` | Errors, negative numbers, destructive actions (separate from brand red) |
+
+- **Radius:** `--radius-sm` 6px controls and buttons, `--radius` 8px cards, tables, drawers, dialogs, `--radius-pill` badges and chips.
+- **Buttons:** primary = filled red, white text; secondary = graphite outline on white; quiet unchanged; `btn-danger` = outlined `#B42318`; only the final confirm in a danger `ConfirmDialog` is solid `#B42318`. Red never fills table rows or backgrounds except the existing tinted danger states.
+- **Gold rules:** focus ring (3px gold + 1px graphite line), active tab underline, selected chip/row tint, `premium` StatusBadge tone (Crown icon), in-progress status. Never red and gold in one control.
+- **Active nav:** warm-white pill with a 4px red marker on the inline-start edge (logical, mirrors in RTL); mobile bottom nav shows a red top bar on the active item.
+- **Logo placements:** `shared/brand/BrandMark` (`lockup` reversed in the 250px sidebar, `mark` in the 64px rail and mobile top bar, `logo` on login and loading screens); favicon + apple-touch-icon in `index.html`; print `DocumentSheet` header uses the primary logo; Clerk `logoImageUrl` is the primary logo. Wordmark is artwork only, never typed.
+- **Fonts:** IBM Plex Sans and IBM Plex Sans Arabic self-hosted WOFF2 in `apps/web/public/fonts/` (400/500/600/700, `font-display: swap`, unicode-range split, SIL OFL in `OFL.txt`), `@font-face` in `shared/styles/fonts.css`, two preloads in `index.html`. Money and KPI use tabular numerals.
+- **Contrast:** `shared/brand/brand-contrast.test.ts` asserts AA for the brand pairs and that tokens.css has no teal values.

@@ -4,7 +4,7 @@
 **Purpose:** Single working tracker for Phase 1 defects, investigation, implementation handoff, and retesting.  
 **Initial intake:** 25 entries: 7 code-review findings, 15 UI-test findings, and 3 engineering follow-ups.  
 **Current intake:** 62 entries (+ P1-061, P1-062 recorded 22 November 2026; 44 below plus 6 hardening/UI entries P1-045–P1-050, 5 Wave 2.5 entries P1-051–P1-055 and 2 Wave 2.6 quote entries P1-056–P1-057 2 Wave 2.6 invoice entries P1-058–P1-059 and the Wave 2.7 plate entry P1-060 recorded 21 November 2026): the original 25, 6 user-feedback/discovery follow-ups, 6 cross-industry research improvements, and 7 approved business/product additions recorded on 16 November 2026.
-**Next available ID:** `P1-079` (P1-077–P1-078 are the U-D list tools: saved views, bulk actions, shortcuts, CSV; P1-063–P1-065 are the Wave 5 server entries, P1-066–P1-067 the Wave 5 web entries; P1-068–P1-069 reminders and follow-ups; P1-070–P1-076 other Wave 6 packages, where P1-072–P1-073 are reserved for the audit-log package: check the index before using them)
+**Next available ID:** `P1-080` (P1-079 is the GO Stores brand shell; P1-077–P1-078 are the U-D list tools: saved views, bulk actions, shortcuts, CSV; P1-063–P1-065 are the Wave 5 server entries, P1-066–P1-067 the Wave 5 web entries; P1-068–P1-069 reminders and follow-ups; P1-070–P1-076 other Wave 6 packages, where P1-072–P1-073 are reserved for the audit-log package: check the index before using them)
 **Current ownership:** 2 entries remain Open/Unassigned; 62 entries are Ready for retest after implementation (counting the Wave 5 entries P1-063–P1-067). Ready entries are P1-001–P1-029, P1-032–P1-067. No runtime retests were performed; P1-045–P1-060 were additionally never run against a database (migrations 0026-0030, 0032 and 0033 and the seed are unapplied).
 
 ## Sources and application context
@@ -116,6 +116,7 @@ Garage OS uses React/Vite, Express, PostgreSQL, Clerk, and `@garage/domain`. It 
 | [P1-076](#p1-076) | Wave 6 (22 Nov 2026) | Printable warranty card with QR (card and A5, EN/AR, single and batch, reprint audit) | Medium | P2 | Ready for retest | Source |
 | [P1-077](#p1-077) | Wave 6 (22 Nov 2026) | List tools: per-user saved Views in FilterBar, opt-in bulk selection in DataTable (confirm bookings, snooze/skip follow-ups, print warranty cards), Export CSV | Medium | P2 | Ready for retest | Source |
 | [P1-078](#p1-078) | Wave 6 (22 Nov 2026) | Keyboard shortcuts: G then letter go-to (role-aware), ? help dialog, J/K/X rows, Esc | Low | P3 | Ready for retest | Source |
+| [P1-079](#p1-079) | Brand (22 Nov 2026) | GO Stores brand shell (concept identity applied: fonts, tokens, shell, logo placements) | Medium | P2 | Ready for retest | Source |
 | [P1-070](#p1-070) | Wave 6 (22 Nov 2026) | Duplicate customer detection and merge server: scoring, preview, one-transaction merge, undo log (migration 0035) | High | P1 | Ready for retest |
 | [P1-071](#p1-071) | Wave 6 (22 Nov 2026) | Customers > Duplicates tab, merge drawer with reason dialog, recent merges with undo | High | P1 | Ready for retest |
 | [P1-072](#p1-072) | Wave 6 (22 Nov 2026) | Owner activity log: GET /api/audit unified timeline over the append-only audit tables, keyset paging, filters, streamed CSV export (migration 0036 indexes) | Medium | P2 | Ready for retest | Engineering |
@@ -1631,6 +1632,17 @@ The user approved all recommendations and valuable additions derived from the Go
 
 **Retest:** Not performed; no browser.
 
+### P1-079 — GO Stores brand shell (concept identity applied: fonts, tokens, shell, logo placements)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; plan `docs/superpowers/plans/2026-11-22-brand-identity-application-plan.md`.
+**Area:** `shared/styles/*`, `public/brand`, `public/fonts`, `shared/brand/BrandMark`, App shell, login, print header.
+**Evidence:** Unit tests only (`shared/brand/brand-contrast.test.ts`: WCAG AA for the brand pairs, no teal left in tokens.css). Needs the manual Visual checks run.
+
+**Acceptance:** IBM Plex self-hosted and loaded; graphite sidebar with red inline-start marker in EN and AR; filled red primary buttons, outlined danger; gold focus ring; logo on login, sidebar, rail, mobile top bar, loading screens, print header; favicon and title updated. The logo is a concept until Maher approves it.
+
+**Retest:** Not performed; no browser. Check owner/manager/reception/technician, en/ar, 360/768/1280, Login, Overview, Quotes > Promotions, Warranties, print preview.
+
 ### P1-070 — Duplicate customer detection and merge (server)
 
 **Status / owner:** Ready for retest / Engineering (delegated implementation).
@@ -1727,3 +1739,4 @@ The user approved all recommendations and valuable additions derived from the Go
 | 2026-11-22 | Recorded P1-074 (technician job extras server, migration 0037) and P1-075 (technician job view extras, web) | Source, mocked-pool and unit tests only; no database, no browser |
 | 2026-11-22 | Recorded P1-072 (owner activity log, CSV export, migration 0036 indexes) and P1-073 (Daily summary and Activity log tabs, summary endpoint) | Mocked-pool and unit tests only; no database, no browser |
 | 2026-11-22 | Recorded P1-077 (saved views, bulk actions, CSV export on lists) and P1-078 (keyboard shortcuts and help dialog), web only, no migration | Unit tests only; no database, no browser |
+| 2026-11-22 | Recorded P1-079 (GO Stores brand shell: self-hosted fonts, brand tokens, graphite shell, logo placements, contrast test) | Unit tests only; no browser |

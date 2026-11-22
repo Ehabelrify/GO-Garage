@@ -87,7 +87,7 @@ owner two-factor, remaining role-based permission checks, large/dense file refac
 | Wave 5 (quick intake) | **Done and committed locally** (`78c969a`, `7337966`, `7503195`): migration 0033 (product kind, unlinked WhatsApp contacts, intake_requests), GET /api/catalogue/intake-items, POST /api/intake, POST /api/whatsapp/conversations/:conversationId/link, panel in apps/web/src/features/intake, top-bar New button (and key N), WhatsApp 'New contact' banner. Tracker P1-063..P1-067. Quality gate: typecheck clean, 540 tests passed (3 skipped), build ok; untested against a DB and in a browser. 12 commits ahead of origin, not pushed. |
 | UX improvements (6 packages) | **Done, committed and pushed** (22 Nov): reminders/follow-ups (0034), customer duplicate merge + undo (0035), owner audit log + CSV + daily summary (0036), technician notes/checklist/photos/issues (0037), printable warranty card, saved views + bulk actions + shortcuts + CSV export. Tracker P1-068..P1-078. Gate: typecheck clean, 659 tests passed (3 skipped), build ok. Nothing run against a DB or in a browser. |
 | Codex brand branch | **Merged** into main (`e8db7b6`, no conflicts): docs/product/go-stores-brand-identity-2026-11-22/ and go-stores-visual-suite-2026-11-22/. **Not yet pushed.** |
-| Brand shell implementation | **Next/running**: follow docs/superpowers/plans/2026-11-22-brand-identity-application-plan.md (fonts first, tokens, sidebar, logo placements, buttons, contrast test). |
+| Brand shell implementation | **Implemented** (22 Nov, P1-079, uncommitted): fonts self-hosted, tokens, shell, logos, contrast test. Awaiting Visual checks and Maher's logo approval (logo is a concept). |
 | UX improvements (section 4 item 3) | Not started |
 | Visual checks rerun | Waiting for the user to push and trigger |
 | Replit test with Maher | Waiting |
@@ -141,6 +141,7 @@ build per stage (not per package), no per-package review agents, no extra review
 of the whole sequence. Keep all trackers, this handoff, docs and pointers updated at every step so another session can resume.
 
 ## 8. Activity log (newest first; append here)
+- **22 Nov 2026 (brand shell):** implemented per the brand plan (P1-079): IBM Plex self-hosted, brand tokens re-pointed, graphite sidebar with red marker, BrandMark logos, red primary / outlined danger buttons, gold focus and tabs, print logo, contrast test. Not committed. Next: Visual checks (all roles, en/ar, 360/768/1280, Login, Overview, Quotes > Promotions, Warranties, print preview) and Maher approval of the logo.
 - **22 Nov 2026 (UX done, pushed, brand merged):** all six UX packages finished; one integrated check passed; 7 feature/doc commits pushed to origin/main (`f7289ad`). `origin/codex/brand-identity` merged locally (`e8db7b6`). Next: brand shell. Note: push worked unattended with the stored credentials (no sign-in window).
 - **22 Nov 2026 (user away):** Plan comparison with Codex boards committed (`815c0bb`): fonts are declared (IBM Plex) but never
   loaded (fix in brand shell: self-host); Agency Square on board 01 contradicts Codex's own guide, so UI font unchanged; gold fails

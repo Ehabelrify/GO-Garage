@@ -4,7 +4,7 @@
 **Inputs:** Codex branch `codex/brand-identity` (`docs/product/go-stores-brand-identity-2026-11-22/` and `docs/product/go-stores-visual-suite-2026-11-22/`),
 the current design system ([UI_PATTERNS](../../product/UI_PATTERNS.md), `apps/web/src/shared/styles/tokens.css`), and the
 [visual review](../../testing/visual/2026-11-21/VISUAL_REVIEW_REPORT.md).
-**Status:** plan approved by delegation; implementation is its own work package ("brand shell"), kept separate from feature work.
+**Status:** implemented (22 Nov 2026, brand shell; awaiting Visual checks and Maher's logo approval).
 
 ## 1. Facts about the identity (from Codex's kit)
 - Logo: red "GO" with a turbine mark, bold italic "STORES" wordmark; variants: primary, reversed, mono dark/light, compact mark,
