@@ -83,7 +83,7 @@ The newest name must be `0041_invoice_adjustments.sql` (or newer if more migrati
 GARAGE_DATASET_CLASS=scenario npm run db:seed:dev
 ```
 
-- Writes the bilingual 12-month dataset (about 110 customers, bookings, jobs, quotes, warranties with **QR codes**, invoices, payments, claims, reminders, finance, audit rows).
+- Writes the bilingual 12-month dataset (about 110 customers, bookings, jobs, quotes, warranties with **QR codes**, invoices, payments, claims, finance, audit rows). It does **not** yet include sent-document history (Send to customer "Last sent"), staff and customer audit events from migration 0039, or invoice reversals, refunds and adjustment invoices from 0041: those screens start empty.
 - It is idempotent: if `seed-cust-001` already exists it says so and does nothing. That is why step 4 comes first.
 - Dates are relative to today. To reproduce the exact dataset the owner reviewed in a visual run, add `GARAGE_SEED_NOW=2026-11-21T10:00:00Z`.
 - It refuses `NODE_ENV=production` and refuses a database marked `operational`.
@@ -95,7 +95,7 @@ Press Run (workflow "Project"). Then, signed in through the role widget as **Own
 
 1. **Warranties → QR cards:** open any row. The drawer shows a QR code and a Print button. (If it says the code "was created before codes could be shown again", the database was seeded with a different secret: purge, set the secret, seed again.)
 2. **Customers:** about 110 customers; open one: vehicles, quotes, warranties, purchases, invoices tabs have data.
-3. **Bookings → Invoices:** open an invoice that is paid or part paid: **Refund** and, on each payment, **Reverse** buttons appear.
+3. **Bookings → Invoices:** open an invoice that is paid or part paid: **Refund** and, on each payment, **Reverse** buttons appear. (The seed has paid and part-paid invoices, but **none with a reversed payment, a refund or a supplementary adjustment invoice yet**, so those three states only appear after you record one yourself. Seeding them is listed as open work in the Phase 2 tracker.)
 4. **Quotes & offers**, **Finance**, **Settings → Staff access** (Invoices group), **Activity log** (filters Customer records, Reminder rules).
 5. As **Technician**, open `/workspace/finance`: you land on the Workshop and see a message "You do not have access to Finance. Ask the owner to grant it."
 

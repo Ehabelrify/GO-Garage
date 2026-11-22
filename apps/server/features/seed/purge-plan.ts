@@ -27,6 +27,8 @@ export interface Step { label: string; table: string; where: string; optional?: 
 /** Child-first order. Immutable-history triggers are disabled only for the duration of the transaction. */
 export function buildSteps(options: { keepDemoAccounts: boolean }): Step[] {
   const steps: Step[] = [
+    { label: "Invoice payment reversals", table: "invoice_payment_reversals", where: `invoice_id IN ${INVOICES}` },
+    { label: "Invoice refunds", table: "invoice_refunds", where: `invoice_id IN ${INVOICES}` },
     { label: "Invoice payment references", table: "invoice_payment_references", where: `invoice_id IN ${INVOICES}` },
     { label: "Invoice history", table: "invoice_events", where: `invoice_id IN ${INVOICES}` },
     { label: "Invoice lines", table: "invoice_lines", where: `invoice_id IN ${INVOICES}` },
