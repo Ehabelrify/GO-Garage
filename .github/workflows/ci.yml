@@ -59,9 +59,11 @@ jobs:
         run: npm run db:migrate
         env:
           DATABASE_URL: ${{ env.GARAGE_TEST_DATABASE_URL }}
+      # Serial on purpose: the rehearsal suite snapshots global booking/job counts, and the other suites create and delete
+      # bookings in the same database, so running the files in parallel makes the snapshot flaky.
       - name: Run integration suites
         run: >-
-          npx vitest run
+          npx vitest run --no-file-parallelism
           apps/server/features/commercial/commercial-migration-rehearsal.integration.test.ts
           apps/server/features/warranty/warranty-ledger.integration.test.ts
           apps/server/features/whatsapp/whatsapp.integration.test.ts
