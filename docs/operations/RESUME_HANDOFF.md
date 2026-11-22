@@ -85,11 +85,13 @@ owner two-factor, remaining role-based permission checks, large/dense file refac
 | Wave 4 (visual-review fixes: design system + 8 feature packages + server capabilities + seed) | **Done and committed locally** (8 commits ahead of origin, last `514c81c`); **not pushed** (user pushes; hold while agents are mid-work) |
 | Seed agent (realism, promotions, technician jobs) | Done, committed (`514c81c`): 110 customers, 31 pending reviews, finance ~5.2M revenue / ~1.7M outstanding, technician has 9 open jobs, 6 promotion policies + rows |
 | Wave 5 (quick intake) | **Done and committed locally** (`78c969a`, `7337966`, `7503195`): migration 0033 (product kind, unlinked WhatsApp contacts, intake_requests), GET /api/catalogue/intake-items, POST /api/intake, POST /api/whatsapp/conversations/:conversationId/link, panel in apps/web/src/features/intake, top-bar New button (and key N), WhatsApp 'New contact' banner. Tracker P1-063..P1-067. Quality gate: typecheck clean, 540 tests passed (3 skipped), build ok; untested against a DB and in a browser. 12 commits ahead of origin, not pushed. |
-| UX improvements (6 packages) | **Running** (see section 4 item 3 and the activity log). Migrations 0034+ reserved for them. |
+| UX improvements (6 packages) | **Done, committed and pushed** (22 Nov): reminders/follow-ups (0034), customer duplicate merge + undo (0035), owner audit log + CSV + daily summary (0036), technician notes/checklist/photos/issues (0037), printable warranty card, saved views + bulk actions + shortcuts + CSV export. Tracker P1-068..P1-078. Gate: typecheck clean, 659 tests passed (3 skipped), build ok. Nothing run against a DB or in a browser. |
+| Codex brand branch | **Merged** into main (`e8db7b6`, no conflicts): docs/product/go-stores-brand-identity-2026-11-22/ and go-stores-visual-suite-2026-11-22/. **Not yet pushed.** |
+| Brand shell implementation | **Next/running**: follow docs/superpowers/plans/2026-11-22-brand-identity-application-plan.md (fonts first, tokens, sidebar, logo placements, buttons, contrast test). |
 | UX improvements (section 4 item 3) | Not started |
 | Visual checks rerun | Waiting for the user to push and trigger |
 | Replit test with Maher | Waiting |
-| Unapplied migrations (never run on any DB) | 0026-0030, 0032 (0031 and 0033 intentionally unused/reserved: 0033 will be Wave 5) |
+| Unapplied migrations (never run on any DB outside CI) | 0026-0030, 0032-0037 (0031 intentionally unused). CI's Postgres job applies them on every push: check the 'database-integration' job result in GitHub Actions. |
 | Quality gate at last commit | typecheck clean, 489 tests passed (3 skipped), build ok; nothing browser- or DB-verified except the first visual run |
 
 Open findings from the first visual run still open: axe colour-contrast (about 70 pages; tokens re-tuned in Wave 4, unverified),
@@ -139,6 +141,7 @@ build per stage (not per package), no per-package review agents, no extra review
 of the whole sequence. Keep all trackers, this handoff, docs and pointers updated at every step so another session can resume.
 
 ## 8. Activity log (newest first; append here)
+- **22 Nov 2026 (UX done, pushed, brand merged):** all six UX packages finished; one integrated check passed; 7 feature/doc commits pushed to origin/main (`f7289ad`). `origin/codex/brand-identity` merged locally (`e8db7b6`). Next: brand shell. Note: push worked unattended with the stored credentials (no sign-in window).
 - **22 Nov 2026 (user away):** Plan comparison with Codex boards committed (`815c0bb`): fonts are declared (IBM Plex) but never
   loaded (fix in brand shell: self-host); Agency Square on board 01 contradicts Codex's own guide, so UI font unchanged; gold fails
   contrast on light surfaces (use fill + graphite text, bronze `#8A5A00` for gold text); radius moves to 6/8 px; full lockup in the
