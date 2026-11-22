@@ -1,3 +1,4 @@
+import { reclaimInvitation } from "./reclaim-invitation";
 import type { NextFunction, Request, Response } from "express";
 import { clerkClient, getAuth } from "@clerk/express";
 import { withTransaction, pool } from "../../infrastructure/database/db";
@@ -61,6 +62,10 @@ async function provisionFromVerifiedIdentity(userId: string): Promise<Membership
     return findMembership(userId);
   }
 
+  // A removed member signing in again: claim a new invitation onto their existing identity row (P2T-022).
+  const reclaimed = await withTransaction((client) => reclaimInvitation(client, userId, normalizedEmail, fullName));
+  if (reclaimed) return findMembership(userId);
+
   // Invite-only: the verified email must match an owner pre-approved row
   // (status 'invited'). Claiming binds the Clerk user id to that row; role and
   // branches come only from the row, never from client or Clerk metadata.
@@ -111,7 +116,7 @@ export async function requireMembership(
     }
 
     let membership = await findMembership(userId);
-    if (!membership) membership = await provisionFromVerifiedIdentity(userId);
+    if (!membership || membership.status === "inactive") membership = (await provisionFromVerifiedIdentity(userId)) ?? membership;
     const actor = membership && toActor(membership);
     if (!actor) {
       res.status(403).json({
