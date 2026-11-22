@@ -182,9 +182,17 @@ async function axeOf(page) {
     await page.addScriptTag({ path: axePath });
     const result = await page.evaluate(async () => {
       const res = await window.axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] }, resultTypes: ["violations"] });
-      return res.violations.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.length }));
+      return res.violations.map((v) => ({
+        id: v.id, impact: v.impact, nodes: v.nodes.length,
+        // First offending element and axe's own explanation (colours and ratio for contrast), so reports name the cause.
+        sample: v.nodes[0] ? `${String(v.nodes[0].target?.[0] ?? "").slice(0, 80)} :: ${String(v.nodes[0].any?.[0]?.message ?? v.nodes[0].failureSummary ?? "").replace(/\s+/g, " ").slice(0, 160)}` : "",
+      }));
     });
-    return { violations: result.length, nodes: result.reduce((n, v) => n + v.nodes, 0), top: result.sort((a, b) => b.nodes - a.nodes).slice(0, 6).map((v) => `${v.id}[${v.impact}]x${v.nodes}`) };
+    return {
+      violations: result.length, nodes: result.reduce((n, v) => n + v.nodes, 0),
+      top: result.sort((a, b) => b.nodes - a.nodes).slice(0, 6).map((v) => `${v.id}[${v.impact}]x${v.nodes}`),
+      samples: result.slice(0, 6).map((v) => `${v.id}: ${v.sample}`),
+    };
   } catch (error) {
     return { violations: 0, nodes: 0, top: [], error: String(error?.message ?? error).slice(0, 200) };
   }
@@ -349,14 +357,17 @@ async function customer360Flow({ context, page, shot }) {
 
 async function drawerFlow({ page, shot }) {
   await openWorkspace(page, "/workspace/customers");
-  const row = page.locator("tr.clickable, [role=row].clickable").first();
+  // Rows are table rows on wide screens and cards on narrow ones; opening one now navigates to the customer record
+  // (?customer=...) rather than opening a dialog, so accept either outcome.
+  const row = page.locator("tr.clickable, [role=row].clickable, .data-card.clickable").first();
   if (!(await row.count())) return { status: "SKIP", detail: "no clickable row on the customers page" };
   await row.click();
-  await page.waitForSelector('[role="dialog"]', { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector('[role="dialog"]') || /[?&]customer=/.test(location.search), null, { timeout: 10_000 });
+  const dialog = await page.locator('[role="dialog"]').count();
   await settle(page);
   await shot("drawer");
-  await page.keyboard.press("Escape");
-  return { detail: "drawer opened from the first customer row" };
+  if (dialog) await page.keyboard.press("Escape");
+  return { detail: `customer opened from the first row (${dialog ? "drawer" : "record page"})` };
 }
 
 async function printFlow(pageId, { context, page, shot, locale, width }) {

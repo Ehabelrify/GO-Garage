@@ -62,6 +62,7 @@ export function buildMarkdown(report) {
       for (const e of r.failedRequests.slice(0, 3)) lines.push(`- request failed: ${clip(e, 200)}`);
       if (r.overflow) lines.push(`- overflow: scrollWidth ${r.overflow.scrollWidth} > ${r.overflow.innerWidth}; offenders: ${clip(r.overflow.offenders.join(", "), 300)}`);
       if (r.axe?.top?.length) lines.push(`- axe: ${clip(r.axe.top.join(", "), 300)}`);
+      for (const sample of r.axe?.samples ?? []) lines.push(`  - ${clip(sample, 300)}`);
       lines.push("");
     }
     if (detail.length > 80) lines.push(`(${detail.length - 80} more rows in report.json)`, "");
