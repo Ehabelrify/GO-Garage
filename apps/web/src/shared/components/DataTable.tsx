@@ -1,9 +1,15 @@
-import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, Download } from "lucide-react";
 import type { Locale } from "@garage/domain";
 import { EmptyState, Skeleton } from "./EmptyState";
+import { csvFilename, downloadCsv, hasCsvColumns, tableToCsv, type CsvColumn } from "../csv";
+import { registerList } from "../list-state";
+import { isTypingTarget, nextRowIndex, normaliseKey } from "../shortcuts";
+import { pageSelectionState, pruneSelection, selectAll, selectedRows, toggleKey, togglePage } from "../selection";
+import { canExportLists, useViewer } from "../viewer";
 
-export interface Column<Row> {
+/** Columns also describe their CSV cell: `csv` (text or number) or `csvMoney` ({minor,currency}, adds a currency column). Columns with neither are not exported. */
+export interface Column<Row> extends CsvColumn<Row> {
   key: string;
   header: string;
   render: (row: Row) => ReactNode;
@@ -21,6 +27,13 @@ export interface Column<Row> {
 }
 
 export type SortState = { key: string; direction: "asc" | "desc" } | null;
+
+export interface BulkContext<Row> {
+  keys: string[];
+  rows: Row[];
+  count: number;
+  clear: () => void;
+}
 
 export interface DataTableProps<Row> {
   columns: Column<Row>[];
@@ -48,6 +61,15 @@ export interface DataTableProps<Row> {
   pageSizes?: number[];
   /** Max height of the scrolling area; header stays sticky. */
   maxHeight?: string;
+  /**
+   * Opt-in row selection (checkbox column, select page / all matching, count bar with `actions`). Pass only to viewers who may
+   * write. Rows rejected by `isSelectable` get a disabled checkbox.
+   */
+  bulk?: { actions: (context: BulkContext<Row>) => ReactNode; isSelectable?: (row: Row) => boolean };
+  /** Shows "Export CSV" (file name base) when columns define `csv`/`csvMoney` and the viewer is not a technician. */
+  exportName?: string;
+  /** Stable id so saved views can read and restore this list's sort and page size. */
+  listId?: string;
 }
 
 export const DEFAULT_PAGE_SIZES = [25, 50, 100];
@@ -61,8 +83,8 @@ export function pageWindow(total: number, page: number, size: number): { page: n
 }
 
 const text = {
-  en: { retry: "Retry", loading: "Loading", errorTitle: "Could not load this list", sortBy: "Sort by", asc: "ascending", desc: "descending", showing: (a: number, b: number, n: number) => `Showing ${a}-${b} of ${n}`, perPage: "Rows per page", prev: "Previous page", next: "Next page", pageOf: (p: number, n: number) => `Page ${p} of ${n}` },
-  ar: { retry: "إعادة المحاولة", loading: "جارٍ التحميل", errorTitle: "تعذر تحميل القائمة", sortBy: "ترتيب حسب", asc: "تصاعدي", desc: "تنازلي", showing: (a: number, b: number, n: number) => `عرض ${a}-${b} من ${n}`, perPage: "صفوف في الصفحة", prev: "الصفحة السابقة", next: "الصفحة التالية", pageOf: (p: number, n: number) => `صفحة ${p} من ${n}` },
+  en: { selectRow: "Select row", selectPage: "Select all rows on this page", selected: (n: number) => `${n} selected`, selectAllMatching: (n: number) => `Select all ${n}`, clearSelection: "Clear selection", bulkBar: "Selected rows", exportCsv: "Export CSV", exportPage: "This page", exportAll: (n: number) => `All ${n} loaded rows`, currency: "Currency", retry: "Retry", loading: "Loading", errorTitle: "Could not load this list", sortBy: "Sort by", asc: "ascending", desc: "descending", showing: (a: number, b: number, n: number) => `Showing ${a}-${b} of ${n}`, perPage: "Rows per page", prev: "Previous page", next: "Next page", pageOf: (p: number, n: number) => `Page ${p} of ${n}` },
+  ar: { selectRow: "تحديد الصف", selectPage: "تحديد كل صفوف هذه الصفحة", selected: (n: number) => `${n} محدد`, selectAllMatching: (n: number) => `تحديد كل ${n}`, clearSelection: "إلغاء التحديد", bulkBar: "الصفوف المحددة", exportCsv: "تصدير CSV", exportPage: "هذه الصفحة", exportAll: (n: number) => `كل الصفوف المحملة ${n}`, currency: "العملة", retry: "إعادة المحاولة", loading: "جارٍ التحميل", errorTitle: "تعذر تحميل القائمة", sortBy: "ترتيب حسب", asc: "تصاعدي", desc: "تنازلي", showing: (a: number, b: number, n: number) => `عرض ${a}-${b} من ${n}`, perPage: "صفوف في الصفحة", prev: "الصفحة السابقة", next: "الصفحة التالية", pageOf: (p: number, n: number) => `صفحة ${p} من ${n}` },
 };
 
 /** Pure sorter (stable, locale-aware, nulls last). Exported for tests and for pages that sort server-side. */
@@ -90,8 +112,10 @@ export function nextSort(current: SortState, key: string): SortState {
 
 export function DataTable<Row>({
   columns, rows, rowKey, lang, caption, onRowClick, selectedKey, loading, error, onRetry, empty, initialSort = null, cards = true, maxHeight, paging = true, pageSize = 25, pageSizes = DEFAULT_PAGE_SIZES,
+  bulk, exportName, listId,
 }: DataTableProps<Row>) {
   const copy = text[lang];
+  const viewer = useViewer();
   const [sort, setSort] = useState<SortState>(initialSort);
   const sorted = useMemo(
     () => sort ? sortRows(rows, columns.find((column) => column.key === sort.key), sort.direction, lang) : rows,
@@ -105,6 +129,91 @@ export function DataTable<Row>({
   const showPager = paging && sorted.length > Math.min(...pageSizes, size);
   const primaryKey = (columns.find((column) => column.primary) ?? columns[0])?.key;
 
+  // Saved views read and restore sort and page size through this handle.
+  const live = useRef({ sort, size });
+  live.current = { sort, size };
+  useEffect(() => {
+    if (!listId) return;
+    return registerList(listId, {
+      get: () => ({ sort: live.current.sort, pageSize: live.current.size }),
+      set: (next) => {
+        if ("sort" in next) setSort(next.sort ?? initialSort);
+        if (next.pageSize) setSize(next.pageSize);
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listId]);
+
+  // Selection (opt-in). Keys outside the current rows are dropped so a filter change never leaves hidden selections.
+  const isSelectable = bulk?.isSelectable;
+  const hasBulk = bulk !== undefined;
+  const selectableKeys = useMemo(
+    () => hasBulk ? sorted.filter((row) => !isSelectable || isSelectable(row)).map(rowKey) : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hasBulk, sorted, isSelectable],
+  );
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => { setSelected((current) => (current.size === 0 ? current : pruneSelection(current, selectableKeys))); }, [selectableKeys]);
+  const pageKeys = useMemo(
+    () => hasBulk ? visible.filter((row) => !isSelectable || isSelectable(row)).map(rowKey) : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hasBulk, visible, isSelectable],
+  );
+  const pageState = pageSelectionState(selected, pageKeys);
+  const headerBox = useCallback((node: HTMLInputElement | null) => { if (node) node.indeterminate = pageState === "some"; }, [pageState]);
+
+  // Export (opt-in, never for technicians).
+  const canExport = Boolean(exportName) && hasCsvColumns(columns) && canExportLists(viewer);
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRoot = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!exportOpen) return;
+    const onPointer = (event: MouseEvent) => { if (exportRoot.current && !exportRoot.current.contains(event.target as Node)) setExportOpen(false); };
+    const onKey = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") { event.stopPropagation(); setExportOpen(false); } };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey, true);
+    return () => { document.removeEventListener("mousedown", onPointer); document.removeEventListener("keydown", onKey, true); };
+  }, [exportOpen]);
+  const exportRows = (scope: "page" | "all") => {
+    downloadCsv(csvFilename(exportName ?? "export"), tableToCsv(columns, scope === "page" ? visible : sorted, copy.currency));
+    setExportOpen(false);
+  };
+
+  // J / K move focus between rows, X toggles the focused row's checkbox. Only the table that holds focus (or the first one) reacts.
+  const wrap = useRef<HTMLDivElement>(null);
+  const keyboardRows = Boolean(onRowClick) || hasBulk;
+  useEffect(() => {
+    if (!keyboardRows) return;
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat) return;
+      const name = normaliseKey(event);
+      if (name !== "j" && name !== "k" && name !== "x") return;
+      if (isTypingTarget(event.target as HTMLElement | null) || document.querySelector("[aria-modal='true']")) return;
+      const root = wrap.current;
+      if (!root) return;
+      const active = document.activeElement as HTMLElement | null;
+      const owner = active?.closest?.(".data-table-wrap[data-keynav='true']");
+      if (owner ? owner !== root : document.querySelector(".data-table-wrap[data-keynav='true']") !== root) return;
+      const items = Array.from(root.querySelectorAll<HTMLElement>("[data-row-key]")).filter((node) => node.offsetParent !== null);
+      const current = active?.closest?.("[data-row-key]") as HTMLElement | null;
+      if (name === "x") {
+        const key = current?.dataset.rowKey;
+        if (!hasBulk || !key || !selectableKeys.includes(key)) return;
+        event.preventDefault();
+        setSelected((now) => toggleKey(now, key));
+        return;
+      }
+      if (items.length === 0) return;
+      const index = nextRowIndex(items.length, current ? items.indexOf(current) : -1, name === "j" ? 1 : -1);
+      if (index < 0) return;
+      event.preventDefault();
+      items[index].focus();
+      items[index].scrollIntoView?.({ block: "nearest" });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [keyboardRows, hasBulk, selectableKeys]);
+
   if (error) {
     return <EmptyState variant="error" title={copy.errorTitle} text={error} action={onRetry && <button type="button" className="btn" onClick={onRetry}>{copy.retry}</button>} />;
   }
@@ -116,12 +225,45 @@ export function DataTable<Row>({
     if (event.target !== event.currentTarget) return;
     if (event.key === "Enter" || event.key === " ") { event.preventDefault(); activate(row); }
   };
+  const checkbox = (row: Row, key: string) => {
+    const allowed = !isSelectable || isSelectable(row);
+    return <input type="checkbox" className="row-check" checked={selected.has(key)} disabled={!allowed} aria-label={copy.selectRow}
+      onChange={() => setSelected((now) => toggleKey(now, key))} onClick={(event) => event.stopPropagation()} />;
+  };
+  const clearSelection = () => setSelected(new Set());
+  const selectedList = bulk ? selectedRows(sorted, rowKey, selected) : [];
+  const rowAttrs = (key: string) => ({ "data-row-key": key, tabIndex: keyboardRows ? 0 : undefined });
 
-  return <div className="data-table-wrap" data-cards={cards ? "true" : "false"}>
+  return <div className="data-table-wrap" data-cards={cards ? "true" : "false"} data-keynav={keyboardRows ? "true" : undefined} ref={wrap}>
+    {canExport && <div className="data-table-tools">
+      <div className="data-table-export" ref={exportRoot}>
+        {paging && sorted.length > visible.length
+          ? <>
+              <button type="button" className="btn btn-sm" aria-haspopup="menu" aria-expanded={exportOpen} onClick={() => setExportOpen((value) => !value)}>
+                <Download size={14} aria-hidden="true" />{copy.exportCsv}
+              </button>
+              {exportOpen && <div className="data-table-export-menu" role="menu">
+                <button type="button" role="menuitem" className="btn btn-quiet btn-sm" onClick={() => exportRows("page")}>{copy.exportPage}</button>
+                <button type="button" role="menuitem" className="btn btn-quiet btn-sm" onClick={() => exportRows("all")}>{copy.exportAll(sorted.length)}</button>
+              </div>}
+            </>
+          : <button type="button" className="btn btn-sm" onClick={() => exportRows("all")}><Download size={14} aria-hidden="true" />{copy.exportCsv}</button>}
+      </div>
+    </div>}
+    {bulk && selected.size > 0 && <div className="bulk-bar" role="region" aria-label={copy.bulkBar}>
+      <span className="bulk-count" role="status" aria-live="polite">{copy.selected(selected.size)}</span>
+      {selected.size < selectableKeys.length && <button type="button" className="btn btn-quiet btn-sm" onClick={() => setSelected(selectAll(selectableKeys))}>{copy.selectAllMatching(selectableKeys.length)}</button>}
+      <button type="button" className="btn btn-quiet btn-sm" onClick={clearSelection}>{copy.clearSelection}</button>
+      <div className="bulk-actions">{bulk.actions({ keys: selectedList.map(rowKey), rows: selectedList, count: selectedList.length, clear: clearSelection })}</div>
+    </div>}
     <div className="table-wrap" style={maxHeight ? ({ "--data-table-max": maxHeight } as React.CSSProperties) : undefined}>
       <table className="data-table">
         <caption className="sr-only">{caption}</caption>
         <thead><tr>
+          {hasBulk && <th scope="col" className="select-col">
+            <input type="checkbox" className="row-check" ref={headerBox} checked={pageState === "all"} disabled={pageKeys.length === 0} aria-label={copy.selectPage}
+              onChange={() => setSelected((now) => togglePage(now, pageKeys))} />
+          </th>}
           {columns.map((column) => {
             const active = sort?.key === column.key ? sort.direction : null;
             const Icon = active === "asc" ? ArrowUp : active === "desc" ? ArrowDown : ChevronsUpDown;
@@ -145,13 +287,15 @@ export function DataTable<Row>({
             const key = rowKey(row);
             return <tr
               key={key}
+              {...rowAttrs(key)}
               className={onRowClick ? "clickable" : undefined}
               data-selected={selectedKey === key ? "true" : undefined}
+              data-checked={selected.has(key) ? "true" : undefined}
               aria-selected={onRowClick && selectedKey === key ? true : undefined}
-              tabIndex={onRowClick ? 0 : undefined}
               onClick={onRowClick ? (event) => { if (!(event.target as HTMLElement).closest("button, a, input, select, textarea")) activate(row); } : undefined}
               onKeyDown={onRowClick ? (event) => onKey(event, row) : undefined}
             >
+              {hasBulk && <td className="select-col">{checkbox(row, key)}</td>}
               {columns.map((column) => <td key={column.key} className={column.numeric ? "num" : undefined}>
                 {column.mono ? <bdi className="mono">{column.render(row)}</bdi> : column.key === primaryKey ? <span className="primary-cell">{column.render(row)}</span> : column.render(row)}
               </td>)}
@@ -165,7 +309,9 @@ export function DataTable<Row>({
         const key = rowKey(row);
         const meta = columns.filter((column) => column.key !== primaryKey && !column.hideOnCard);
         const body = <>
-          {columns.filter((column) => column.key === primaryKey).map((column) => <div className="data-card-title" key={column.key}>{column.render(row)}</div>)}
+          {columns.filter((column) => column.key === primaryKey).map((column) => hasBulk
+            ? <div className="data-card-top" key={column.key}>{checkbox(row, key)}<div className="data-card-title">{column.render(row)}</div></div>
+            : <div className="data-card-title" key={column.key}>{column.render(row)}</div>)}
           {meta.length > 0 && <div className="data-card-meta">
             {meta.map((column) => <span key={column.key} className={column.mono ? "mono" : undefined}>
               <span className="data-card-label">{column.header}</span><span className="data-card-value">{column.render(row)}</span>
@@ -179,12 +325,14 @@ export function DataTable<Row>({
               role="listitem"
               className="data-card clickable"
               key={key}
+              data-row-key={key}
               data-selected={selectedKey === key ? "true" : undefined}
+              data-checked={selected.has(key) ? "true" : undefined}
               tabIndex={0}
               onClick={(event) => { if (!(event.target as HTMLElement).closest("button, a, input, select, textarea")) activate(row); }}
               onKeyDown={(event) => onKey(event, row)}
             >{body}</div>
-          : <div role="listitem" className="data-card" key={key}>{body}</div>;
+          : <div role="listitem" className="data-card" key={key} {...rowAttrs(key)} data-checked={selected.has(key) ? "true" : undefined}>{body}</div>;
       })}
     </div>}
     {showPager && <nav className="table-pager" aria-label={copy.perPage}>

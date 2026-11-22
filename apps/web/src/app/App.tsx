@@ -9,6 +9,8 @@ import { branchDisplay, customerDisplay, serviceDisplay, type Lang, type ModalCo
 import { ConfirmDialog } from "../shared/components/ConfirmDialog";
 import { GlobalSearch } from "../shared/components/GlobalSearch";
 import { RecordProvider } from "../shared/components/RecordRef";
+import { ViewerProvider } from "../shared/viewer";
+import { ShortcutsHost } from "./ShortcutsHost";
 import { hasCapability } from "../shared/capabilities";
 import { useFullPrecision } from "../shared/preferences";
 import { buildRecordRegistry } from "./record-registry";
@@ -171,6 +173,7 @@ function ReadyWorkspace({
   const sectionPages = menuPage ? sectionPagesFor(actor.role, menuPage) : [];
   const recordRegistry = useMemo(() => buildRecordRegistry(state, lang), [state, lang]);
   const defaultPage = defaultPageForRole(actor.role);
+  const viewer = useMemo(() => ({ userId: actor.userId, role: actor.role, isDemo: Boolean(actor.isDemo) }), [actor.userId, actor.role, actor.isDemo]);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -256,7 +259,7 @@ function ReadyWorkspace({
         {t("Your change may be saved, but the latest workspace data could not be loaded. The information shown may be outdated.", "قد يكون التغيير قد حُفظ، لكن تعذر تحميل أحدث بيانات مساحة العمل. قد تكون البيانات المعروضة قديمة.")}
         {" "}<button className="btn" type="button" onClick={() => void store.refresh()}>{t("Refresh data", "تحديث البيانات")}</button>
       </div>}
-      <RecordProvider lang={lang} registry={recordRegistry}><main className="page-wrap" key={page}>
+      <ViewerProvider viewer={viewer}><RecordProvider lang={lang} registry={recordRegistry}><main className="page-wrap" key={page}>
         {page === "overview" && <RouteChunk loader={overviewPage} lang={lang} pageProps={{ lang, t, state, navigate, branchName, notify }} />}
         {page === "catalogue" && hasCapability(actor, "catalogue.manage") && <RouteChunk loader={cataloguePage} lang={lang} pageProps={{ lang }} />}
         {page === "quotes" && (hasCapability(actor, "quotes.view") || hasCapability(actor, "quotes.manage")) && <RouteChunk loader={quotesPage} lang={lang} pageProps={{ lang }} />}
@@ -267,7 +270,7 @@ function ReadyWorkspace({
         {page === "customers" && hasCapability(actor, "customers.read") && <RouteChunk loader={customersPage} lang={lang} pageProps={{ lang, t, state, notify }} />}
         {page === "warranties" && actor.role !== "technician" && <RouteChunk loader={warrantiesPage} lang={lang} pageProps={{ lang, t, state, notify }} />}
         {page === "whatsapp" && hasCapability(actor, "whatsapp.use") && <RouteChunk loader={whatsappPage} lang={lang} pageProps={{ lang, t, state, notify, branchName, role: actor.role }} />}
-      </main><IntakeHost lang={lang} actor={actor} state={state} notify={notify} /></RecordProvider>
+      </main><IntakeHost lang={lang} actor={actor} state={state} notify={notify} /><ShortcutsHost lang={lang} allowedPages={navItems.map((item) => item.id)} canIntake={canOpenIntake(actor)} navigate={navigate} /></RecordProvider></ViewerProvider>
     </div>
 
     <nav className="mobile-nav" aria-label={t("Quick navigation", "التنقل السريع")} data-count={mobileNavItems.length + Number(overflowItems.length > 0)}>

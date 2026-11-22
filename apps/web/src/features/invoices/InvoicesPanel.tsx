@@ -34,14 +34,14 @@ export function InvoicesPanel({ lang, scope }: InvoicesPanelProps) {
   const clear = () => { setQuery(""); setStatus("all"); };
 
   const columns: Column<Invoice>[] = [
-    { key: "number", header: t("Invoice", "الفاتورة"), primary: true, mono: true, sortable: true, sortValue: (row) => row.number ?? "", render: (row) => row.number ? <bdi dir="ltr">{row.number}</bdi> : t("Draft", "مسودة") },
-    { key: "customer", header: t("Customer", "العميل"), render: (row) => <RecordRef type="customer" id={row.customerId} label={row.customerName ? customerDisplay(row.customerName, lang) : undefined} /> },
-    { key: "vehicle", header: t("Vehicle", "المركبة"), render: (row) => <RecordRef type="vehicle" id={row.vehicleId} label={row.plate ? formatPlateDisplay(row.plate) : undefined} /> },
-    { key: "branch", header: t("Branch", "الفرع"), render: (row) => branchName(row.branchId) },
-    { key: "date", header: t("Date", "التاريخ"), sortable: true, sortValue: (row) => row.issueDate ?? row.createdAt, render: (row) => <DateText value={row.issueDate ?? row.createdAt} lang={lang} /> },
-    { key: "total", header: t("Total", "الإجمالي"), numeric: true, render: (row) => <Amount minor={row.totalMinor} currency={row.currency} lang={lang} /> },
-    { key: "balance", header: t("Balance", "المتبقي"), numeric: true, render: (row) => row.status === "draft" || row.status === "void" ? "—" : <Amount minor={row.balanceMinor} currency={row.currency} lang={lang} /> },
-    { key: "status", header: t("Status", "الحالة"), sortable: true, sortValue: (row) => row.status, render: (row) => <InvoiceStatusBadge status={row.status} lang={lang} /> },
+    { key: "number", header: t("Invoice", "الفاتورة"), primary: true, mono: true, sortable: true, sortValue: (row) => row.number ?? "", csv: (row) => row.number ?? "", render: (row) => row.number ? <bdi dir="ltr">{row.number}</bdi> : t("Draft", "مسودة") },
+    { key: "customer", header: t("Customer", "العميل"), csv: (row) => row.customerName ?? "", render: (row) => <RecordRef type="customer" id={row.customerId} label={row.customerName ? customerDisplay(row.customerName, lang) : undefined} /> },
+    { key: "vehicle", header: t("Vehicle", "المركبة"), csv: (row) => (row.plate ? formatPlateDisplay(row.plate) : ""), render: (row) => <RecordRef type="vehicle" id={row.vehicleId} label={row.plate ? formatPlateDisplay(row.plate) : undefined} /> },
+    { key: "branch", header: t("Branch", "الفرع"), csv: (row) => branchName(row.branchId), render: (row) => branchName(row.branchId) },
+    { key: "date", header: t("Date", "التاريخ"), csv: (row) => (row.issueDate ?? row.createdAt).slice(0, 10), sortable: true, sortValue: (row) => row.issueDate ?? row.createdAt, render: (row) => <DateText value={row.issueDate ?? row.createdAt} lang={lang} /> },
+    { key: "total", header: t("Total", "الإجمالي"), numeric: true, csvMoney: (row) => (row.totalMinor === null ? null : { minor: row.totalMinor, currency: row.currency }), render: (row) => <Amount minor={row.totalMinor} currency={row.currency} lang={lang} /> },
+    { key: "balance", header: t("Balance", "المتبقي"), numeric: true, csvMoney: (row) => (row.status === "draft" || row.status === "void" || row.balanceMinor === null ? null : { minor: row.balanceMinor, currency: row.currency }), render: (row) => row.status === "draft" || row.status === "void" ? "—" : <Amount minor={row.balanceMinor} currency={row.currency} lang={lang} /> },
+    { key: "status", header: t("Status", "الحالة"), csv: (row) => row.status, sortable: true, sortValue: (row) => row.status, render: (row) => <InvoiceStatusBadge status={row.status} lang={lang} /> },
   ];
   const statusOptions = ["draft", "issued", "partial", "paid", "void"] as const;
   const error = list.error ? errorCopy(list.error.replace(/^.*: /, ""), lang) : null;
@@ -51,8 +51,8 @@ export function InvoicesPanel({ lang, scope }: InvoicesPanelProps) {
       search={{ value: query, onChange: setQuery, placeholder: t("Search number, customer or plate", "ابحث برقم الفاتورة أو العميل أو اللوحة") }}
       filters={[{ key: "status", label: t("Status", "الحالة"), value: status, onChange: setStatus,
         options: [{ value: "all", label: t("All statuses", "كل الحالات") }, ...statusOptions.map((value) => ({ value, label: statusLabel(value, lang) }))] }]}
-      onClear={clear} resultCount={list.data ? rows.length : undefined} />
-    <DataTable columns={columns} rows={rows} rowKey={(row) => row.id} lang={lang} caption={t("Invoices", "الفواتير")}
+      onClear={clear} resultCount={list.data ? rows.length : undefined} viewsId={scope ? undefined : "invoices"} />
+    <DataTable listId={scope ? undefined : "invoices"} exportName="invoices" columns={columns} rows={rows} rowKey={(row) => row.id} lang={lang} caption={t("Invoices", "الفواتير")}
       loading={list.loading} error={error ? t("Invoices could not be loaded.", "تعذر تحميل الفواتير.") : null} onRetry={list.reload}
       onRowClick={(row) => setRecord(row.id)} selectedKey={record || null} initialSort={{ key: "date", direction: "desc" }}
       empty={filtered

@@ -1,0 +1,52 @@
+/* Warranty card. Physical print sizes (pt/mm) are deliberate here: the card is a fixed-size object, so its type
+   is set in points (not screen px) and the on-screen preview is magnified with zoom. Logical properties only. */
+.wc-variants { display: flex; gap: 8px; flex-wrap: wrap; margin-block-end: 12px; }
+.wc-preview { display: grid; gap: 14px; justify-items: center; margin-block: 12px; }
+.wc-preview .wc-pair { zoom: 1.7; }
+.wc-preview .wc-a5 { zoom: .62; }
+
+.wc-pair { display: grid; gap: 4mm; color: #172c34; }
+.wc-face { position: relative; box-sizing: border-box; display: flex; flex-direction: column; gap: 1.2mm; overflow: hidden; background: #fff;
+  border: .2mm solid #82958a; border-radius: 3mm; padding: 3.4mm; line-height: 1.25; }
+.wc-card .wc-face { inline-size: 85.6mm; block-size: 54mm; font-size: 6.2pt; }
+.wc-a5 .wc-face { inline-size: 210mm; block-size: 148mm; padding: 12mm; gap: 5mm; font-size: 12pt; border-radius: 6mm; }
+.wc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 3mm; padding-block-end: 1.4mm; border-block-end: .5mm solid var(--teal, #0f6b6b); }
+.wc-brand { display: flex; align-items: center; gap: 1.6mm; }
+.wc-brand strong, .wc-title strong { display: block; font-size: 1.15em; }
+.wc-brand small, .wc-title small, .wc-sub, .wc-facts dt, .wc-qr small { display: block; color: #5b6f75; }
+.wc-logo { display: grid; place-items: center; inline-size: 8mm; block-size: 8mm; border-radius: 1mm; background: var(--teal-soft, #e3f1ef); color: var(--teal-dark, #0b4f4f); font-weight: 700; text-transform: uppercase; }
+.wc-a5 .wc-logo { inline-size: 18mm; block-size: 18mm; border-radius: 2mm; }
+.wc-title { text-align: end; }
+.wc-body { display: flex; justify-content: space-between; gap: 3mm; flex: 1; min-block-size: 0; }
+.wc-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2mm 3mm; margin: 0; align-content: start; flex: 1; min-inline-size: 0; }
+.wc-facts div { min-inline-size: 0; }
+.wc-facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.wc-wide { grid-column: 1 / -1; }
+.wc-qr { flex: none; display: grid; place-items: center; align-content: center; gap: .8mm; inline-size: 20mm; text-align: center; }
+.wc-qr svg { inline-size: 18mm; block-size: 18mm; }
+.wc-a5 .wc-qr { inline-size: 44mm; }
+.wc-a5 .wc-qr svg { inline-size: 40mm; block-size: 40mm; }
+.wc-qr-off { color: #5b6f75; border: .2mm dashed #82958a; padding: 1mm; border-radius: 1mm; }
+.wc-term { padding: 1.2mm 1.8mm; background: var(--teal-soft, #e3f1ef); border-inline-start: .8mm solid var(--teal, #0f6b6b); border-radius: 1mm; }
+.wc-term strong { display: block; font-size: 1.1em; }
+.wc-term span { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.wc-a5 .wc-term span { -webkit-line-clamp: 8; }
+.wc-foot { display: flex; justify-content: space-between; gap: 2mm; color: #5b6f75; }
+.wc-void { position: absolute; inset-block-start: 38%; inset-inline-start: 25%; padding: .6mm 3mm; border: .5mm solid #b42318; color: #b42318; font-size: 2.2em; font-weight: 700; transform: rotate(-12deg); opacity: .6; }
+.wc-back h3 { margin: 0; font-size: 1.2em; }
+.wc-back ol { margin: 0; padding-inline-start: 4mm; display: grid; gap: .8mm; }
+.wc-placeholder { margin: 0; padding: 1.2mm; border: .2mm dashed #b7791f; color: #8a5a00; border-radius: 1mm; }
+.wc-back .wc-foot { margin-block-start: auto; }
+
+.wc-print-host { display: none; }
+
+@page wc-card { size: 85.6mm 54mm; margin: 0; }
+@page wc-a5 { size: 210mm 148mm; margin: 0; }
+@media print {
+  body.printing-document > .wc-print-host { display: block !important; }
+  .wc-print-host .wc-pair { display: block; zoom: 1; gap: 0; }
+  .wc-print-host .wc-face { border-radius: 0; break-after: page; page-break-after: always; }
+  .wc-print-host .wc-pair:last-child .wc-back { break-after: auto; page-break-after: auto; }
+  .wc-print-host .wc-card .wc-face { page: wc-card; }
+  .wc-print-host .wc-a5 .wc-face { page: wc-a5; }
+}

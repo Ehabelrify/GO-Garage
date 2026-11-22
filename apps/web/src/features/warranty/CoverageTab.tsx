@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ClipboardCheck, Plus, Printer, ScanLine } from "lucide-react";
+import { ClipboardCheck, IdCard, Plus, Printer, ScanLine } from "lucide-react";
 import type { WarrantyRecord, WarrantyStatus } from "@garage/domain";
 import { filterWarrantyRecords } from "@garage/domain";
 import {
@@ -13,6 +13,7 @@ import { buildCoverageDocument } from "./warranty-document";
 import { usePrintRequest } from "./warranty-print-request";
 import { resolveStatus } from "../../shared/components";
 import { qrActionLabel } from "./warranty-copy";
+import { WarrantyCardDrawer } from "./WarrantyCard";
 import { CustomerLink, JobLink, VehicleLink, type WarrantyScope } from "./warranty-scope";
 
 type Lookup = { status: "idle" | "busy" | "none" | "error" } | { status: "found"; result: ResolvedWarranty };
@@ -30,6 +31,7 @@ export function CoverageTab({ scope, onOpenClaim, onIssue, onNewClaim }: {
   const [voidReason, setVoidReason] = useState("");
   const [voidError, setVoidError] = useState("");
   const [voiding, setVoiding] = useState(false);
+  const [cardIds, setCardIds] = useState<string[] | null>(null);
 
   useEffect(() => { setVoidId(null); setVoidReason(""); }, [state.currentBranch, scope.userId]);
 
@@ -67,9 +69,9 @@ export function CoverageTab({ scope, onOpenClaim, onIssue, onNewClaim }: {
   };
 
   const columns: Column<WarrantyRecord>[] = [
-    { key: "customer", header: t("Customer", "العميل"), primary: true, sortable: true,
+    { key: "customer", header: t("Customer", "العميل"), primary: true, sortable: true, csv: (r) => scope.customerName(r.customerId),
       sortValue: (r) => scope.customerName(r.customerId), render: (r) => <CustomerLink scope={scope} customerId={r.customerId} /> },
-    { key: "vehicle", header: t("Vehicle", "المركبة"), render: (r) => <VehicleLink scope={scope} customerId={r.customerId} vehicleId={r.vehicleId} /> },
+    { key: "vehicle", header: t("Vehicle", "المركبة"), csv: (r) => scope.vehicleOf(r.customerId, r.vehicleId)?.plate ?? "", render: (r) => <VehicleLink scope={scope} customerId={r.customerId} vehicleId={r.vehicleId} /> },
     { key: "policy", header: t("Coverage", "التغطية"), sortable: true, sortValue: (r) => policyDisplayName(r.policyName),
       render: (r) => <div className="w-cov-name"><span>{policyDisplayName(r.policyName)}</span><span className="secondary-cell">{scope.serviceName(r.serviceId)}</span></div> },
     { key: "status", header: t("Status", "الحالة"), sortable: true, sortValue: (r) => r.status, render: (r) => <StatusBadge status={r.status} domain="warranty" lang={lang} /> },
@@ -82,7 +84,7 @@ export function CoverageTab({ scope, onOpenClaim, onIssue, onNewClaim }: {
       search={{ value: query, onChange: setQuery, placeholder: t("Customer, plate, policy or job…", "العميل أو اللوحة أو السياسة أو أمر الشغل…") }}
       filters={[{ key: "status", label: t("Status", "الحالة"), value: status, allValue: "all", onChange: (v) => setStatus(v as WarrantyStatus | "all"),
         options: [{ value: "all", label: t("All statuses", "كل الحالات") }, ...(["active", "expired", "terminated", "void"] as const).map((s) => ({ value: s, label: s === "active" ? t("Active", "ساري") : s === "expired" ? t("Expired", "منتهي") : s === "terminated" ? t("Terminated", "مُنهى") : t("Void", "ملغى") }))] }]}
-      onClear={filtersActive ? clear : undefined}>
+      onClear={filtersActive ? clear : undefined} viewsId="warranty-coverage">
       <form className="w-lookup" onSubmit={(event) => { event.preventDefault(); void findCode(); }}>
         <label><span className="sr-only">{t("Scan or enter a warranty code", "امسح أو أدخل رمز الضمان")}</span>
           <input className="field-input" value={code} onChange={(event) => { setCode(event.target.value); setLookup({ status: "idle" }); }}
@@ -100,6 +102,10 @@ export function CoverageTab({ scope, onOpenClaim, onIssue, onNewClaim }: {
     </div>}
 
     <DataTable rows={rows} columns={columns} rowKey={(r) => r.id} lang={lang} caption={t("Warranty coverage", "تغطيات الضمان")}
+      listId="warranty-coverage" exportName="warranty-coverage"
+      bulk={{ isSelectable: (r) => r.status !== "void", actions: ({ rows: chosen }) =>
+        <button className="btn btn-sm w-nowrap" type="button" onClick={() => setCardIds(chosen.map((r) => r.id))}>
+          <IdCard size={14} aria-hidden="true" />{t(`Print cards (${chosen.length})`, `طباعة البطاقات (${chosen.length})`)}</button> }}
       loading={loading} selectedKey={recordId || null} onRowClick={(r) => setRecordId(r.id)}
       empty={filtersActive
         ? <EmptyState variant="no-results" title={t("No matching coverage", "لا توجد تغطية مطابقة")} action={<button className="btn" type="button" onClick={clear}>{t("Clear filters", "مسح التصفية")}</button>} />
@@ -109,6 +115,8 @@ export function CoverageTab({ scope, onOpenClaim, onIssue, onNewClaim }: {
 
     {open && <CoverageDrawer scope={scope} record={open} onClose={() => setRecordId("")} onOpenClaim={onOpenClaim}
       onNewClaim={() => onNewClaim(open.id)} onVoid={() => { setVoidId(open.id); setVoidReason(""); setVoidError(""); }} />}
+
+    {cardIds && <WarrantyCardDrawer scope={scope} records={warranties.filter((w) => cardIds.includes(w.id))} onClose={() => setCardIds(null)} />}
 
     <ConfirmDialog open={voidId !== null} lang={lang} danger busy={voiding}
       title={t("Void this warranty?", "إلغاء هذا الضمان؟")} body={t("Voiding cannot be undone.", "لا يمكن التراجع عن الإلغاء.")}
@@ -135,6 +143,7 @@ function CoverageDrawer({ scope, record, onClose, onOpenClaim, onNewClaim, onVoi
   const stage = (value: string) => { const names = stageNames[value as keyof typeof stageNames]; return names ? names[lang] : value; };
   const customer = state.customers.find((item) => item.id === record.customerId);
   const [printing, requestPrint] = usePrintRequest();
+  const [cardOpen, setCardOpen] = useState(false);
   const sheet = printing ? buildCoverageDocument({
     record, lang, customerName: scope.customerName(record.customerId), plate: vehicle?.plate ?? "—", vehicleDescription: vehicle?.makeModel,
     serviceLabel: scope.serviceName(record.serviceId), branchLabel: scope.branchName(record.branchId), statusLabel: resolveStatus(record.status, lang, "warranty").label,
@@ -143,6 +152,7 @@ function CoverageDrawer({ scope, record, onClose, onOpenClaim, onNewClaim, onVoi
   return <DetailDrawer open onClose={onClose} lang={lang} wide
     title={policyDisplayName(record.policyName)} subtitle={customer ? scope.customerName(customer.id) : undefined}
     footer={<>
+      {record.status !== "void" && <button className="btn w-nowrap" type="button" onClick={() => setCardOpen(true)}><IdCard size={15} aria-hidden="true" />{t("Warranty card", "بطاقة الضمان")}</button>}
       <button className="btn w-nowrap" type="button" onClick={requestPrint}><Printer size={15} aria-hidden="true" />{t("Print", "طباعة")}</button>
       {scope.canVoid && record.status !== "void" && <button className="btn btn-danger" type="button" onClick={onVoid}>{t("Void", "إلغاء الضمان")}</button>}
       {record.status !== "void" && <button className="btn btn-primary" type="button" onClick={onNewClaim}><ClipboardCheck size={15} />{t("Open claim", "فتح مطالبة")}</button>}
@@ -185,5 +195,6 @@ function CoverageDrawer({ scope, record, onClose, onOpenClaim, onNewClaim, onVoi
       </dl>
     </Collapsible>}
     {sheet && <PrintHost model={sheet} />}
+    {cardOpen && <WarrantyCardDrawer scope={scope} records={[record]} onClose={() => setCardOpen(false)} />}
   </DetailDrawer>;
 }

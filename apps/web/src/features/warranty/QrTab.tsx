@@ -5,6 +5,7 @@ import type { WarrantyRecord } from "@garage/domain";
 import { ConfirmDialog, DataTable, DetailDrawer, EmptyState, FilterBar, Notice, type Column } from "../../shared/components";
 import { WarrantyVerificationCard } from "./PublicWarrantyVerificationPage";
 import { startWarrantyPrint } from "./warranty-print";
+import { forgetLiveToken, rememberLiveToken } from "./warranty-card";
 import { policyDisplayName, verificationReady } from "./warranty-logic";
 import { CustomerLink, VehicleLink, type WarrantyScope } from "./warranty-scope";
 import { VerificationSettings } from "./VerificationSettings";
@@ -38,6 +39,7 @@ export function QrTab({ scope }: { scope: WarrantyScope }) {
     const result = await store.createWarrantyVerificationToken(target.id);
     setBusyId(null);
     if (!result.ok) { setError(scope.error(result.error)); return; }
+    rememberLiveToken(target.id, result.token);
     setLive({ warrantyId: target.id, token: result.token });
     setOpenId(target.id);
   };
@@ -46,6 +48,7 @@ export function QrTab({ scope }: { scope: WarrantyScope }) {
     const result = await store.revokeWarrantyVerificationToken(target.id);
     setBusyId(null);
     if (!result.ok) { setError(scope.error(result.error)); return; }
+    forgetLiveToken(target.id);
     if (live?.warrantyId === target.id) setLive(null);
     notify(t("QR code revoked.", "أُلغي رمز QR."));
   };

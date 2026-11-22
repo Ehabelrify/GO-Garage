@@ -280,3 +280,45 @@ a.phone:hover { text-decoration: underline; }
   .filter-bar-end { grid-column: 1 / -1; margin-inline-start: 0; }
   .kv-grid, .record-preview dl { grid-template-columns: 1fr; }
 }
+
+/* Bulk selection, CSV export (Wave 6, package U-D) */
+.data-table .select-col, .data-table th.select-col { width: 44px; min-width: 44px; padding-inline-end: 0; }
+.row-check { width: 18px; height: 18px; accent-color: var(--teal-dark); cursor: pointer; margin: 0; }
+.row-check:disabled { cursor: not-allowed; opacity: .5; }
+.data-table tbody tr[data-checked="true"], .data-card[data-checked="true"] { background: var(--teal-soft); }
+.data-table tbody tr[data-row-key]:focus-visible, .data-card[data-row-key]:focus-visible { outline: var(--focus-ring); outline-offset: -3px; }
+.data-card-top { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.data-card-top .data-card-title { flex: 1; }
+.bulk-bar { position: sticky; inset-block-start: 0; z-index: var(--z-popover); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px; margin-block-end: 8px; background: var(--paper); border: 1px solid var(--teal-dark); box-shadow: var(--shadow); }
+.bulk-count { font-weight: 600; font-size: var(--fs-body); font-variant-numeric: tabular-nums; }
+.bulk-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-inline-start: auto; }
+.data-table-tools { display: flex; justify-content: flex-end; margin-block-end: 8px; }
+.data-table-export { position: relative; }
+.data-table-export .btn { white-space: nowrap; }
+.data-table-export-menu { position: absolute; z-index: var(--z-menu); inset-block-start: calc(100% + 4px); inset-inline-end: 0; display: grid; gap: 2px; min-width: 200px; padding: 6px; background: var(--paper); border: 1px solid var(--line); box-shadow: var(--shadow-pop); }
+.data-table-export-menu .btn { justify-content: flex-start; }
+
+/* Saved views menu (FilterBar) */
+.views-menu { position: relative; display: inline-flex; }
+.views-menu .btn { white-space: nowrap; }
+.views-popover { position: absolute; z-index: var(--z-menu); inset-block-start: calc(100% + 6px); inset-inline-start: 0; width: min(320px, calc(100vw - 32px)); display: grid; gap: 8px; padding: 10px; background: var(--paper); border: 1px solid var(--line); box-shadow: var(--shadow-pop); }
+.views-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; max-height: 240px; overflow: auto; }
+.views-item { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.views-item > .views-apply { flex: 1; min-width: 0; justify-content: flex-start; overflow-wrap: anywhere; text-align: start; }
+.views-item .btn[aria-pressed="true"] { color: var(--teal-dark); }
+.views-form { display: flex; gap: 6px; align-items: center; }
+.views-form input { flex: 1; min-width: 0; }
+.views-note { margin: 0; color: var(--muted); font-size: var(--fs-caption); }
+.views-error { margin: 0; color: var(--red); font-size: var(--fs-caption); }
+
+/* Keyboard shortcuts dialog and bulk results */
+.shortcuts-panel { width: min(560px, 100%); }
+.shortcuts-group { margin: 14px 0 0; }
+.shortcuts-group h3 { margin: 0 0 6px; font-size: var(--fs-h3); }
+.shortcuts-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.shortcuts-list li { display: flex; justify-content: space-between; gap: 12px; align-items: center; font-size: var(--fs-body); }
+.shortcuts-keys { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; direction: ltr; }
+.shortcuts-keys kbd { min-width: 24px; padding: 2px 6px; text-align: center; border: 1px solid var(--line); border-bottom-width: 2px; background: var(--paper); font: inherit; font-size: var(--fs-label); font-weight: 600; }
+.shortcuts-then { color: var(--muted); font-size: var(--fs-caption); }
+.bulk-result { margin-block-start: 8px; font-size: var(--fs-body); }
+.bulk-result ul { margin: 6px 0 0; padding-inline-start: 18px; }

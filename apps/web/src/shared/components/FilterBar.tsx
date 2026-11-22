@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Search } from "lucide-react";
 import type { CSSProperties } from "react";
 import type { Locale } from "@garage/domain";
+import { SavedViewsMenu } from "./SavedViews";
 
 export interface FilterOption { value: string; label: string }
 export interface FilterDef {
@@ -25,6 +26,8 @@ export interface FilterBarProps {
   resultCount?: number;
   /** Extra controls (date input, toggles). */
   children?: ReactNode;
+  /** Stable list id: adds the per-user "Views" menu (save, rename, delete, default, reset) for this list. */
+  viewsId?: string;
 }
 
 export function activeFilterCount(search: FilterBarProps["search"], filters: FilterDef[] = []): number {
@@ -36,7 +39,7 @@ const text = {
   ar: { clear: "مسح التصفية", results: (n: number) => `${n} نتيجة` },
 };
 
-export function FilterBar({ lang, search, filters = [], onClear, resultCount, children }: FilterBarProps) {
+export function FilterBar({ lang, search, filters = [], onClear, resultCount, children, viewsId }: FilterBarProps) {
   const copy = text[lang];
   const active = activeFilterCount(search, filters);
   const shown = filters.slice(0, 3);
@@ -53,6 +56,11 @@ export function FilterBar({ lang, search, filters = [], onClear, resultCount, ch
       </select>
     </label>)}
     {children && <div className="filter-bar-extra">{children}</div>}
+    {viewsId && <SavedViewsMenu lang={lang} listId={viewsId} binding={{
+      search: search ? { value: search.value, onChange: search.onChange } : undefined,
+      filters: shown.map((filter) => ({ key: filter.key, value: filter.value, options: filter.options, onChange: filter.onChange, allValue: filter.allValue })),
+      onReset: onClear,
+    }} />}
     {((active > 0 && onClear) || resultCount !== undefined) && <div className="filter-bar-end">
       {active > 0 && onClear && <button type="button" className="btn btn-quiet btn-sm" onClick={onClear}>{copy.clear}</button>}
       {resultCount !== undefined && <span className="filter-bar-count" role="status" aria-live="polite">{copy.results(resultCount)}</span>}

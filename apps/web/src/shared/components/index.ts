@@ -1,6 +1,6 @@
 export { PageHeader, type PageHeaderProps } from "./PageHeader";
 export { FilterBar, activeFilterCount, type FilterBarProps, type FilterDef, type FilterOption } from "./FilterBar";
-export { DataTable, sortRows, nextSort, pageWindow, DEFAULT_PAGE_SIZES, type Column, type DataTableProps, type SortState } from "./DataTable";
+export { DataTable, sortRows, nextSort, pageWindow, DEFAULT_PAGE_SIZES, type Column, type DataTableProps, type SortState, type BulkContext } from "./DataTable";
 export { FormSection, Field, RequiredNote, type FormSectionProps, type FieldProps } from "./Form";
 export { DetailDrawer, type DetailDrawerProps } from "./DetailDrawer";
 export { Collapsible, Accordion, type CollapsibleProps, type AccordionSection } from "./Collapsible";
@@ -32,3 +32,8 @@ export {
 } from "../search";
 export { DocumentSheet, PrintButton, PrintHost, printDocument } from "../print/DocumentSheet";
 export { documentLabels, type DocumentModel, type DocumentLine, type DocumentTotal, type DocumentParty, type DocumentVehicle } from "../print/document-model";
+export { SavedViewsMenu, type SavedViewsBinding } from "./SavedViews";
+export { BulkRunDialog, type BulkRunDialogProps } from "./BulkRunDialog";
+export { runBulk, summariseOutcomes, type BulkOutcome } from "../selection";
+export { ViewerProvider, useViewer, canExportLists, type Viewer } from "../viewer";
+export { buildCsv, tableToCsv, downloadCsv, csvFilename, escapeCsvCell, type CsvColumn } from "../csv";

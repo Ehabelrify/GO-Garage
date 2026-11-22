@@ -62,20 +62,20 @@ export function QuoteWorkspace({ lang, embedded = false, creating: controlledCre
   const createButton = canManage ? <button type="button" className="btn btn-primary" onClick={startCreate}><Plus size={16} aria-hidden="true" />{t("Create quote", "إنشاء عرض سعر")}</button> : null;
 
   const columns: Column<QuoteRow>[] = [
-    { key: "customer", header: t("Customer", "العميل"), primary: true, sortable: true, sortValue: (row) => lookups.customerName(row.input.customerId), render: (row) => <RecordRef type="customer" id={row.input.customerId} label={lookups.customerName(row.input.customerId)} /> },
-    { key: "vehicle", header: t("Vehicle", "المركبة"), sortable: true, sortValue: (row) => lookups.plate(row.input.vehicle.vehicleId), render: (row) => {
+    { key: "customer", header: t("Customer", "العميل"), primary: true, csv: (row) => lookups.customerName(row.input.customerId), sortable: true, sortValue: (row) => lookups.customerName(row.input.customerId), render: (row) => <RecordRef type="customer" id={row.input.customerId} label={lookups.customerName(row.input.customerId)} /> },
+    { key: "vehicle", header: t("Vehicle", "المركبة"), csv: (row) => lookups.plate(row.input.vehicle.vehicleId) || row.input.vehicle.model, sortable: true, sortValue: (row) => lookups.plate(row.input.vehicle.vehicleId), render: (row) => {
       const plate = lookups.plate(row.input.vehicle.vehicleId);
       const model = lookups.vehicleModel(row.input.vehicle.vehicleId) || row.input.vehicle.model;
       return <span>{plate ? <Plate value={plate} /> : <bdi>{model}</bdi>}{plate && model && <span className="qo-cell-sub"><bdi>{model}</bdi></span>}</span>;
     } },
-    { key: "total", header: t("Total", "الإجمالي"), numeric: true, sortable: true, sortValue: (row) => row.total?.minor ?? null, render: (row) => row.total ? <Amount minor={row.total.minor} currency={row.total.currency} lang={lang} /> : <span className="qo-muted">{t("No total yet", "لا إجمالي بعد")}</span> },
-    { key: "valid", header: t("Valid until", "صالح حتى"), sortable: true, sortValue: (row) => quoteAttentionKey(row), render: (row) => {
+    { key: "total", header: t("Total", "الإجمالي"), numeric: true, csvMoney: (row) => row.total ? { minor: row.total.minor, currency: row.total.currency } : null, sortable: true, sortValue: (row) => row.total?.minor ?? null, render: (row) => row.total ? <Amount minor={row.total.minor} currency={row.total.currency} lang={lang} /> : <span className="qo-muted">{t("No total yet", "لا إجمالي بعد")}</span> },
+    { key: "valid", header: t("Valid until", "صالح حتى"), csv: (row) => row.validThrough ? String(row.validThrough).slice(0, 10) : "", sortable: true, sortValue: (row) => quoteAttentionKey(row), render: (row) => {
       if (!row.validThrough) return <span className="qo-muted">{t("Not set", "غير محدد")}</span>;
       const soon = row.state === "offered" ? expiresSoonLabel(row.validThrough, lang) : null;
       return <span><DateText value={row.validThrough} lang={lang} />{soon && <span className="qo-cell-sub">{soon}</span>}</span>;
     } },
     ...(showFollowup ? [{ key: "followup", header: t("Follow-up", "المتابعة"), render: (row: QuoteRow) => hasOpenFollowup(row) ? followupLabels[row.followup.status][lang] : "" } satisfies Column<QuoteRow>] : []),
-    { key: "status", header: t("Status", "الحالة"), sortable: true, sortValue: (row) => row.state, render: (row) => <StatusBadge status={isExpired(row) ? "expired" : row.state} lang={lang} domain="quote" /> },
+    { key: "status", header: t("Status", "الحالة"), csv: (row) => (isExpired(row) ? "expired" : row.state), sortable: true, sortValue: (row) => row.state, render: (row) => <StatusBadge status={isExpired(row) ? "expired" : row.state} lang={lang} domain="quote" /> },
   ];
 
   async function markAnswered(row: QuoteRow) {
@@ -94,8 +94,8 @@ export function QuoteWorkspace({ lang, embedded = false, creating: controlledCre
         { key: "status", label: t("Status", "الحالة"), value: status, onChange: setStatus, options: [{ value: "all", label: t("All statuses", "كل الحالات") }, ...stateOptions.map((value) => ({ value, label: lang === "ar" ? stateAr[value] : value[0].toUpperCase() + value.slice(1) }))] },
         ...(showFollowup ? [{ key: "followup", label: t("Follow-up", "المتابعة"), value: followup, onChange: setFollowup, options: [{ value: "all", label: t("Any follow-up", "أي متابعة") }, ...(["requested", "preparing", "answered"] as const).map((value) => ({ value, label: followupLabels[value][lang] }))] }] : []),
       ]}
-      onClear={clear} resultCount={shown.length} />
-    <DataTable<QuoteRow> columns={columns} rows={shown} rowKey={(row) => row.ref.quoteId} lang={lang} caption={t("Quotes", "عروض الأسعار")}
+      onClear={clear} resultCount={shown.length} viewsId="quotes" />
+    <DataTable<QuoteRow> listId="quotes" exportName="quotes" columns={columns} rows={shown} rowKey={(row) => row.ref.quoteId} lang={lang} caption={t("Quotes", "عروض الأسعار")}
       onRowClick={(row) => setRecord(row.ref.quoteId)} selectedKey={record || null} loading={list.loading && rows.length === 0} error={list.error} onRetry={list.reload}
       initialSort={{ key: "valid", direction: "asc" }}
       empty={rows.length === 0
