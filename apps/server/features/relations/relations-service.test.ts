@@ -56,11 +56,11 @@ describe("relations API authorization", () => {
     vi.mocked(pool.query).mockImplementation(async (sql: unknown) => {
       const text = String(sql);
       if (text.includes("FROM customers c WHERE")) return { rows: [{ id: "c1", name: "N", phone: "0100", preferred_language: "ar", archived: false }], rowCount: 1 } as never;
-      if (text.includes("FROM customer_purchases")) return { rows: [{ id: "quote:q1", branch_id: "b1", vehicle_id: "v1", quote_id: "q1", booking_id: "bk1", job_id: "j1", warranty_id: "w1", invoice_id: null, label_en: "PPF", label_ar: "ppf", quantity: 1, amount_minor: "250000", currency: "SAR", purchased_on: "2026-11-01", status: "delivered", total: "1" }], rowCount: 1 } as never;
+      if (text.includes("FROM customer_purchases")) return { rows: [{ id: "quote:q1", branch_id: "b1", vehicle_id: "v1", quote_id: "q1", booking_id: "bk1", job_id: "j1", warranty_id: "w1", invoice_id: null, generic_invoice_id: "inv1", generic_invoice_number: "INV-2026-0001", generic_invoice_status: "issued", label_en: "PPF", label_ar: "ppf", quantity: 1, amount_minor: "250000", currency: "SAR", purchased_on: "2026-11-01", status: "delivered", total: "1" }], rowCount: 1 } as never;
       return { rows: [], rowCount: 0 } as never;
     });
     const view = (await customer360(actor("owner"), "c1")) as unknown as Record<string, { items: Array<Record<string, unknown>> }>;
-    expect(view.purchases.items[0]).toMatchObject({ quoteId: "q1", warrantyId: "w1", amount: { minor: 250000, currency: "SAR" } });
+    expect(view.purchases.items[0]).toMatchObject({ quoteId: "q1", warrantyId: "w1", genericInvoiceId: "inv1", genericInvoiceNumber: "INV-2026-0001", genericInvoiceStatus: "issued", amount: { minor: 250000, currency: "SAR" } });
   });
   it("hides contact numbers for demo identities", async () => {
     vi.mocked(pool.query).mockImplementation(async (sql: unknown) => {
