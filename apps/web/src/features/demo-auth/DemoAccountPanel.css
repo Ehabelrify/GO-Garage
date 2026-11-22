@@ -20,7 +20,7 @@
   align-items: center;
   gap: 9px;
   color: #58796b;
-  font-size: 10px;
+  font-size: var(--fs-caption);
   font-weight: 700;
   letter-spacing: .09em;
 }
@@ -56,14 +56,14 @@
   height: 35px;
   color: #6e8b7b;
   background: #eaf2eb;
-  font-size: 10px;
+  font-size: var(--fs-caption);
   font-variant-numeric: tabular-nums;
 }
 .demo-account-fieldset { min-width: 0; padding: 0; margin: 0; border: 0; }
 .demo-account-fieldset legend {
   margin-bottom: 8px;
   color: #72837b;
-  font-size: 10px;
+  font-size: var(--fs-caption);
   font-weight: 600;
 }
 .demo-account-list { display: grid; gap: 7px; }
@@ -92,8 +92,8 @@
 .demo-account-option:focus-within { outline: var(--focus-ring); outline-offset: 2px; }
 .demo-account-copy { display: grid; gap: 3px; min-width: 0; flex: 1; }
 .demo-account-copy strong { font-size: 12px; font-weight: 700; }
-.demo-account-copy small { color: var(--demo-muted); font-size: 10px; }
-.demo-account-email { color: #788980; font-size: 9px; }
+.demo-account-copy small { color: var(--demo-muted); font-size: var(--fs-caption); }
+.demo-account-email { color: #5f6b66; font-size: var(--fs-caption); }
 .demo-radio {
   display: grid;
   place-items: center;
@@ -109,7 +109,7 @@
 .demo-disclaimer {
   margin: 15px 0 13px;
   color: #718078;
-  font-size: 10px;
+  font-size: var(--fs-caption);
   line-height: 1.65;
 }
 .demo-disclaimer::before {
@@ -171,7 +171,7 @@
   display: block;
   margin-top: 13px;
   color: #98a79f;
-  font-size: 8px;
+  font-size: var(--fs-caption);
   letter-spacing: .12em;
   text-align: center;
 }
@@ -184,7 +184,7 @@
   color: #914c41;
   background: #fbefeb;
   border-inline-start: 2px solid #b86455;
-  font-size: 11px;
+  font-size: var(--fs-caption);
   line-height: 1.5;
 }
 .demo-inline-error svg { flex: none; margin-top: 1px; }
@@ -220,8 +220,8 @@
 }
 .demo-identity-copy { display: grid; gap: 3px; flex: 1; min-width: 0; }
 .demo-identity-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
-.demo-identity-copy small { color: #557568; font-size: 10px; }
-.demo-identity-copy > span { overflow: hidden; color: #74857d; text-overflow: ellipsis; font-size: 10px; }
+.demo-identity-copy small { color: #557568; font-size: var(--fs-caption); }
+.demo-identity-copy > span { overflow: hidden; color: #74857d; text-overflow: ellipsis; font-size: var(--fs-caption); }
 .demo-identity-shield { flex: none; color: #5a8b72; }
 .demo-current .demo-submit { margin-top: 2px; }
 .demo-error-state { display: grid; grid-template-columns: 35px minmax(0,1fr); align-items: start; gap: 13px; padding-top: 25px; }
@@ -260,7 +260,7 @@
 .demo-skeleton-copy { width: 83%; height: 12px; margin-bottom: 8px; }
 .demo-skeleton-card { height: 58px; }
 .demo-skeleton-card.short { width: 92%; }
-.demo-loading-label { margin-top: 2px; color: var(--demo-muted); font-size: 10px; }
+.demo-loading-label { margin-top: 2px; color: var(--demo-muted); font-size: var(--fs-caption); }
 
 @keyframes demo-rise { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes demo-spin { to { transform: rotate(360deg); } }
@@ -279,8 +279,8 @@
 /* Keep demo account details legible at a glance on compact screens. */
 .demo-panel-topline, .demo-account-fieldset legend,
 .demo-account-copy small, .demo-disclaimer, .demo-identity-copy small,
-.demo-identity-copy > span, .demo-loading-label { font-size:11px; }
+.demo-identity-copy > span, .demo-loading-label { font-size: var(--fs-caption); }
 .demo-heading p, .demo-error-state p, .demo-account-copy strong,
 .demo-submit, .demo-retry { font-size:13px; }
-.demo-account-email { font-size:11px; overflow-wrap:anywhere; }
-.demo-server-note { font-size:10px; }
+.demo-account-email { font-size: var(--fs-caption); overflow-wrap:anywhere; }
+.demo-server-note { font-size: var(--fs-caption); }
