@@ -50,6 +50,9 @@ live WhatsApp delivery, and scheduled messaging are not implemented.
 
 ## Replit and local commands
 
+To rebuild a Replit preview from scratch (purge the old sample data, apply migrations, seed again) follow
+[docs/operations/REPLIT_FRESH_PREVIEW.md](docs/operations/REPLIT_FRESH_PREVIEW.md). It needs a `WARRANTY_QR_SECRET` secret.
+
 ```sh
 npm ci
 npm run dev

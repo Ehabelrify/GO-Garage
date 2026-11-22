@@ -11,6 +11,7 @@ import { GlobalSearch } from "../shared/components/GlobalSearch";
 import { RecordProvider } from "../shared/components/RecordRef";
 import { ViewerProvider } from "../shared/viewer";
 import { ShortcutsHost } from "./ShortcutsHost";
+import { accessNoticeFor, accessNoticeText } from "./access-notice";
 import { EmptyState } from "../shared/components/EmptyState";
 import { hasCapability } from "../shared/capabilities";
 import { useFullPrecision } from "../shared/preferences";
@@ -207,8 +208,14 @@ function ReadyWorkspace({
   }, [mobileMenuOpen]);
 
   useEffect(() => {
-    if (!resolved) navigate(`/workspace/${defaultPage}`);
+    if (!resolved) {
+      // Say why the person is not where they asked to be (P2T-015): a page they may not open, or an address that is not a page.
+      const notice = accessNoticeFor(segment);
+      if (notice) notify(accessNoticeText(notice, actor.role, lang));
+      navigate(`/workspace/${defaultPage}`);
+    }
     else if (resolved.redirectTo) navigate(resolved.redirectTo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolved, defaultPage, navigate]);
 
   const branchName = (branchId: string) => {

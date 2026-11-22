@@ -58,6 +58,7 @@ jobs:
         env:
           GARAGE_SEED_NOW: "2026-11-21T10:00:00Z"
           GARAGE_DATASET_CLASS: scenario
+          WARRANTY_QR_SECRET: ci-only-visual-warranty-qr-secret  # pragma: allowlist secret
 
       - name: Start the app
         run: |
@@ -75,6 +76,9 @@ jobs:
           GARAGE_DATASET_CLASS: scenario
           GARAGE_ROLE_WIDGET_ENABLED: "true"
           SESSION_SECRET: ci-only-visual-session-secret  # pragma: allowlist secret
+          # Seeded customer QR codes are derived from this secret (docs/engineering/SECURITY_PRIVACY.md). The seed step above uses the
+          # same value, so the app can recompute every seeded code. CI-only value.
+          WARRANTY_QR_SECRET: ci-only-visual-warranty-qr-secret  # pragma: allowlist secret
           # Clearly fake Clerk values: the server needs a syntactically valid secret/publishable key to start its
           # middleware, and the browser Clerk script is stubbed by scripts/visual/run.mjs. No network call to Clerk.
           CLERK_SECRET_KEY: sk_live_ci_only_not_a_real_key_000000000000  # pragma: allowlist secret
