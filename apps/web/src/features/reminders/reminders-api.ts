@@ -6,7 +6,9 @@ export interface ReminderItem {
   dueAt: string; snoozedUntil: string | null; sentAt: string | null; branchId: string; customerId: string; customerName: string;
   vehicleId: string | null; plate: string | null; bookingId: string | null; jobId: string | null; warrantyId: string | null; quoteId: string | null; conversationId: string | null;
 }
+export interface SchedulerStatus { enabled: boolean; running: boolean; intervalSeconds: number; lastRunAt: string | null; lastError: string | null; nextRunAt: string | null }
 export interface ReminderList {
+  scheduler?: SchedulerStatus;
   reminders: ReminderItem[]; counts: Record<ReminderStatus, number>; deliveryMode: "simulated"; canAct: boolean; canRun: boolean; canManageRules: boolean;
 }
 export interface RuleView {

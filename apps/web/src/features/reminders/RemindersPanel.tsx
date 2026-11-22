@@ -6,6 +6,7 @@ import { customerDisplay } from "../../shared/ui";
 import { useLoad } from "../finance/use-load";
 import { cairoClock, actionable,defaultSortValue, errorCopy, filterReminders, kindLabel, kindOrder, reasonLabel, runSummaryText, statusLabel, statusOrder, statusTone, type StatusFilter } from "./reminder-model";
 import { ReminderApiError, remindersApi, type ReminderItem } from "./reminders-api";
+import { schedulerLine } from "./scheduler-status";
 import { RulesPanel } from "./RulesPanel";
 import "./reminders.css";
 
@@ -67,6 +68,7 @@ export function RemindersPanel({ lang, tabs }: Props) {
 
   const error = list.error ? errorCopy(list.error.replace(/^.*: /, ""), lang) : null;
   const counts = data?.counts;
+  const schedulerNote = schedulerLine(data?.scheduler, lang, (iso) => new Date(iso).toLocaleString(lang === "ar" ? "ar-EG" : "en-GB", { timeZone: "Africa/Cairo", dateStyle: "short", timeStyle: "short" }));
   return <>
     <PageHeader title={t("Follow-ups", "المتابعات")}
       subtitle={t("Reminders and check-ins for customers. Messages are simulated: nothing is delivered.", "تذكيرات ومتابعات للعملاء. الرسائل محاكاة: لا يُسلَّم شيء فعلياً.")}
@@ -77,6 +79,7 @@ export function RemindersPanel({ lang, tabs }: Props) {
         onClick={() => void act("run", async () => { const summary = await remindersApi.run(); setMessage({ tone: "info", text: runSummaryText(summary, lang) }); })}>
         <Play size={14} aria-hidden="true" />{busy === "run" ? t("Checking…", "جارٍ الفحص…") : t("Check now", "افحص الآن")}</button> : undefined}
       tabs={tabs} />
+    {schedulerNote && <Notice tone={schedulerNote.tone}>{schedulerNote.text}</Notice>}
     {message && <Notice tone={message.tone}>{message.text}</Notice>}
     <FilterBar lang={lang}
       search={{ value: query, onChange: setQuery, placeholder: t("Search customer, plate or message", "ابحث بالعميل أو اللوحة أو الرسالة") }}

@@ -13,6 +13,8 @@ import { ContactLinks, VehicleCell } from "./cells";
 import { RowMenu } from "./RowMenu";
 import { CustomerVehiclePicker } from "./CustomerVehiclePicker";
 import { TransportPanel } from "../transport/TransportPanel";
+import { PickupPromiseDrawer, type PromiseTarget } from "../pickup/PickupPromiseDrawer";
+import { cancelCategories, combineCancelReason, cancelReasonReady, type CancelCategory } from "./cancel-reason";
 import "./bookings.css";
 
 interface BookingsPageProps extends RecordPageProps {
@@ -62,6 +64,9 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
   const [error, setError] = useState("");
   const [pending, setPending] = useState<PendingAction>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [cancelCategory, setCancelCategory] = useState<CancelCategory | "">("");
+  const [promiseTarget, setPromiseTarget] = useState<PromiseTarget | null>(null);
+  const canPromise = role === "owner" || role === "branch-manager";
   const [bulkConfirm, setBulkConfirm] = useState<Booking[] | null>(null);
   const [acting, setActing] = useState(false);
   const [moving, setMoving] = useState<{ date: string; time: string } | null>(null);
@@ -157,7 +162,7 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
     setActing(true);
     const booking = state.bookings.find((item) => item.id === pending.bookingId);
     let result;
-    if (pending.kind === "cancel") result = await store.cancelBooking(pending.bookingId, cancelReason);
+    if (pending.kind === "cancel") result = await store.cancelBooking(pending.bookingId, combineCancelReason(cancelCategory as CancelCategory, cancelReason));
     else {
       const job = booking ? noShowJob(booking, state.jobs, role) : null;
       result = job ? await store.transitionJob(job.id, "no-show") : { ok: false as const, error: "REQUEST_FAILED" };
@@ -165,6 +170,7 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
     setActing(false);
     setPending(null);
     setCancelReason("");
+    setCancelCategory("");
     notify(result.ok
       ? pending.kind === "cancel" ? t("Booking cancelled.", "تم إلغاء الحجز.") : t("Marked as no-show.", "تم تسجيله كلم يحضر.")
       : message(result.error, { en: "The change could not be saved.", ar: "تعذر حفظ التغيير." }));
@@ -329,6 +335,12 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
               </div>
             </Collapsible>}
 
+            {canPromise && (selected.status === "pending" || selected.status === "confirmed") && <Collapsible title={t("Pickup promise", "وعد التسليم")}>
+              <div className="action-row">
+                <button type="button" className="btn btn-sm" onClick={() => setPromiseTarget({ mode: "record", bookingId: selected.id, subtitle: customerName(selected.customerId) })}>{t("Record or revise promise", "تسجيل أو تعديل وعد التسليم")}</button>
+              </div>
+            </Collapsible>}
+
             {canTransport && selected.status !== "cancelled" && selected.status !== "no-show" && <Collapsible title={t("Transport", "النقل")}>
               <TransportPanel lang={lang} bookingId={selected.id} />
             </Collapsible>}
@@ -377,20 +389,26 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
       </form>
     </DetailDrawer>
 
+    <PickupPromiseDrawer lang={lang} target={promiseTarget} onClose={() => setPromiseTarget(null)} onDone={(message) => { setPromiseTarget(null); notify(message); }} />
+
     <ConfirmDialog
       open={pending !== null}
       lang={lang}
       danger
       busy={acting}
-      confirmDisabled={pending?.kind === "cancel" && cancelReason.trim().length < 3}
-      disabledReason={t("Enter the cancellation reason to continue.", "اكتب سبب الإلغاء للمتابعة.")}
+      confirmDisabled={pending?.kind === "cancel" && !cancelReasonReady(cancelCategory, cancelReason)}
+      disabledReason={t("Choose a reason category and enter the reason to continue.", "اختر فئة السبب واكتب السبب للمتابعة.")}
       title={pending?.kind === "no-show" ? t("Mark as no-show?", "تسجيل أنه لم يحضر؟") : t("Cancel this booking?", "إلغاء هذا الحجز؟")}
       body={`${pendingWho}. ${pending?.kind === "no-show" ? t("The job is closed. No message is sent.", "يُغلق أمر الشغل. لا تُرسل رسالة.") : t("The workshop job is cancelled too. No message is sent.", "يُلغى أمر الشغل أيضاً. لا تُرسل رسالة.")}`}
       confirmLabel={pending?.kind === "no-show" ? t("Mark no-show", "تسجيل لم يحضر") : t("Cancel booking", "إلغاء الحجز")}
       cancelLabel={t("Keep booking", "إبقاء الحجز")}
       onConfirm={() => void runPending()}
-      onCancel={() => { setPending(null); setCancelReason(""); }}
+      onCancel={() => { setPending(null); setCancelReason(""); setCancelCategory(""); }}
     >
+      {pending?.kind === "cancel" && <Field label={t("Reason category", "فئة السبب")} required>
+        <Select className="field-select" label={t("Reason category", "فئة السبب")} value={cancelCategory} onChange={(event) => setCancelCategory(event.target.value as CancelCategory | "")}
+          options={[{ value: "", label: t("Choose…", "اختر…") }, ...cancelCategories.map((c) => ({ value: c.value, label: t(c.en, c.ar) }))]} />
+      </Field>}
       {pending?.kind === "cancel" && <Field label={t("Cancellation reason", "سبب الإلغاء")} required>
         <textarea className="field-input" rows={3} maxLength={300} value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} />
       </Field>}

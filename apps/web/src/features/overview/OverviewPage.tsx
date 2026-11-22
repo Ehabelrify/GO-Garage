@@ -4,8 +4,9 @@ import { configuredNumber } from "@garage/domain";
 import { ArrowUpRight } from "lucide-react";
 import { financeApi, useGarageStore, workQueueApi } from "../../shared/store";
 import { pageBranchMatches, serviceDisplay, customerDisplay, type BranchPageProps } from "../../shared/ui";
-import { Amount, Collapsible, DataTable, DateText, Delta, EmptyState, PageHeader, Plate, RecordRef, StatusBadge, type Column } from "../../shared/components";
+import { Amount, Collapsible, DataTable, DateText, Delta, EmptyState, Notice, PageHeader, Plate, RecordRef, StatusBadge, type Column } from "../../shared/components";
 import { isActiveJob, localIsoDate, monthStart, nextActionLabels, queueLabels, queuePath, queueTarget, selectAttention, groupQueue, summariseBranches, describeQueueRecord, todayBookings, type BranchSummary, type QueueLookup } from "./overview-logic";
+import { PickupPromiseDrawer, type PromiseTarget } from "../pickup/PickupPromiseDrawer";
 import "./overview.css";
 
 interface OverviewPageProps extends BranchPageProps {
@@ -36,6 +37,9 @@ export function OverviewPage({ lang, t, state, navigate, branchName }: OverviewP
   const role = actor?.role;
   const isOwner = role === "owner";
   const isManager = role === "branch-manager";
+  const canPromise = isOwner || isManager;
+  const [promiseTarget, setPromiseTarget] = useState<PromiseTarget | null>(null);
+  const [promiseNote, setPromiseNote] = useState("");
   const isReception = role === "receptionist";
   const canSeeFinance = isOwner;
 
@@ -124,6 +128,9 @@ export function OverviewPage({ lang, t, state, navigate, branchName }: OverviewP
     ...(branchFilter === "all" ? [{ key: "branch", header: t("Branch", "الفرع"), render: (item: QueueItem) => <span className="ov-nowrap">{branchName(item.branchId)}</span> } as Column<QueueItem>] : []),
     { key: "stage", header: t("Stage", "المرحلة"), render: (item) => stageText(item.stage) },
     { key: "next", header: t("Next step", "الخطوة التالية"), render: actionText },
+    ...(canPromise ? [{ key: "promise", header: t("Promise", "الوعد"), hideOnCard: false, render: (item: QueueItem) => item.kind === "pickup-commitment"
+      ? <button type="button" className="btn btn-sm btn-danger" onClick={(event) => { event.stopPropagation(); setPromiseNote(""); setPromiseTarget({ mode: "cancel", commitmentId: item.recordId, subtitle: branchName(item.branchId) }); }}>{t("Cancel promise", "إلغاء الوعد")}</button>
+      : null } as Column<QueueItem>] : []),
   ];
 
   const branchColumns: Column<BranchSummary>[] = [
@@ -211,6 +218,9 @@ export function OverviewPage({ lang, t, state, navigate, branchName }: OverviewP
 
   return <>
     <PageHeader title={title} subtitle={branchFilter === "all" ? t("All branches", "كل الفروع") : branchName(branchFilter)} />
+
+    {promiseNote && <Notice tone="info">{promiseNote}</Notice>}
+    <PickupPromiseDrawer lang={lang} target={promiseTarget} onClose={() => setPromiseTarget(null)} onDone={(message) => { setPromiseTarget(null); setPromiseNote(message); setQueueRetry((value) => value + 1); }} />
 
     {todaySection}
 
