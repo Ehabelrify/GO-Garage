@@ -84,7 +84,8 @@ owner two-factor, remaining role-based permission checks, large/dense file refac
 | Wave 1-2.7 (hardening, access, modules, customer 360, special requests, invoices, plates, visual job) | Done, committed, pushed |
 | Wave 4 (visual-review fixes: design system + 8 feature packages + server capabilities + seed) | **Done and committed locally** (8 commits ahead of origin, last `514c81c`); **not pushed** (user pushes; hold while agents are mid-work) |
 | Seed agent (realism, promotions, technician jobs) | Done, committed (`514c81c`): 110 customers, 31 pending reviews, finance ~5.2M revenue / ~1.7M outstanding, technician has 9 open jobs, 6 promotion policies + rows |
-| Wave 5 (quick intake) | **Running** (22 Nov): two agents, server (migration 0033: product kind, unlinked WhatsApp contacts, GET /api/catalogue/intake-items, POST /api/intake, POST /api/whatsapp/conversations/:id/link) and web (apps/web/src/features/intake, top-bar New button, WhatsApp 'New contact' banner). Tracker IDs P1-063..P1-067 reserved. Uncommitted until both report. |
+| Wave 5 (quick intake) | **Done and committed locally** (`78c969a`, `7337966`, `7503195`): migration 0033 (product kind, unlinked WhatsApp contacts, intake_requests), GET /api/catalogue/intake-items, POST /api/intake, POST /api/whatsapp/conversations/:conversationId/link, panel in apps/web/src/features/intake, top-bar New button (and key N), WhatsApp 'New contact' banner. Tracker P1-063..P1-067. Quality gate: typecheck clean, 540 tests passed (3 skipped), build ok; untested against a DB and in a browser. 12 commits ahead of origin, not pushed. |
+| UX improvements (6 packages) | **Running** (see section 4 item 3 and the activity log). Migrations 0034+ reserved for them. |
 | UX improvements (section 4 item 3) | Not started |
 | Visual checks rerun | Waiting for the user to push and trigger |
 | Replit test with Maher | Waiting |
@@ -115,7 +116,25 @@ Finance/Warranties print buttons (named 'Print' in Wave 4, unverified), screensh
   the DB integration tests.
 - **Demo lookups:** seeded customer Ahmed Mahmoud El-Shazly, plates `أ ب ج 1234` and `س م ر 5678` (see the visual README).
 
+## 7b. Instructions given while the user is away (22 Nov 2026, user away for a few hours)
+Standing order, in this sequence, no confirmation needed (the user said "I trust you"):
+1. Let the UX improvements workflow finish (reminders, duplicate merge, audit log + CSV + daily summary, technician mode,
+   warranty card, then saved filters/bulk actions/shortcuts). Run typecheck + tests + build; fix integration problems; commit
+   in logical groups (repo-local identity).
+2. **Push** to origin/main (the user allowed pushing on THIS repo only; if the permission rule is not active and a push is
+   refused, leave the commits ready locally and say so; never force-push, never delete branches).
+3. **Merge `origin/codex/brand-identity`** (Codex's brand identity kit + visual suite; both folders under docs/product/,
+   conflict-free in a dry run). Keep its authorship; resolve nothing by overwriting our files.
+4. **Write the brand application plan** (docs/superpowers/plans/2026-11-22-brand-identity-application-plan.md): decide the
+   red / gold balance (user: "accent colors between performance red and premium gold yellow, make good decisions"), map brand
+   tokens into the shared design system, logo/favicon/login/print, contrast checks, rollout and verification.
+5. **Implement** the brand shell per that plan as its own work package (do not mix with feature work), commit, push.
+6. Then stop and wait for the user: Visual checks run, Replit test with Maher.
+Brand notes: the logo is a concept built by Codex from social references (needs Maher's approval and the original vector
+files); keep red actions from reading as destructive; gold is attention/selection/premium only; keep IBM Plex for UI text.
+
 ## 8. Activity log (newest first; append here)
+- **22 Nov 2026 (Wave 5 done):** Wave 5 server and web agents finished and were committed after an integrated check (the web calls match the server routes: intake-items, /api/intake, conversations/:id/link). Notes from the reports: a quote created by intake has no acceptance policy/tax treatment until the owner sets terms, so it cannot be offered yet; booking from intake books the chosen service but records chosen items only in `intake_requests`; an unsaved WhatsApp number goes to the channel's `default_branch_id` (set it per channel, else the first branch); product seed labels end in "- example price". UX improvements launched next.
 - **22 Nov 2026 (later):** Seed realism agent finished and was committed (`514c81c`). Wave 5 launched as two parallel agents (server and web). Resume note: if Wave 5 files exist uncommitted in the working tree, check `git status`, run typecheck/tests/build, read the two agent reports in the workflow transcripts, then commit in logical groups. After Wave 5 come the UX improvements (section 4 item 3).
 - **22 Nov 2026:** Visual review of all 234 screenshots by five reviewers -> consolidated report and work packages. Decisions
   taken (section 3). Wave 4 implemented in parallel: shared design system (WP0), server capabilities/consent/promotions (WP-S),
