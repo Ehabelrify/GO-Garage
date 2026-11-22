@@ -8,7 +8,7 @@ import {
 import { useGarageStore } from "../../shared/store";
 import { branchDisplay, customerDisplay } from "../../shared/ui";
 import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
-import { buildInvoiceDocument, errorCopy, lineDescription, parseMajor, toMajorText } from "./invoice-model";
+import { buildInvoiceDocument, canTakeMoneyBack, errorCopy, lineDescription, newActionKey, parseMajor, refundableMinor, toMajorText } from "./invoice-model";
 import { InvoiceApiError, invoicesApi, type DraftLineInput, type InvoiceDetail } from "./invoices-api";
 
 interface Props { lang: Locale; invoiceId: string | null; onClose: () => void; onChanged: () => void }
@@ -36,7 +36,10 @@ export function InvoiceDrawer({ lang, invoiceId, onClose, onChanged }: Props) {
   const [rate, setRate] = useState("");
   const [notes, setNotes] = useState("");
   const [terms, setTerms] = useState("");
-  const [confirm, setConfirm] = useState<"issue" | "void" | "pay" | null>(null);
+  const [confirm, setConfirm] = useState<"issue" | "void" | "pay" | "reverse" | "refund" | null>(null);
+  const [reversing, setReversing] = useState<string | null>(null);
+  const [refund, setRefund] = useState({ amount: "", evidence: "" });
+  const [actionKey, setActionKey] = useState("");
   const [reason, setReason] = useState("");
   const [pay, setPay] = useState({ amount: "", method: "cash" as (typeof methods)[number], reference: "", receivedOn: new Date().toISOString().slice(0, 10) });
 
@@ -83,6 +86,11 @@ export function InvoiceDrawer({ lang, invoiceId, onClose, onChanged }: Props) {
   };
   const save = () => invoice && run(() => invoicesApi.save(invoice.id, { expectedRevision: invoice.revision, currency, taxRatePercent: parsed.rateValue, notes, terms, lines: parsed.lines }), () => setEditing(false));
   const payMinor = parseMajor(pay.amount, exponent);
+  const refundMinor = parseMajor(refund.amount, exponent);
+  const refundable = detail ? refundableMinor(detail) : 0;
+  const refundValid = refundMinor !== null && !Number.isNaN(refundMinor) && refundMinor > 0 && refundMinor <= refundable && /^private:[A-Za-z0-9/_-]+$/.test(refund.evidence.trim()) && reason.trim().length >= 3;
+  const reverseValid = reason.trim().length >= 3;
+  const openMoneyBack = (kind: "reverse" | "refund", paymentId?: string) => { setReason(""); setRefund({ amount: "", evidence: "" }); setReversing(paymentId ?? null); setActionKey(newActionKey()); setConfirm(kind); };
   const payValid = payMinor !== null && !Number.isNaN(payMinor) && payMinor > 0 && pay.reference.trim().length > 0;
 
   const footer = invoice && doc ? <>
@@ -93,6 +101,7 @@ export function InvoiceDrawer({ lang, invoiceId, onClose, onChanged }: Props) {
     {editing && <button type="button" className="btn" disabled={busy} onClick={() => setEditing(false)}>{t("Cancel", "إلغاء")}</button>}
     {detail?.canWrite && invoice.status === "draft" && !editing && <button type="button" className="btn btn-primary" onClick={() => setConfirm("issue")}>{t("Issue invoice", "إصدار الفاتورة")}</button>}
     {detail?.canPay && (invoice.status === "issued" || invoice.status === "partial") && <button type="button" className="btn btn-primary" onClick={() => setConfirm("pay")}>{t("Record payment", "تسجيل دفعة")}</button>}
+    {detail?.canPay && canTakeMoneyBack(invoice.status) && refundable > 0 && <button type="button" className="btn" onClick={() => openMoneyBack("refund")}>{t("Refund", "استرداد")}</button>}
     {detail?.canVoid && (invoice.status === "draft" || invoice.status === "issued") && <button type="button" className="btn btn-danger" onClick={() => { setReason(""); setConfirm("void"); }}>{t("Void", "إلغاء الفاتورة")}</button>}
   </> : undefined;
 
@@ -113,8 +122,10 @@ export function InvoiceDrawer({ lang, invoiceId, onClose, onChanged }: Props) {
             {invoice.jobId && <RecordRef type="job" id={invoice.jobId} label={invoice.plate ? formatPlateDisplay(invoice.plate) : undefined} />}
             {invoice.quoteId && <RecordRef type="quote" id={invoice.quoteId} label={t("Accepted quote", "عرض السعر المقبول")} />}
             {invoice.warrantyId && <RecordRef type="warranty" id={invoice.warrantyId} />}
+            {invoice.kind === "adjustment" && invoice.parentInvoiceId && <RecordRef type="invoice" id={invoice.parentInvoiceId} label={t("Original invoice", "الفاتورة الأصلية")} />}
           </span>
         </div>
+        {invoice.kind === "adjustment" && <Notice tone="info">{t("Supplementary invoice: it carries only a fee added after the original invoice was issued. The original is unchanged.", "فاتورة مكملة: تحمل فقط رسوماً أُضيفت بعد إصدار الفاتورة الأصلية. الفاتورة الأصلية لم تتغير.")}</Notice>}
         {invoice.status === "void" && <Notice tone="info">{t("Void", "ملغاة")}: {invoice.voidReason}</Notice>}
         {invoice.status === "draft" && !editing && invoice.totalMinor === null && <Notice tone="info">{t("This draft is not priced yet. Edit the lines to add prices and tax before issuing.", "هذه المسودة بلا أسعار بعد. عدّل البنود لإضافة الأسعار والضريبة قبل الإصدار.")}</Notice>}
 
@@ -172,8 +183,13 @@ export function InvoiceDrawer({ lang, invoiceId, onClose, onChanged }: Props) {
           {detail.payments.length > 0 && <section><h3>{t("Payment references", "مراجع الدفع")}</h3>
             <ul className="invoice-payments">{detail.payments.map((payment) => <li key={payment.id}>
               <Amount variant="detail"minor={payment.amountMinor} currency={payment.currency} lang={lang} /> · {methodLabel[payment.method as (typeof methods)[number]]?.[lang === "ar" ? 1 : 0] ?? payment.method} · <bdi className="mono">{payment.reference}</bdi> · <DateText value={payment.receivedOn} lang={lang} />
+              {payment.reversed ? <span className="tag">{t("Reversed", "معكوسة")}</span> : detail.canPay && canTakeMoneyBack(invoice.status) && <button type="button" className="btn btn-sm" onClick={() => openMoneyBack("reverse", payment.id)}>{t("Reverse", "عكس")}</button>}
             </li>)}</ul>
             <p className="form-hint">{t("References only. No payment is processed here.", "مراجع فقط. لا تتم معالجة أي دفعة هنا.")}</p></section>}
+          {(detail.refunds?.length ?? 0) > 0 && <section><h3>{t("Refunds", "المبالغ المستردة")}</h3>
+            <ul className="invoice-payments">{detail.refunds!.map((item) => <li key={item.id}>
+              <Amount variant="detail" minor={item.amountMinor} currency={item.currency} lang={lang} /> · {item.reason} · <DateText value={item.recordedAt} lang={lang} />
+            </li>)}</ul></section>}
           {detail.history.length > 0 && <section><h3>{t("History", "السجل")}</h3>
             <ol className="invoice-history">{detail.history.map((event) => <li key={event.seq}>{historyLabel(event.action, lang)} · <DateText value={event.occurredAt} lang={lang} />{event.actorName ? ` · ${event.actorName}` : ""}{event.reason ? ` · ${event.reason}` : ""}</li>)}</ol></section>}
         </>}
@@ -205,13 +221,32 @@ export function InvoiceDrawer({ lang, invoiceId, onClose, onChanged }: Props) {
       <Field label={t("Reference", "المرجع")} required hint={t("Receipt or transfer number", "رقم الإيصال أو التحويل")}><input className="field-input" maxLength={120} value={pay.reference} onChange={(event) => setPay({ ...pay, reference: event.target.value })} /></Field>
       <Field label={t("Received on", "تاريخ الاستلام")} required><input className="field-input" type="date" value={pay.receivedOn} onChange={(event) => setPay({ ...pay, receivedOn: event.target.value })} /></Field>
     </ConfirmDialog>
+    <ConfirmDialog open={confirm === "reverse"} lang={lang} danger busy={busy}
+      title={t("Reverse this payment?", "عكس هذه الدفعة؟")}
+      body={t("The payment stays on record as reversed, the invoice balance is restored and the finance collection is reversed with it.", "تبقى الدفعة في السجل كمعكوسة، ويُعاد المتبقي على الفاتورة، وتُعكس معها حركة التحصيل المالية.")}
+      confirmLabel={t("Reverse payment", "عكس الدفعة")} confirmDisabled={!reverseValid} disabledReason={t("Enter a reason (at least 3 characters).", "اكتب سبباً (3 أحرف على الأقل).")}
+      onCancel={() => setConfirm(null)}
+      onConfirm={() => { if (invoice && reversing && reverseValid) void run(() => invoicesApi.reversePayment(invoice.id, reversing, { reason: reason.trim(), idempotencyKey: actionKey }), () => setConfirm(null)); }}>
+      <Field label={t("Reason", "السبب")} required><textarea className="field-textarea" maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
+    </ConfirmDialog>
+    <ConfirmDialog open={confirm === "refund"} lang={lang} danger busy={busy}
+      title={t("Record a refund", "تسجيل استرداد")}
+      body={t("This records money returned to the customer. It does not move money. You can refund up to what was paid and not yet refunded.", "هذا يسجل مبلغاً أُعيد للعميل ولا ينقل أموالاً. يمكنك استرداد حتى المدفوع الذي لم يُسترد بعد.")}
+      confirmLabel={t("Record refund", "تسجيل الاسترداد")} confirmDisabled={!refundValid}
+      disabledReason={t("Enter an amount up to the refundable balance, a reason and an evidence reference starting with private:.", "أدخل مبلغاً لا يتجاوز المتاح للاسترداد وسبباً ومرجع إثبات يبدأ بـ private:.")}
+      onCancel={() => setConfirm(null)}
+      onConfirm={() => { if (invoice && refundValid && refundMinor) void run(() => invoicesApi.refund(invoice.id, { amountMinor: refundMinor, reason: reason.trim(), evidenceRef: refund.evidence.trim(), idempotencyKey: actionKey }), () => setConfirm(null)); }}>
+      <Field label={`${t("Amount", "المبلغ")} (${invoice?.currency ?? ""})`} required hint={`${t("Refundable now", "المتاح للاسترداد")}: ${toMajorText(refundable, exponent)}`}><input className="field-input" inputMode="decimal" value={refund.amount} onChange={(event) => setRefund({ ...refund, amount: event.target.value })} /></Field>
+      <Field label={t("Reason", "السبب")} required><textarea className="field-textarea" maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
+      <Field label={t("Evidence reference", "مرجع الإثبات")} required hint={t("A protected file reference, for example private:refunds/receipt-12", "مرجع ملف محمي، مثل private:refunds/receipt-12")}><input className="field-input" maxLength={160} value={refund.evidence} onChange={(event) => setRefund({ ...refund, evidence: event.target.value })} /></Field>
+    </ConfirmDialog>
   </>;
 }
 
 function historyLabel(action: string, lang: Locale) {
   const labels: Record<string, [string, string]> = {
     generated: ["Generated", "أُنشئت تلقائياً"], created: ["Created", "أُنشئت"], edited: ["Edited", "عُدّلت"], issued: ["Issued", "صدرت"],
-    "payment-recorded": ["Payment recorded", "سُجّلت دفعة"], voided: ["Voided", "أُلغيت"],
+    "payment-recorded": ["Payment recorded", "سُجّلت دفعة"], "payment-reversed": ["Payment reversed", "عُكست دفعة"], refunded: ["Refunded", "استُرد مبلغ"], "adjustment-created": ["Supplementary invoice created", "أُنشئت فاتورة مكملة"], voided: ["Voided", "أُلغيت"],
   };
   const found = labels[action];
   return found ? found[lang === "ar" ? 1 : 0] : action;

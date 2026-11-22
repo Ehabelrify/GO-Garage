@@ -8,11 +8,15 @@ export interface Invoice {
   customerId: string; customerName: string | null; vehicleId: string; plate: string | null; bookingId: string | null; jobId: string | null; quoteId: string | null; warrantyId: string | null;
   taxRatePercent: number | null; subtotalMinor: number | null; discountMinor: number; taxMinor: number | null; totalMinor: number | null; paidMinor: number; balanceMinor: number | null;
   issueDate: string | null; notes: string; terms: string; revision: number; createdAt: string; updatedAt: string; issuedAt: string | null; voidReason: string | null;
+  /** 'adjustment' invoices carry only a late fee and point at the issued invoice they supplement. */
+  kind?: "standard" | "adjustment"; parentInvoiceId?: string | null;
 }
+export interface InvoicePayment { id: string; amountMinor: number; currency: string; method: string; reference: string; receivedOn: string; recordedAt: string; reversed?: boolean }
+export interface InvoiceRefund { id: string; amountMinor: number; currency: string; reason: string; recordedAt: string }
 export interface InvoiceDetail {
   invoice: Invoice; lines: InvoiceLine[];
   history: Array<{ seq: number; action: string; fromStatus: string | null; toStatus: string; actorName: string | null; reason: string; occurredAt: string }>;
-  payments: Array<{ id: string; amountMinor: number; currency: string; method: string; reference: string; receivedOn: string; recordedAt: string }>;
+  payments: InvoicePayment[]; refunds?: InvoiceRefund[];
   canWrite: boolean; canPay: boolean; canVoid: boolean;
 }
 export type DraftLineInput = Pick<InvoiceLine, "kind" | "descriptionEn" | "descriptionAr" | "quantity" | "unitMinor" | "discountMinor" | "taxMinor">;
@@ -44,4 +48,9 @@ export const invoicesApi = {
   void: (id: string, expectedRevision: number, reason: string) => call<InvoiceDetail>(`/api/invoices/${encodeURIComponent(id)}/void`, post({ expectedRevision, reason })),
   pay: (id: string, input: { expectedRevision: number; amountMinor: number; method: string; reference: string; receivedOn: string }) =>
     call<InvoiceDetail>(`/api/invoices/${encodeURIComponent(id)}/payments`, post(input)),
+  /** One key per user action: a retry of the same action replays, a new action is a new key. */
+  reversePayment: (id: string, paymentId: string, input: { reason: string; idempotencyKey: string }) =>
+    call<InvoiceDetail>(`/api/invoices/${encodeURIComponent(id)}/payments/${encodeURIComponent(paymentId)}/reverse`, post(input)),
+  refund: (id: string, input: { amountMinor: number; reason: string; evidenceRef: string; idempotencyKey: string }) =>
+    call<InvoiceDetail>(`/api/invoices/${encodeURIComponent(id)}/refunds`, post(input)),
 };

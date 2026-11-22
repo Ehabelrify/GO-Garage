@@ -435,6 +435,42 @@ async function sendButtonFlow(kind, { page, shot }) {
   return { status: "SKIP", detail: `opened ${limit} ${kind} row(s) but none showed Send to customer (no sendable document in the seed?)` };
 }
 
+/** Opens invoices until one with money received shows the Refund or Reverse controls, opens the refund dialog, never confirms. */
+async function moneyBackFlow({ page, shot }) {
+  const dialog = page.locator('[role="dialog"]');
+  await openWorkspace(page, "/workspace/bookings?tab=invoices");
+  const rows = page.locator("tr.clickable");
+  const count = await rows.count();
+  if (!count) return { status: "SKIP", detail: "no invoice rows to open" };
+  const limit = Math.min(count, 12);
+  for (let i = 0; i < limit; i += 1) {
+    await rows.nth(i).click().catch(() => {});
+    await dialog.first().waitFor({ state: "visible", timeout: 5_000 }).catch(() => {});
+    await settle(page);
+    const refund = dialog.getByRole("button", { name: /^(refund|استرداد)$/i }).first();
+    const reverse = dialog.getByRole("button", { name: /^(reverse|عكس)$/i }).first();
+    if (await refund.count() || await reverse.count()) {
+      await shot("invoice-money-back");
+      if (await refund.count()) {
+        await refund.click();
+        await page.waitForSelector('[role="alertdialog"]', { timeout: 5_000 }).catch(() => {});
+        const confirm = page.locator('[role="alertdialog"]').getByRole("button").last();
+        const blocked = await confirm.isDisabled().catch(() => false);
+        await shot("invoice-refund-dialog");
+        await page.keyboard.press("Escape");
+        await page.keyboard.press("Escape");
+        return blocked ? { detail: `refund dialog opened on invoice row ${i + 1}; confirm is disabled until amount, reason and evidence are valid; not confirmed` }
+          : { status: "FAIL", detail: "refund confirm button is enabled with an empty form" };
+      }
+      await page.keyboard.press("Escape");
+      return { detail: `Reverse control present on invoice row ${i + 1}; not clicked` };
+    }
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+  }
+  return { status: "SKIP", detail: `opened ${limit} invoice row(s) but none had money received (no paid or part-paid invoice in the seed?)` };
+}
+
 async function cancelDialogFlow({ page, shot }) {
   await openWorkspace(page, "/workspace/bookings");
   const menu = page.getByRole("button", { name: /row actions|إجراءات الصف/i });
@@ -562,6 +598,7 @@ async function main() {
       }
       for (const v of printVariants) {
         flows.push(await runFlow(browser, cookies, "send-invoice-drawer", v, (ctx) => sendButtonFlow("invoice", ctx)));
+        flows.push(await runFlow(browser, cookies, "invoice-reverse-refund", v, moneyBackFlow));
         flows.push(await runFlow(browser, cookies, "send-quote-drawer", v, (ctx) => sendButtonFlow("quote", ctx)));
         flows.push(await runFlow(browser, cookies, "send-warranty-qr", v, (ctx) => sendButtonFlow("warranty", ctx)));
         flows.push(await runFlow(browser, cookies, "booking-cancel-reason", v, cancelDialogFlow));

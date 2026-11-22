@@ -49,6 +49,19 @@ export function buildInvoiceDocument(input: {
   };
 }
 
+/** What can still be taken back: reversed payments are already out, refunds reduce what is left. Never negative. */
+export function refundableMinor(detail: { payments: Array<{ amountMinor: number; reversed?: boolean }>; refunds?: Array<{ amountMinor: number }> }): number {
+  const paid = detail.payments.filter((payment) => !payment.reversed).reduce((sum, payment) => sum + payment.amountMinor, 0);
+  const refunded = (detail.refunds ?? []).reduce((sum, refund) => sum + refund.amountMinor, 0);
+  return Math.max(0, paid - refunded);
+}
+
+/** Reverse and refund apply to invoices that have received money and are not void. */
+export const canTakeMoneyBack = (status: Invoice["status"]) => status === "partial" || status === "paid";
+
+/** A fresh idempotency key per user action. */
+export const newActionKey = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`);
+
 /** Parses a typed major-unit amount to minor units; null for blank, NaN for invalid. */
 export function parseMajor(value: string, exponent = 2): number | null {
   const cleaned = value.replace(/[,\s]/g, "");
@@ -73,6 +86,12 @@ export function errorCopy(code: string, lang: Locale): string {
     HAS_PAYMENTS: ["An invoice with recorded payments cannot be voided.", "لا يمكن إلغاء فاتورة عليها مدفوعات."],
     JOB_NOT_COMPLETE: ["An invoice can be generated once the job is ready or delivered.", "يمكن إنشاء الفاتورة عندما يكون العمل جاهزاً أو مسلّماً."],
     JOB_NOT_FOUND: ["No job exists for that record yet.", "لا يوجد عمل لهذا السجل بعد."],
+    ALREADY_REVERSED: ["This payment was already reversed.", "تم عكس هذه الدفعة من قبل."],
+    OVER_REVERSAL: ["The reversal is larger than what was paid.", "العكس أكبر من المبلغ المدفوع."],
+    OVER_REFUND: ["The refund is larger than what was paid and not yet refunded.", "الاسترداد أكبر من المدفوع الذي لم يُسترد بعد."],
+    PAYMENT_NOT_FOUND: ["This payment is no longer available.", "لم تعد هذه الدفعة متاحة."],
+    IDEMPOTENCY_CONFLICT: ["That request was already used with different details. Reload and try again.", "استُخدم هذا الطلب سابقاً بتفاصيل مختلفة. أعد التحميل وحاول مجدداً."],
+    FINANCE_DEFINITION_REQUIRED: ["No approved finance definition covers this currency and action yet. Ask the owner to approve one.", "لا يوجد تعريف مالي معتمد لهذه العملة والإجراء بعد. اطلب من المالك اعتماد واحد."],
     INVOICE_NOT_FOUND: ["This invoice is no longer available.", "لم تعد هذه الفاتورة متاحة."],
     WRITE_OUTCOME_UNKNOWN: ["We could not confirm whether the change was saved. Reload and check before retrying.", "لم نتمكن من تأكيد حفظ التغيير. أعد التحميل وراجع قبل إعادة المحاولة."],
   };
