@@ -42,6 +42,13 @@ Requirements:
 - Avoid PII in logs, analytics, URLs, and error messages.
 - Define retention and deletion procedures with the owner and applicable legal requirements.
 
+### 3.1 Unsaved WhatsApp numbers (Wave 5)
+
+- A message from a number that is not linked to a customer still reaches the inbox as "New contact (<phone>)". The phone is stored only in `whatsapp_conversations.contact_phone`, only when the provider event legitimately carried it (optional `contactPhone` in the signed webhook body, validated as 8-15 digits). Without it the title uses a neutral label with the last four characters of the contact hash.
+- The phone is never written to logs, audit or conversation events, and is not copied anywhere else. Linking the chat to a customer clears it (the customer record then owns the number). Demo sessions never receive it from operational conversations.
+- Visibility follows the existing inbox rules (`whatsapp.use`, branch scope); linking needs `whatsapp.use` and `bookings.manage`, is blocked for demo identities, and writes a `contact-linked` conversation event. Outbound replies stay governed by the existing assignment and delivery-policy rules; provider delivery remains disabled.
+- Quick intake (`POST /api/intake`) stores the free-text notes and the chosen items in `intake_requests`; treat notes as customer data (no secrets, no payment details).
+
 ## 4. Media and documents
 
 - Store photos/PDFs in private object storage by default.

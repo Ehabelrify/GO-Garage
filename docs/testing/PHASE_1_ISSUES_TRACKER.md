@@ -4,8 +4,8 @@
 **Purpose:** Single working tracker for Phase 1 defects, investigation, implementation handoff, and retesting.  
 **Initial intake:** 25 entries: 7 code-review findings, 15 UI-test findings, and 3 engineering follow-ups.  
 **Current intake:** 62 entries (+ P1-061, P1-062 recorded 22 November 2026; 44 below plus 6 hardening/UI entries P1-045–P1-050, 5 Wave 2.5 entries P1-051–P1-055 and 2 Wave 2.6 quote entries P1-056–P1-057 2 Wave 2.6 invoice entries P1-058–P1-059 and the Wave 2.7 plate entry P1-060 recorded 21 November 2026): the original 25, 6 user-feedback/discovery follow-ups, 6 cross-industry research improvements, and 7 approved business/product additions recorded on 16 November 2026.
-**Next available ID:** `P1-063`
-**Current ownership:** 2 entries remain Open/Unassigned and 60 entries are Ready for retest after implementation. Ready entries are P1-001–P1-029 and P1-032–P1-062. No runtime retests were performed; P1-045–P1-060 were additionally never run against a database (migrations 0026-0030 and 0032 and the seed are unapplied).
+**Next available ID:** `P1-068` (P1-063–P1-065 are the Wave 5 server entries, P1-066–P1-067 the Wave 5 web entries)
+**Current ownership:** 2 entries remain Open/Unassigned; 62 entries are Ready for retest after implementation (counting the Wave 5 entries P1-063–P1-067). Ready entries are P1-001–P1-029, P1-032–P1-067. No runtime retests were performed; P1-045–P1-060 were additionally never run against a database (migrations 0026-0030, 0032 and 0033 and the seed are unapplied).
 
 ## Sources and application context
 
@@ -104,6 +104,11 @@ Garage OS uses React/Vite, Express, PostgreSQL, Clerk, and `@garage/domain`. It 
 | [P1-060](#p1-060) | Wave 2.7 (21 Nov 2026) | Robust Egyptian plate normalisation: search, duplicate check, inputs | Medium | P2 | Ready for retest | Source |
 | [P1-061](#p1-061) | Wave 4 (22 Nov 2026) | Quotes view vs manage capabilities (managers see, cannot change) | High | P1 | Ready for retest | Source |
 | [P1-062](#p1-062) | Wave 4 (22 Nov 2026) | WhatsApp consent GET returns missing instead of 404; GET /api/promotions list | Medium | P2 | Ready for retest | Source |
+| [P1-063](#p1-063) | Wave 5 (22 Nov 2026) | Catalogue products (parts, accessories, care): name, category, price, tax; no bay time; unified GET /api/catalogue/intake-items | High | P1 | Ready for retest | Source |
+| [P1-064](#p1-064) | Wave 5 (22 Nov 2026) | WhatsApp numbers not linked to a customer arrive as New contact (phone); POST /api/whatsapp/conversations/:id/link | High | P1 | Ready for retest | Source |
+| [P1-065](#p1-065) | Wave 5 (22 Nov 2026) | POST /api/intake: customer, vehicle, WhatsApp link and draft quote / booking / customer only in one transaction | High | P1 | Ready for retest | Source |
+| [P1-066](#p1-066) | Wave 5 (22 Nov 2026) | Quick-intake side panel (top-bar New, N key): customer, car, one catalogue, quote / booking / customer only | High | P1 | Ready for retest | Source |
+| [P1-067](#p1-067) | Wave 5 (22 Nov 2026) | WhatsApp inbox: unsaved numbers as New contact (phone), thread banner, create or link customer | High | P1 | Ready for retest | Source |
 
 ## Technical issue details
 
@@ -1453,6 +1458,81 @@ The user approved all recommendations and valuable additions derived from the Go
 
 **Retest:** Not performed; no database. Not production-ready.
 
+<a id="p1-063"></a>
+
+### P1-063 — Catalogue products and the unified intake catalogue (server)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; user answer (products are name/category/price/tax only; stock and inventory come with the customer app).
+**Area:** Catalogue, quotes, invoices, seed.
+**Evidence:** Mocked-pool tests `commercial/catalogue-products.test.ts`, `intake/intake.test.ts`.
+
+**Acceptance:** `catalogue_package_versions.kind` accepts `product`; a product saves/publishes/retires/archives/price-edits through the existing routes, has `work = []` and one product scope item, and a bilingual category. `GET /api/catalogue/intake-items?q=&kind=&vehicleId=&branchId=` returns published, effective, non-archived items eligible for the vehicle and branch (services, packages and products in one list) for `quotes.view`, `quotes.manage` or `bookings.manage`. A quote line for a product needs no bay time; invoice lines for products read "other" with the product name; eligibility for service intents ignores products. Seed adds 20 products priced as example prices (availability unconfirmed).
+
+**Implementation — 2026-11-22:** migration `0033`; `packages/domain` (`PRODUCT_SERVICE_ID`, `ScopeItem.productId/label`, `PackageVersion.productCategory`, `IntakeCatalogueItem`); `commercial/catalogue-service.ts` (`validateProduct`, `listIntakeItems`, `intakeEligible`, `loadIntakePackages`), `catalogue-routes.ts`, `quote-service.ts` (empty `work` allowed only when every scope item is a product; no service lookup for product scope), `quote-booking.ts`, `invoicing/invoice-service.ts`, `policy-service.ts` (catalogue-pricing `bayHours` may be 0), `seed/seed-products.ts`.
+
+**Retest:** Not performed; migration 0033 not applied; no database. Publishing a product through the real policy and evidence flow is untested. Not production-ready.
+
+<a id="p1-064"></a>
+
+### P1-064 — WhatsApp contacts not linked to a customer (server)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; user answer (unsaved number shows as "New contact (<phone number>)" for receptionists and managers).
+**Area:** WhatsApp inbox, provider webhook, privacy.
+**Evidence:** Mocked-pool tests `whatsapp/unlinked-contact.test.ts`.
+
+**Acceptance:** The signed provider webhook no longer answers 409 `CONTACT_UNMAPPED` for an unknown inbound text: it creates or continues one open unlinked conversation per (channel, contact hash) and stores the message. An optional `contactPhone` (validated) is stored only in `contact_phone`. Inbox list and detail projections carry `linked`, `contactLabel`, `contactPhone?`. `POST /api/whatsapp/conversations/:id/link {customerId, vehicleId?}` (needs `whatsapp.use` and `bookings.manage`, branch scoped, demo blocked) links the chat, writes `messaging_contact_links` with the stored hash, clears the phone and records an event. Journey booking, status lookup and booking confirmation answer `CONTACT_NOT_LINKED` for unlinked chats. Booking confirmations from unknown contacts still answer 409.
+
+**Implementation — 2026-11-22:** migration `0033`; `whatsapp/unlinked-contact.ts`, `contact-projection.ts`, `provider-webhook.ts`, `whatsapp.ts`, `booking-journey.ts`, `whatsapp-policy.ts`; seed adds 3 unlinked conversations.
+
+**Retest:** Not performed; no database; the link route and webhook were exercised only with a mocked pool. Provider delivery stays disabled. Not production-ready.
+
+<a id="p1-065"></a>
+
+### P1-065 — Quick intake endpoint (server)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; user request (Wave 5).
+**Area:** Customers, vehicles, quotes, bookings, WhatsApp.
+**Evidence:** Mocked-pool tests `intake/intake.test.ts`.
+
+**Acceptance:** `POST /api/intake` creates or finds the customer, creates or finds the vehicle (duplicate plate answers 409 `DUPLICATE_PLATE` with the existing vehicle), optionally links a WhatsApp conversation, then builds a DRAFT quote, a booking (through the capacity-checked booking code, products excluded from bay time) or only saves the customer, all in one transaction, idempotent by `idempotencyKey`. Needs `bookings.manage`, plus `quotes.manage` for a quote; branch scoped; demo identities blocked.
+
+**Implementation — 2026-11-22:** `intake/intake-service.ts`, `intake-quote.ts`, `intake-routes.ts`; `operations/booking-create.ts` (the `POST /api/bookings` transaction extracted unchanged so both entry points share it); `quote-service.ts` (`createQuoteRevisionInTransaction`); `quote-generation.ts` (`loadAcceptanceTerms`).
+
+**Retest:** Not performed; no database; the transaction, locks and unique-key behaviour are untested against Postgres. Not production-ready.
+
+<a id="p1-066"></a>
+
+### P1-066 — Quick-intake side panel (web)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; user request (Wave 5).
+**Area:** Web shell, customers, vehicles, catalogue, quotes, bookings.
+**Evidence:** Pure-logic unit tests (`features/intake/intake-logic.test.ts`); typecheck and build.
+
+**Acceptance:** A top-bar New button (and key N outside fields) opens one side panel without navigation: find or create the customer, find or add the car (live plate normalisation, duplicate plate offers the existing car), pick items from one catalogue (service, package, product with type, category, price, quantity, per-currency totals, notes), then Create quote (needs `quotes.manage`), Book appointment (existing slots code) or Save customer only. Result view links the new records and offers Open quote and Add another. One idempotency key per panel session. No raw ids shown.
+
+**Implementation — 2026-11-22:** `apps/web/src/features/intake/*` (`IntakePanel`, `IntakeHost`, `intake-logic`, `intake-api`, `intake-bus`, `intake.css`); `App.tsx` button and mount. Codes against `GET /api/catalogue/intake-items` and `POST /api/intake` (server entries P1-063–P1-065); a 404 on the catalogue shows an empty list and Save customer only still needs the server endpoint.
+
+**Retest:** Not performed; no database, no browser (360/768/1280, RTL) check, server endpoints not exercised. Not production-ready.
+
+<a id="p1-067"></a>
+
+### P1-067 — WhatsApp new contacts and linking (web)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; user answer (unsaved number shows as "New contact (<phone number>)").
+**Area:** WhatsApp inbox.
+**Evidence:** Unit tests for the label rule; typecheck and build.
+
+**Acceptance:** Conversations with `linked:false` show "New contact (<phone>)" with a New contact badge in the list and thread; the thread shows "This number is not saved yet" with Create customer (opens the panel prefilled, links the conversation on success) and Link to existing (customer search then `POST /api/whatsapp/conversations/:id/link`). Linked conversations show the customer's name.
+
+**Implementation — 2026-11-22:** `WhatsAppSimulationPage.tsx`, `inbox-model.ts`, `features/intake/NewContactBanner.tsx`. Older servers without `linked` are treated as linked.
+
+**Retest:** Not performed; no database or browser; depends on the server projection fields and link endpoint. Not production-ready.
+
 ## Change log
 
 | Date | Change | Runtime verification |
@@ -1491,3 +1571,5 @@ The user approved all recommendations and valuable additions derived from the Go
 | 2026-11-21 | Recorded P1-060 (Egyptian plate normalisation in domain, search, duplicate check and inputs); migration 0032 written, not applied | Source and unit tests only; no database, no browser, no runtime retest |
 | 2026-11-21 | Recorded P1-058 (generic invoices auto-generated from delivered jobs, numbering, lifecycle, Invoices tab) and P1-059 (shared printable document sheet, invoice and warranty invoice print); migration 0030 written, not applied | Source and mocked tests only; no database, no browser, no print check |
 | 2026-11-22 | Recorded P1-061 (quotes.view / quotes.manage capabilities) and P1-062 (consent GET missing state, GET /api/promotions); no migration; advanced next ID to P1-063 | Source and mocked tests only; no database, no browser |
+| 2026-11-22 | Recorded P1-066 (quick-intake side panel) and P1-067 (WhatsApp new contacts, link banner), web side of Wave 5; next ID P1-068 (P1-063–P1-065 reserved for the server entries) | Source and unit tests only; no database, no browser, server endpoints unexercised |
+| 2026-11-22 | Recorded P1-063 (catalogue products, unified intake catalogue), P1-064 (WhatsApp unlinked contacts and link) and P1-065 (POST /api/intake), the server side of Wave 5; migration 0033 written, not applied | Source and mocked-pool tests only; no database, no browser |

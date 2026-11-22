@@ -54,7 +54,7 @@ approved business policy. Do not describe the application as production-ready.
   styles.
 - `apps/server/index.ts` is the Replit-facing server composition entry.
 - `apps/server/features/auth/`, `commercial/`, `finance/`, `operations/`,
-  `owner-records/`, `relations/`, `special-requests/`, `invoicing/` (generic invoices, `/api/invoices`), `warranty/`, `whatsapp/`, and `seed/` contain
+  `owner-records/`, `relations/`, `special-requests/`, `invoicing/` (generic invoices, `/api/invoices`), `intake/` (quick intake, `POST /api/intake`), `warranty/`, `whatsapp/`, and `seed/` contain
   server features (`relations/` = global search, Customer/Vehicle 360, warranty
   resolve; `owner-records/` = Owner soft-archive/restore/audit; `seed/` also holds
   the bilingual dummy-data generator and the go-live purge plan);
