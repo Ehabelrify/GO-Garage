@@ -1,0 +1,131 @@
+# Garage OS - Resume and handoff record
+
+**Purpose:** if a session is cut off, any agent (Claude, Codex, Replit, Lovable) can read this file and continue where work
+stopped. It records the user's standing instructions, decisions, the agreed sequence, what is done, what is running and what
+is next. **Update it at every milestone** (it is cheap: edit the "Status board" and append to the "Activity log").
+It complements, and never overrides, the root [AGENT_INSTRUCTIONS.md](../../AGENT_INSTRUCTIONS.md).
+
+Last updated: 22 November 2026 (end of Wave 4 commits, Wave 5 not started).
+
+## 1. How to resume (read in this order)
+1. [AGENT_INSTRUCTIONS.md](../../AGENT_INSTRUCTIONS.md) (+ [apps](../../apps/AGENT_INSTRUCTIONS.md), [docs](../AGENT_INSTRUCTIONS.md) guides).
+2. This file, sections 2-6.
+3. The plan: [2026-11-21-hardening-access-ui-data-plan.md](../superpowers/plans/2026-11-21-hardening-access-ui-data-plan.md)
+   (waves, decisions, agreed sequence) and the design [spec](../superpowers/specs/2026-11-21-production-hardening-and-access-design.md).
+4. The visual review: [VISUAL_REVIEW_REPORT.md](../testing/visual/2026-11-21/VISUAL_REVIEW_REPORT.md) and its
+   [README](../testing/visual/2026-11-21/README.md) (findings and their status).
+5. [Phase 1 tracker](../testing/PHASE_1_ISSUES_TRACKER.md) (next free ID is in its header) and [MIGRATIONS](../engineering/MIGRATIONS.md).
+6. `git log --oneline -30` and `git status` to see the real state; trust the repo over this file if they disagree, then fix this file.
+
+## 2. Standing instructions from the user (always apply)
+- **Do not break the other agents' instructions** (Replit, Codex, Claude, maybe Lovable all work here). Keep Replit control
+  points: `.replit`, port 5000, `npm run dev`/`npm start`, the migrate/seed facades, `scripts/post-merge.sh`.
+- **Git identity:** repo-local `Ehab Elrify <ehab.elrify@gmail.com>`; never the machine's global account. Commits end with
+  `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`. **Never push unless the user asks** (the user usually pushes
+  with the VS Code Sync button). Do not push while an agent is mid-work.
+- **No IBM tooling on this project:** the Vault Radar commit/push hooks are disabled for this repo only
+  (`git config --local hook.ciso-vr.enabled false`, `hook.ciso-vr-prepush.enabled false`). Do not touch global/system git config.
+  Never write literal bidi/zero-width/direction-control characters in source files (scanners flag them as Trojan Source);
+  build them from code points, e.g. `String.fromCodePoint(0x2067)`.
+- **Do not install anything on the user's machine.** Replit owns the database; there is **no database locally**, so nothing
+  here has run against Postgres except what CI does. Never run migrations or seeds against a database without the user's say-so.
+- **Production mindset, features unlocked in phases.** Demo layer is cleaned up, not the product's identity. Dummy data lives in
+  the same database and is purged at go-live (`npm run db:purge:demo`, dry run by default).
+- **Login:** Google sign-in only (Apple later), no sign-up, staff are invite-only (owner pre-approves a work email, role and
+  branches). The login page also has the "Enter as a role" widget, which stays on the live app until go-live
+  (`GARAGE_ROLE_WIDGET_ENABLED`). Magic-link invites come later.
+- **Owner** has full add/modify/delete/archive. **Branch manager** has limited options; managers can SEE quotes, reservations,
+  benefits and promotions but not add/edit/remove (`quotes.view` vs `quotes.manage`). The owner edits every user's
+  permissions on the Staff page.
+- **Everything interlinks:** from a customer, a plate or a warranty QR you can reach quotes, jobs, bookings, chats, warranties,
+  purchases, special requests (Customer 360 / Vehicle 360). Smooth UX: side drawers, expand/collapse, no raw ids.
+- **Currencies:** EGP, SAR, USD from one list (`packages/domain/src/currencies.ts`); never mix currencies in a total.
+- **Money display:** whole EGP and compact (11.8M) on dashboards, 2 decimals in tables, plus a per-viewer "Show full precision".
+- **Names** are shown exactly as entered, never translated; interface text follows the UI language. Arabic copy review is
+  done by the user later (do not block on it).
+- **Printable quotes and invoices:** generic template now (`DocumentSheet`), the confirmed template will be supplied later.
+- **Visual checks workflow is manual-only.** After ANY UI change, remind the user to run it from the Actions tab and say which
+  pages/roles changed. The user downloads the artifact (the local `gh` token is invalid; the user can put the zips in the
+  repo root, which is git-ignored) and Claude reads the screenshots with the slicer helper (see section 7).
+- Ask before anything hard to reverse or outward-facing. Report honestly: untested-without-database means untested.
+
+## 3. Decisions recorded
+| Topic | Decision |
+|---|---|
+| Owner app | Not separate: the owner is a role in the branch app with a cross-branch Overview. One codebase, one database. |
+| Role widget | Real login page side widget; same database; cleared at go-live. Protection (passcode or read-only demo owner) NOT yet decided. |
+| Capacity source of truth | The availability configuration (not Settings "decisions"). |
+| Paging | Classic pages, default 25 (25/50/100), "Showing x-y of n". |
+| Tablet | Icon-only sidebar rail at <=1024 px; tables become cards below ~1000 px. |
+| Promotions | Tab is shown; dummy data from the confirmed facts GS-F021..F026 (advertised examples, not approved policy). |
+| Receptionist quotes | Currently view-only (`quotes.view`). The user has not said whether receptionists should write quotes: ask. |
+| Products (parts/accessories) | Wave 5 adds them as name/category/price/tax only. Stock tracking and inventory monitoring come with the customer app (Phase 5). |
+| Unsaved WhatsApp number | Shows as `New contact (<phone>)` for receptionists/managers; linking/creating the customer attaches the conversation. |
+
+## 4. Agreed sequence (user, 22 Nov 2026)
+1. Seed agent finishes -> checks -> last Wave 4 commit.
+2. **Wave 5 - quick-intake side panel** (walk-in or unsaved WhatsApp number: find/create customer, add vehicle, pick services,
+   products or packages from one catalogue; finish as Create quote / Book / Save customer only). Needs migration `0033`
+   (product kind in the catalogue, conversations without a linked customer).
+3. **UX improvements:** reminders and follow-ups (simulated outbox), duplicate customer detection and merge, owner audit-log
+   screen with CSV export and daily summary, saved filters/bulk actions/shortcuts, printable warranty card with QR,
+   technician photos/notes/checklists/report issue.
+4. User pushes -> user runs the manual **Visual checks** -> Claude reads the artifact and fixes what it shows.
+5. User tests on **Replit with Maher** (migrations first, seed on a throwaway database) to settle things BEFORE the customer app.
+6. Phase 5 customer mobile app simulation (needs its own design first): sign-up with Google/Apple, book appointments, browse
+   products (no ordering), reserve with a deposit (no gateway), special requests to the owner, own vehicles/warranties/quotes;
+   **plus stock tracking and inventory monitoring**.
+Not scheduled yet (user has not chosen): role-widget protection, health check/monitoring/backups, content-security-policy,
+owner two-factor, remaining role-based permission checks, large/dense file refactors, tracker summary header.
+
+## 5. Status board (update me)
+| Area | State |
+|---|---|
+| Wave 1-2.7 (hardening, access, modules, customer 360, special requests, invoices, plates, visual job) | Done, committed, pushed |
+| Wave 4 (visual-review fixes: design system + 8 feature packages + server capabilities + seed) | Committed locally (6 commits ahead of origin) except the last seed edits; **not pushed** |
+| Seed agent (realism, promotions, technician jobs) | Running when this was written; uncommitted edits in `apps/server/features/seed/*` |
+| Wave 5 (quick intake) | Not started |
+| UX improvements (section 4 item 3) | Not started |
+| Visual checks rerun | Waiting for the user to push and trigger |
+| Replit test with Maher | Waiting |
+| Unapplied migrations (never run on any DB) | 0026-0030, 0032 (0031 and 0033 intentionally unused/reserved: 0033 will be Wave 5) |
+| Quality gate at last commit | typecheck clean, 489 tests passed (3 skipped), build ok; nothing browser- or DB-verified except the first visual run |
+
+Open findings from the first visual run still open: axe colour-contrast (about 70 pages; tokens re-tuned in Wave 4, unverified),
+Finance/Warranties print buttons (named 'Print' in Wave 4, unverified), screenshot timeouts on very long pages (paging should fix).
+
+## 6. Working method (what has worked)
+- Plan -> parallel agents with **disjoint file ownership** -> one shared-files agent first (design system) -> feature agents.
+  Give every agent: the files it owns, the files it must not touch, verification commands, and "do not commit".
+- After agents finish: run `npm run typecheck`, `npx vitest run`, `npm run build`; grep changed files for invisible
+  bidi/zero-width characters; then commit in logical groups with the repo-local identity.
+- The tracker (`docs/testing/PHASE_1_ISSUES_TRACKER.md`) gets an entry for each shipped change (next ID in its header).
+- Use the right tools: Read/Edit/Grep; avoid shell loops with `sleep` (blocked); a commit/hook command can be refused by the
+  permission classifier: keep commands simple and plain (`git add <paths>` then `git commit -m ...`).
+
+## 7. Tools and where things are
+- **Screenshot review:** artifact zips go in the repo root (git-ignored). Unzip outside the repo
+  (`%LOCALAPPDATA%\Temp\visual-run-<id>\checks`). The slicer is a PowerShell script (`slice.ps1`, parameters `-Src -OutDir
+  -SliceHeight -MaxSlices -StartY -Overview`) that cuts tall full-page PNGs into readable pieces; it lives in the temp folder, so
+  recreate it if missing (about 40 lines using System.Drawing). Compact reference of the first run:
+  `docs/testing/visual/2026-11-21/`.
+- **Visual workflow:** `.github/workflows/visual.yml` (manual). It seeds a throwaway Postgres, boots the app with a Clerk stub
+  defined in the page, signs in as the four demo roles and captures every page (en/ar x 360/768/1280) plus flows.
+- **CI:** `.github/workflows/ci.yml` on every push: typecheck, tests, build, and a Postgres job that runs all migrations and
+  the DB integration tests.
+- **Demo lookups:** seeded customer Ahmed Mahmoud El-Shazly, plates `أ ب ج 1234` and `س م ر 5678` (see the visual README).
+
+## 8. Activity log (newest first; append here)
+- **22 Nov 2026:** Visual review of all 234 screenshots by five reviewers -> consolidated report and work packages. Decisions
+  taken (section 3). Wave 4 implemented in parallel: shared design system (WP0), server capabilities/consent/promotions (WP-S),
+  seed realism (WP9), eight feature packages (WP1-WP8). Committed locally as 6 commits (`aac4e45`..`3aad6e6`). Quick-intake
+  side panel designed and planned as Wave 5. Agreed sequence recorded. This handoff file created.
+- **21-22 Nov 2026:** First Visual checks run: found the vehicle/customer 360 HTTP 500 (extra bind parameter), nested buttons in
+  mobile cards, 768 px overflow; fixed in `8b79b75`. Clerk stub fixed (defined in the page, `e23a4a9`); runner pinned to
+  Ubuntu 24.04; IBM scanner disabled for this repo; workflows kept in `.github/workflows`.
+- **21 Nov 2026:** Waves 1-2.7: security hardening and CI; invite-only Google access with 13+2 capabilities and per-user
+  permissions; relations API, Customer/Vehicle 360, QR lookup, owner archive; ten modules on shared patterns; purchases and
+  special requests; owner price editing and invoice currency; quote auto-generation, generic invoices, printable
+  `DocumentSheet`; plate normalisation (migration 0032); bilingual seeder with confirmed Go Stores prices and a purge script;
+  manual visual-check workflow. Pushed to GitHub (`origin/main`).
+- **Before:** Replit/Codex built Phase 1 per the tracker (P1-001..P1-044); see [PROJECT_LOG](PROJECT_LOG.md).

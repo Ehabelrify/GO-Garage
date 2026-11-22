@@ -126,8 +126,10 @@ been verified.
   [warranty evidence storage](docs/engineering/WARRANTY_EVIDENCE_STORAGE.md), and
   [migrations](docs/engineering/MIGRATIONS.md), and [visual checks](docs/engineering/VISUAL_CHECKS.md). CI: `.github/workflows/ci.yml`, `.github/workflows/visual.yml`.
 - Operations: [delivery plan](docs/operations/DELIVERY_PLAN.md),
-  [decisions](docs/operations/DECISIONS.md), and
-  [project log](docs/operations/PROJECT_LOG.md).
+  [decisions](docs/operations/DECISIONS.md),
+  [project log](docs/operations/PROJECT_LOG.md), and the
+  [resume and handoff record](docs/operations/RESUME_HANDOFF.md) (read it first when
+  continuing interrupted work: standing user instructions, decisions, agreed sequence, status).
 - Current implementation and readiness: [repository assessment](docs/reports/REPOSITORY_ASSESSMENT.md).
 - Phase 1 issues and future intake: [unified tracker](docs/testing/PHASE_1_ISSUES_TRACKER.md).
 - Scoped guidance: [apps](apps/AGENT_INSTRUCTIONS.md) and

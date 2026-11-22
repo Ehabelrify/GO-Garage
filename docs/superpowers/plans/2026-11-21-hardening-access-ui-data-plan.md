@@ -114,6 +114,19 @@ side panel, the conversation is linked and the list shows the customer's name fr
 Phase 5 (customer mobile app) must also include: stock tracking and inventory monitoring (per-branch quantity, reorder alerts,
 movements, reservation of stock for quotes/orders), as the user requires before launching the storefront.
 
+## Agreed sequence (user, 22 Nov 2026)
+1. Seed agent finishes -> checks -> last Wave 4 commit.
+2. Wave 5: quick-intake side panel (customer, vehicle, catalogue incl. products; unsaved WhatsApp numbers as "New contact (<phone>)").
+3. UX improvements from the open items: reminders and follow-ups (booking reminders, warranty expiry, ready for pickup, on the
+   simulated outbox), duplicate customer detection and merge, owner audit-log screen + CSV export + daily owner summary,
+   saved filters / bulk actions / keyboard shortcuts on big lists, printable warranty card with QR, technician photos / notes /
+   checklists / report issue.
+4. User pushes -> user runs the manual Visual checks -> Claude reads the artifact and fixes what it shows.
+5. User runs a test on Replit together with Maher (migrations 0026-0033 first, seed on a throwaway database) to settle things
+   BEFORE the customer mobile app (Phase 5).
+Not scheduled (user did not pick them): role-widget protection, health check/monitoring/backups, CSP, owner 2FA. Raise again
+before the Replit test, since the widget is public on the live URL.
+
 ## Wave 3
 Stabilization gate (P4): typecheck, test, build, DB-integration run, tracker + docs updates, report to user.
 

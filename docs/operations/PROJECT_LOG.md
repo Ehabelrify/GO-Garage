@@ -2,6 +2,23 @@
 
 Use this file to record meaningful progress, not every minor edit.
 
+### 2026-11-22 — Production hardening, access model, shared design system and visual-review fixes
+**Completed**
+- Waves 1-2.7 (21 Nov): security headers/rate limits/CI, invite-only Google access with per-user capabilities, Customer/Vehicle 360 and search, owner archive/delete, special requests, purchases, invoices and printable documents, quote auto-generation, plate normalisation, bilingual seed with confirmed Go Stores prices, manual Visual checks workflow. Pushed.
+- Wave 4 (22 Nov): visual review of 234 screenshots, then a shared design system (type scale, Amount/Delta/Plate/Phone, paged table, one-row topbar, tablet rail), `quotes.view`/`quotes.manage`, consent and promotions API fixes, seed realism, and eight feature packages. Committed locally (`aac4e45`..`3aad6e6`), not pushed.
+
+**Changed**
+- Added [RESUME_HANDOFF.md](RESUME_HANDOFF.md) (standing instructions, decisions, agreed sequence, status board) so any agent can resume. Plan: `docs/superpowers/plans/2026-11-21-hardening-access-ui-data-plan.md`.
+
+**Validation**
+- At the last commit: typecheck clean, 489 tests passed (3 skipped), build ok. First Visual checks run executed and reviewed. No migration 0026-0032 or seed has run on a database outside CI; nothing browser-verified after Wave 4.
+
+**Open issues**
+- Wave 4 needs a Visual checks rerun; Wave 5 (quick intake) and the UX improvements are not started; role-widget protection undecided; Replit test with Maher pending.
+
+**Next**
+- Follow the agreed sequence in RESUME_HANDOFF.md section 4.
+
 ### 2026-11-16 — Recorded approved operational scope and planning handover
 **Completed**
 - Preserved business research in the33-fact register, sourced dossier and authenticated evidence ledgers, with observations/self-reports/advertisements distinguished from policy approval.
