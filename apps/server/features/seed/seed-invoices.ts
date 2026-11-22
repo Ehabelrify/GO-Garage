@@ -50,7 +50,7 @@ export function addSeedInvoices(world: World) {
       source: "auto", idempotency_key: `job:${visit.jobId}`, number, status, currency: "EGP", tax_rate_percent: null,
       subtotal_minor: gross, discount_minor: discount, tax_minor: 0, total_minor: sale, paid_minor: paid,
       issue_date: status === "draft" ? null : issueDate,
-      notes: "Example invoice (seed data). Tax is not applied: no tax policy is approved.", terms: "",
+      notes: "Tax is not applied: no tax policy is approved.", terms: "",
       revision: status === "draft" ? 1 : status === "issued" ? 2 : 3 + (paid > 0 ? 1 : 0),
       created_by: issuer, issued_by: status === "draft" ? null : issuer, issued_at: status === "draft" ? null : issuedAt,
       voided_by: voided ? issuer : null, voided_at: voided ? new Date(issuedAt.getTime() + DAY) : null, void_reason: voided ? "Example: issued to the wrong customer record" : null,

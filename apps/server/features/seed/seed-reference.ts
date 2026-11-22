@@ -146,11 +146,11 @@ export function buildReference(ds: Dataset, ctx: SeedContext): Reference {
   }
 
   /* policy helper: approved + activated + audited */
-  const policyRows = (id: string, family: string, value: unknown, extra: { branchId?: string; from?: string; at?: Date } = {}): PolicyRef => {
+  const policyRows = (id: string, family: string, value: unknown, extra: { branchId?: string; from?: string; through?: string; at?: Date } = {}): PolicyRef => {
     const at = extra.at ?? base;
     ds.add("commercial_policy_versions", {
       policy_id: id, family, version: 1, value: json(value), branch_id: extra.branchId ?? null,
-      effective_from: extra.from ?? windowStart, effective_through: null, state: "approved",
+      effective_from: extra.from ?? windowStart, effective_through: extra.through ?? null, state: "approved",
       evidence_ref: EVIDENCE, approved_by: OWNER, approved_at: at, reason: SEED_REASON, created_by: OWNER, created_at: at,
     });
     ds.add("commercial_policy_active", { policy_id: id, version: 1, activated_by: OWNER, activated_at: at });
@@ -228,12 +228,12 @@ export function buildReference(ds: Dataset, ctx: SeedContext): Reference {
     exceptionAuthority: { roles: ["owner"], requiresReason: true, requiresEvidence: true },
   };
   const promoPolicies = {
-    club: policyRows("promotion-qualification:seed-ultimate-club", "promotion-qualification", { ...promoBase, promotionId: "seed-ultimate-club", evidenceKinds: ["membership-verification"], maximumUnits: 15, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(10001), perVehicle: egp(10001) }, beneficiaryRule: lbl("عضوية النادي مؤكدة", "Club membership confirmed") }),
-    plus: policyRows("promotion-qualification:seed-plus-lifetime", "promotion-qualification", { ...promoBase, promotionId: "seed-plus-lifetime", evidenceKinds: ["membership-verification"], maximumUnits: 10, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(0), perVehicle: egp(0) }, beneficiaryRule: lbl("حجز قبل الموعد المعلن", "Reserved before the advertised deadline") }),
-    recent: policyRows("promotion-qualification:seed-recent-ultimate", "promotion-qualification", { ...promoBase, promotionId: "seed-recent-ultimate", evidenceKinds: ["membership-verification"], maximumUnits: 20, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(0), perVehicle: egp(0) }, beneficiaryRule: lbl("عرض ألتيميت الأخير", "Recent Ultimate offer") }),
-    nov: policyRows("promotion-qualification:seed-nov-announcement", "promotion-qualification", { ...promoBase, promotionId: "seed-nov-announcement", evidenceKinds: ["membership-verification"], maximumUnits: 25, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(0), perVehicle: egp(0) }, beneficiaryRule: lbl("إعلان 5 نوفمبر", "5 November announcement") }),
-    referral: policyRows("promotion-qualification:seed-warranty-card-referral", "promotion-qualification", { ...promoBase, promotionId: "seed-warranty-card-referral", evidenceKinds: ["warranty-reference"], maximumUnits: 50, recipient: { kind: "referred-customer", transferWarranty: false }, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(10000), perVehicle: egp(10000) }, beneficiaryRule: lbl("كارت ضمان سابق، والخصم لا ينقل الضمان", "Existing warranty card; discount does not transfer the warranty") }),
-    threecars: policyRows("promotion-qualification:seed-four-cars", "promotion-qualification", { ...promoBase, promotionId: "seed-four-cars", evidenceKinds: ["grouped-vehicles"], maximumUnits: 10, grouping: { minimumVehicles: 3, maximumVehicles: 4, timingWindowHours: 72, timing: "same-booking" }, discountAllocation: { kind: "equal-remainder-by-vehicle", total: egp(35000), perVehicle: null }, beneficiaryRule: lbl("الرابعة مجانًا عند ثلاث سيارات معًا", "Fourth car free when three come together") }),
+    club: policyRows("promotion-qualification:seed-ultimate-club", "promotion-qualification", { ...promoBase, promotionId: "seed-ultimate-club", evidenceKinds: ["membership-verification"], maximumUnits: 15, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(10001), perVehicle: egp(10001) }, beneficiaryRule: lbl("باقة نادي ألتيميت 44,999 جنيه - محدودة بـ 15 سيارة (عرض معلن)", "Ultimate club package 44,999 EGP - limited to 15 cars (advertised offer)") }, { from: ctx.day(-60), through: ctx.day(40) }),
+    plus: policyRows("promotion-qualification:seed-plus-lifetime", "promotion-qualification", { ...promoBase, promotionId: "seed-plus-lifetime", evidenceKinds: ["membership-verification"], maximumUnits: 10, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(0), perVehicle: egp(0) }, beneficiaryRule: lbl("باقة بلس مدى الحياة 52,999 جنيه (عرض معلن)", "Plus lifetime package 52,999 EGP (advertised offer)") }, { from: ctx.day(-52), through: ctx.day(40) }),
+    recent: policyRows("promotion-qualification:seed-recent-ultimate", "promotion-qualification", { ...promoBase, promotionId: "seed-recent-ultimate", evidenceKinds: ["membership-verification"], maximumUnits: 20, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(0), perVehicle: egp(0) }, beneficiaryRule: lbl("عرض ألتيميت الأخير 39,999 جنيه (عرض معلن)", "Recent Ultimate offer 39,999 EGP (advertised offer)") }, { from: ctx.day(-6), through: ctx.day(40) }),
+    nov: policyRows("promotion-qualification:seed-nov-announcement", "promotion-qualification", { ...promoBase, promotionId: "seed-nov-announcement", evidenceKinds: ["membership-verification"], maximumUnits: 25, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(0), perVehicle: egp(0) }, beneficiaryRule: lbl("عرض 5 نوفمبر - فيلم يبدأ من 32,999 جنيه مع فحص استلام وسحب داخل القاهرة وغسيل مجاني وسيارة سائق (عرض معلن)", "5 November offer - film from 32,999 EGP with handover inspection, Cairo tow, free washing and chauffeur car (advertised offer)") }, { from: ctx.day(-16), through: ctx.day(9) }),
+    referral: policyRows("promotion-qualification:seed-warranty-card-referral", "promotion-qualification", { ...promoBase, promotionId: "seed-warranty-card-referral", evidenceKinds: ["warranty-reference"], maximumUnits: 50, recipient: { kind: "referred-customer", transferWarranty: false }, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(10000), perVehicle: egp(10000) }, beneficiaryRule: lbl("إحالة بكارت الضمان - خصم 10,000 جنيه على سيارة أخرى، والخصم لا ينقل الضمان (عرض معلن)", "Warranty-card referral - 10,000 EGP off another car; the discount does not transfer the warranty (advertised offer)") }, { from: ctx.day(-120) }),
+    threecars: policyRows("promotion-qualification:seed-four-cars", "promotion-qualification", { ...promoBase, promotionId: "seed-four-cars", evidenceKinds: ["grouped-vehicles"], maximumUnits: 10, grouping: { minimumVehicles: 3, maximumVehicles: 4, timingWindowHours: 72, timing: "same-booking" }, discountAllocation: { kind: "equal-remainder-by-vehicle", total: egp(35000), perVehicle: null }, beneficiaryRule: lbl("السيارة الرابعة مجانًا عند حضور ثلاث سيارات معًا (عرض معلن)", "Fourth car free when three cars come together (advertised offer)") }, { from: ctx.day(-30), through: ctx.day(9) }),
   } as Reference["promoPolicies"];
   const promoCaps = { club: 15, plus: 10, recent: 20, nov: 25, referral: 50, threecars: 10 } as Reference["promoCaps"];
 
@@ -266,7 +266,7 @@ export function buildReference(ds: Dataset, ctx: SeedContext): Reference {
   for (const grade of GRADES) {
     ds.add("catalogue_grade_versions", {
       grade_id: grade.id, version: 1, revision: 1, state: "published", name: json(lbl(grade.ar, grade.en)),
-      thickness_micrometres: grade.um, provenance: "Advertised list of 26 April 2026 (GS-F016). Example data, not an approved specification.",
+      thickness_micrometres: grade.um, provenance: "Advertised list of 26 April 2026 (GS-F016). Not an approved specification.",
       approval: json(gradeApproval), created_by: OWNER, created_at: base,
     });
     ds.add("catalogue_grade_active", { grade_id: grade.id, version: 1, retired: false });
@@ -338,13 +338,13 @@ export function buildReference(ds: Dataset, ctx: SeedContext): Reference {
   addPackage({ id: "seed-pkg-promo-nov-from", name: lbl("إعلان 5 نوفمبر - فيلم يبدأ من 32,999", "5 November announcement - film from 32,999"), ...promoScope("pro", "excluded", []), primaryServiceId: "full-ppf", gradeKey: "pro", priceMinor: 3_299_900, effectiveFrom: ctx.day(-16), effectiveThrough: ctx.day(9), warranty: { "work-ppf": "seed-wp-ppf-pro" }, benefitKeys: ["inspection", "tow", "wash", "vip", "fourth"], promo: "nov", provenance: "5 November 2026 announcement (GS-F026): film from 32,999, free handover inspection, free Cairo tow, free washing during warranty, chauffeur car. Eligibility unverified." });
 
   // Roof add-on is size dependent and the adjacent services are unconfirmed: draft items with an unconfigured price.
-  const draft = (key: string, serviceId: string, en: string, ar: string, note: string) => {
+  const draft = (key: string, serviceId: string, en: string, ar: string, note: string, unconfirmed = true) => {
     addPackage({
-      id: `seed-pkg-draft-${key}`, kind: "standalone", state: "draft", name: lbl(ar, en), scope: [scopeItem("scope-main", serviceId, { areas: [key] })],
+      id: `seed-pkg-draft-${key}`, kind: "standalone", state: "draft", name: unconfirmed ? lbl(`${ar} - التوفر غير مؤكد`, `${en} - availability unconfirmed`) : lbl(ar, en), scope: [scopeItem("scope-main", serviceId, { areas: [key] })],
       work: [], primaryServiceId: serviceId, priceMinor: null, provenance: `${note} Availability unconfirmed.`,
     });
   };
-  draft("roof", "full-ppf", "Roof PPF add-on (size dependent)", "إضافة السقف (حسب المقاس)", "GS-F017: roof addition depends on size.");
+  draft("roof", "full-ppf", "Roof PPF add-on (size dependent)", "إضافة السقف (حسب المقاس)", "GS-F017: roof addition depends on size.", false);
   draft("wrapping", "seed-svc-wrapping", "Vehicle wrapping", "تغليف السيارات (راب)", "GS-F014 Instagram highlight.");
   draft("carbon-fiber", "seed-svc-carbon-fiber", "Carbon fibre trim", "كربون فايبر", "GS-F014 Instagram highlight.");
   draft("steering-wheel", "seed-svc-steering-wheel", "Steering wheels", "دركسيون", "GS-F014 Instagram highlight.");
@@ -393,8 +393,8 @@ export function buildReference(ds: Dataset, ctx: SeedContext): Reference {
     const at = ctx.at(policy.publishedOn ?? windowStart, "10:00");
     ds.add("warranty_policies", {
       policy_id: policy.id, version: policy.version, name: policy.name, eligible_service_ids: policy.services, auto_issue: policy.auto,
-      start_rule: "job-delivery", duration_months: policy.months, exclusions: "Example exclusions only (seed data): misuse, collision damage, third-party removal. The Owner must replace these before publishing.",
-      evidence_requirements: "Example evidence only (seed data): dated photos and the job card. The Owner must confirm before publishing.",
+      start_rule: "job-delivery", duration_months: policy.months, exclusions: "Draft exclusions: misuse, collision damage, third-party removal. The Owner must confirm them before publishing.",
+      evidence_requirements: "Draft evidence: dated photos and the job card. The Owner must confirm before publishing.",
       review_role: policy.reviewRole, response_days: 5, status: policy.status, created_by: OWNER, published_by: published ? OWNER : null,
       created_at: at, published_at: published ? at : null, coverage_kind: policy.kind,
       lifetime_definition: policy.kind === "lifetime" ? json(lifetimeDefinition(policy, at)) : null,
@@ -422,7 +422,7 @@ export function buildReference(ds: Dataset, ctx: SeedContext): Reference {
   }
 
   /* messaging channel (simulation only: provider delivery stays disabled) */
-  ds.add("messaging_channels", { id: channelId, provider: "simulation", display_label: "WhatsApp simulator (seed)", status: "sandbox", provider_asset_ref: "simulation:seed", enabled_at: base });
+  ds.add("messaging_channels", { id: channelId, provider: "simulation", display_label: "WhatsApp simulator", status: "sandbox", provider_asset_ref: "simulation:seed", enabled_at: base });
   for (const [index, language] of (["ar", "en"] as const).entries()) {
     ds.add("messaging_delivery_policies", {
       channel_id: channelId, version: index + 1, language, customer_service_window_hours: 24, approved_template_ref: null,

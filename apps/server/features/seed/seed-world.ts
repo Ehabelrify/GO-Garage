@@ -143,7 +143,15 @@ export interface World {
   /** Fill factor for bay capacity: bulk history leaves headroom so curated scenes can always be placed. */
   capFactor: number;
   intakeReserve: number;
+  /** Dates of every visit per vehicle ("v:id") and customer ("c:id"), so the generator never books the same car or person twice in a short window. */
+  vehicleDates: Map<string, string[]>;
+  /** Vehicles that already had a full-film (PPF) job: the same car does not get a second full film in the demo year. */
+  ppfVehicles: Set<string>;
 }
+
+/** True when the key ("v:<vehicle id>" or "c:<customer id>") has no other visit within +/- windowDays of the date. */
+export const slotFree = (world: World, key: string, date: string, windowDays = 10) =>
+  !(world.vehicleDates.get(key) ?? []).some((other) => Math.abs(Date.parse(`${other}T12:00:00Z`) - Date.parse(`${date}T12:00:00Z`)) < windowDays * 86_400_000);
 
 export const nextId = (world: World, key: string, width = 4) => {
   const value = (world.seq.get(key) ?? 0) + 1;

@@ -1,4 +1,5 @@
 import { Rng, pad } from "./seed-core";
+import { initialState } from "./seed-data";
 
 export type Lang = "ar" | "en";
 export type CategoryKey = "sedan" | "suv";
@@ -21,7 +22,7 @@ export const DEMO_TECHNICIAN = "demo-technician";
 
 /** demo-* accounts mirror auth/demo-auth.ts; the remaining staff are fictional seed memberships (not login accounts). Names are single-script and emails lowercase. */
 export const STAFF: StaffRec[] = [
-  { id: OWNER, email: "owner@noemail.com", name: "Khaled Mansour", role: "owner", branchIds: [] },
+  { id: OWNER, email: "owner@noemail.com", name: "Sherif Abdallah", role: "owner", branchIds: [] },
   { id: "demo-manager", email: "manager@noemail.com", name: "Salma Nabil", role: "branch-manager", branchIds: [BRANCH_A] },
   { id: "demo-reception", email: "reception@noemail.com", name: "Karim Adel", role: "receptionist", branchIds: [BRANCH_A] },
   { id: DEMO_TECHNICIAN, email: "technician@noemail.com", name: "Youssef Samir", role: "technician", branchIds: [BRANCH_A] },
@@ -140,7 +141,8 @@ export const RICH_COUNT = RICH.length;
 
 export function buildPeople(rng: Rng, totalCustomers: number): CustomerRec[] {
   const customers: CustomerRec[] = [];
-  const platesUsed = new Set<string>();
+  // Plates of the legacy sample vehicles (seed-data.ts) are reserved so a generated plate can never collide with them.
+  const platesUsed = new Set<string>(initialState.customers.flatMap((customer) => customer.vehicles.map((vehicle) => vehicle.plate)));
   const namesUsed = new Set<string>();
   let vehicleSeq = 0;
   const prefixes = ["100", "101", "102", "111", "112", "120", "122", "127"];
@@ -177,7 +179,8 @@ export function buildPeople(rng: Rng, totalCustomers: number): CustomerRec[] {
     const nameEn = `${first[1]} ${father[1]} ${family[1]}`;
     namesUsed.add(nameEn);
     // Subscriber numbers stay in the fictional 000 block and never end in a round "00".
-    const subscriber = 1101 + index * 17 + Math.floor((index * 17) / 100);
+    let subscriber = 1101 + index * 17 + Math.floor((index * 17) / 100);
+    if (subscriber % 100 === 0) subscriber += 1;
     const prefix = prefixes[index % prefixes.length];
     const customer: CustomerRec = {
       id: `seed-cust-${pad(index + 1, 3)}`,

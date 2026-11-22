@@ -265,24 +265,24 @@ export const initialState: GarageState = {
   customers: [
     {
       id: "customer-sample-1",
-      name: "Mariam Hassan",
+      name: "مريم حسن",
       phone: "+20 100 000 0101",
       language: "ar",
-      vehicles: [{ id: "vehicle-sample-1", plate: "DEMO A17", makeModel: "Toyota Corolla 2022" }],
+      vehicles: [{ id: "vehicle-sample-1", plate: "ه ل ح 2210", makeModel: "Toyota Corolla 2022" }],
     },
     {
       id: "customer-sample-2",
-      name: "Omar Fawzy",
+      name: "Hossam Ibrahim",
       phone: "+20 100 000 0102",
       language: "en",
-      vehicles: [{ id: "vehicle-sample-2", plate: "DEMO B24", makeModel: "Hyundai Tucson 2023" }],
+      vehicles: [{ id: "vehicle-sample-2", plate: "م ص ر 6035", makeModel: "Hyundai Tucson 2023" }],
     },
     {
       id: "customer-sample-3",
-      name: "Nour El-Sayed",
+      name: "نورهان السيد",
       phone: "+20 100 000 0103",
       language: "ar",
-      vehicles: [{ id: "vehicle-sample-3", plate: "DEMO A39", makeModel: "Kia Sportage 2021" }],
+      vehicles: [{ id: "vehicle-sample-3", plate: "ق ط ن 4817", makeModel: "Kia Sportage 2021" }],
     },
   ],
   bookings: [

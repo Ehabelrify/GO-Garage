@@ -2,13 +2,13 @@ import {
   SEED_REASON, addDays, daysBetween, hash, json, plainHash, type Money,
 } from "./seed-core";
 import {
-  BRANCH_A, BRANCH_B, managerOf, receptionOf, techniciansOf, type CustomerRec, type VehicleRec,
+  BRANCH_A, BRANCH_B, DEMO_TECHNICIAN, managerOf, receptionOf, techniciansOf, type CustomerRec, type VehicleRec,
 } from "./seed-people";
 import {
   GRADES, SERVICES, packageAt, serviceById, warrantyPolicyAt, type PackageDef, type PromoKey,
 } from "./seed-reference";
 import {
-  demandOf, nextId, nextWorkingDay, occupancyPlan, reserveCapacity, tryPlace,
+  demandOf, nextId, nextWorkingDay, occupancyPlan, reserveCapacity, slotFree, tryPlace,
   type ChatSpec, type Product, type QuoteRec, type VisitRec, type World,
 } from "./seed-world";
 import { deliverVisit } from "./seed-aftersales";
@@ -39,11 +39,11 @@ export function packageProduct(pkg: PackageDef): Product {
 export function pickProduct(world: World, vehicle: VehicleRec, quoteDate: string): Product {
   const { rng, ref } = world;
   const roll = rng.float();
-  if (roll < 0.34) {
-    const serviceId = rng.weighted([["inspection", 34], ["tint", 26], ["audio", 8], ["ceramic", 18], ["full-ppf", 14]] as const);
+  if (roll < 0.46) {
+    const serviceId = rng.weighted([["inspection", 34], ["tint", 26], ["audio", 8], ["ceramic", 18], ["full-ppf", 6]] as const);
     return legacyProduct(serviceId, serviceId === "full-ppf" ? rng.pick(["black", "ultimate", "matte"]) : undefined);
   }
-  if (roll < 0.80) {
+  if (roll < 0.72) {
     const grade = rng.weighted([["pro", 30], ["ultimate", 28], ["plus", 12], ["black", 10], ["matte", 10]] as const);
     const pkg = packageAt(ref, `seed-pkg-ppf-${grade}-${vehicle.category}`, quoteDate);
     if (pkg) return packageProduct(pkg);
@@ -176,7 +176,33 @@ export function makeQuote(world: World, o: QuoteOptions): QuoteRec {
 export interface VisitOptions {
   customer: CustomerRec; vehicle: VehicleRec; branchId: string; date: string; product: Product; quote?: QuoteRec | null;
   status: VisitRec["status"]; leadDays?: number; rich?: boolean; chat?: ChatSpec | null; whatsapp?: boolean; deliveredDelay?: number;
-  forceStage?: VisitRec["stage"]; time?: string; skipCapacity?: boolean;
+  forceStage?: VisitRec["stage"]; time?: string; skipCapacity?: boolean; technician?: string;
+}
+
+export const isPpfProduct = (product: Product) => Boolean(product.gradeKey) || product.serviceId === "full-ppf";
+
+/** Key that identifies "this car already had this work" (inspections may repeat; every full film counts as the same work). */
+export const workKey = (vehicleId: string, product: Product): string | null =>
+  isPpfProduct(product) ? `${vehicleId}|ppf` : product.serviceId === "inspection" && !product.pkg ? null : `${vehicleId}|${product.pkg?.id ?? product.serviceId}`;
+
+/**
+ * True when booking this work would put the same car or the same person on the calendar twice in a short window,
+ * or repeat work the car already had (a second full film, a second ceramic coat, the same add-on again).
+ */
+export function visitConflict(world: World, customer: CustomerRec, vehicle: VehicleRec, date: string, product: Product): boolean {
+  const key = workKey(vehicle.id, product);
+  if (key && world.ppfVehicles.has(key)) return true;
+  return !slotFree(world, `v:${vehicle.id}`, date, 10) || !slotFree(world, `c:${customer.id}`, date, 4);
+}
+
+/** Mirrors the placement loop of makeVisit without reserving anything. */
+export function wouldPlace(world: World, branchId: string, date: string, product: Product): boolean {
+  let day = nextWorkingDay(date);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (tryPlace(world, branchId, day, demandOf(product))) return true;
+    day = nextWorkingDay(addDays(day, 1));
+  }
+  return false;
 }
 
 const hh = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
@@ -227,6 +253,9 @@ export function makeVisit(world: World, o: VisitOptions): VisitRec | null {
     warranties: [], transportId: null,
   };
   world.visits.push(visit);
+  for (const key of [`v:${o.vehicle.id}`, `c:${o.customer.id}`]) world.vehicleDates.set(key, [...(world.vehicleDates.get(key) ?? []), date]);
+  const work = workKey(o.vehicle.id, o.product);
+  if (work && o.status !== "cancelled" && o.status !== "no-show") world.ppfVehicles.add(work);
   if (o.chat) o.chat.visit = visit;
 
   if (o.status === "pending") return visit;
@@ -234,7 +263,8 @@ export function makeVisit(world: World, o: VisitOptions): VisitRec | null {
   visit.jobId = jobId;
   const jobEvents: Array<{ from: string | null; to: string; actor: string; note: string; at: Date }> = [];
   const techs = techniciansOf(o.branchId);
-  const technician = rng.pick(techs);
+  const others = techs.filter((id) => id !== DEMO_TECHNICIAN);
+  let technician = o.technician ?? rng.pick(techs);
   const manager = managerOf(o.branchId);
 
   if (o.status === "cancelled" || o.status === "no-show") {
@@ -261,6 +291,10 @@ export function makeVisit(world: World, o: VisitOptions): VisitRec | null {
     else stage = date === today ? "received" : "in-service";
     if (o.forceStage && o.forceStage !== "delivered" && (stage !== "delivered")) stage = o.forceStage as typeof stage;
     visit.stage = stage;
+    // The demo technician carries the curated job set and only the most recent deliveries; everything else is spread over the rest of the team.
+    if (!o.technician && technician === DEMO_TECHNICIAN && others.length && !(stage === "delivered" && deliveredDate !== null && daysBetween(deliveredDate, today) <= 6)) {
+      technician = others[n % others.length];
+    }
     const order = ["booked", "received", "in-service", "qc", "ready", "delivered"] as const;
     const reached = order.indexOf(stage as (typeof order)[number]);
     const lastDay = deliveredDate ?? pickup;
@@ -283,6 +317,8 @@ export function makeVisit(world: World, o: VisitOptions): VisitRec | null {
       visit.deliveredAt = jobEvents[jobEvents.length - 1].at;
     }
     if (reached >= 1) visit.technician = technician;
+    // Jobs due in the next days are already assigned; further-out bookings stay unassigned until the manager plans them.
+    else if (o.technician || date <= addDays(ctx.today, 5)) visit.technician = technician;
   }
   jobEvents.forEach((event, index) => {
     const previous = index > 0 ? jobEvents[index - 1].at.getTime() : 0;

@@ -142,7 +142,7 @@ function addInvoice(world: World, warranty: WarrantyRec, serviceId: string) {
   const quoteBound = Boolean(visit.quote?.accepted);
   ds.add("warranty_invoice_drafts", {
     id: warranty.invoiceId, warranty_id: warranty.id, branch_id: visit.branchId, status: "draft", tax_rate_percent: null, paid_amount: paid,
-    payment_method: method, notes: "Example invoice. Tax treatment is not approved; amounts follow the advertised list price (seed data)." + (visit.quote?.discountMinor ? " Includes a warranty-card referral discount; the discount does not transfer any warranty." : ""),
+    payment_method: method, notes: "Tax treatment is not approved; amounts follow the advertised list price." + (visit.quote?.discountMinor ? " Includes a warranty-card referral discount; the discount does not transfer any warranty." : ""),
     created_by: warranty.issuedBy, updated_by: warranty.issuedBy, created_at: warranty.issuedAt, updated_at: recordedAt ?? warranty.issuedAt,
     payment_recorded_at: recordedAt, payment_recorded_by: recordedAt ? warranty.issuedBy : null,
     accepted_quote_id: quoteBound ? visit.quote!.id : null, accepted_quote_revision: quoteBound ? visit.quote!.revision : null,

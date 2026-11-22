@@ -373,6 +373,178 @@ describe("seed generator", () => {
     }
   });
 
+  it("keeps every person name in a single script, with lowercase emails and no duplicate names, plates or phones", () => {
+    const arabic = /[\u0600-\u06FF]/, latin = /[A-Za-z]/;
+    const names = rows("customers").map((row) => String(row.name));
+    for (const name of names) expect(arabic.test(name) && latin.test(name), name).toBe(false);
+    for (const customer of world.customers) {
+      expect(customer.language === "ar" ? arabic.test(customer.name) : latin.test(customer.name), customer.name).toBe(true);
+      expect(latin.test(customer.nameAr) || arabic.test(customer.nameEn), customer.id).toBe(false);
+    }
+    const arabicShare = names.filter((name) => arabic.test(name)).length / names.length;
+    expect(arabicShare).toBeGreaterThan(0.6);
+    expect(arabicShare).toBeLessThan(0.9);
+    expect(new Set(names).size).toBe(names.length);
+    expect(new Set(rows("customers").map((row) => row.phone)).size).toBe(names.length);
+    const staff = rows("staff_memberships");
+    for (const member of staff) {
+      expect(String(member.email), String(member.email)).toBe(String(member.email).toLowerCase());
+      expect(arabic.test(String(member.full_name)) && latin.test(String(member.full_name))).toBe(false);
+    }
+    expect(new Set(staff.map((member) => String(member.email))).size).toBe(staff.length);
+    for (const customer of rows("customers")) expect(String(customer.phone)).not.toMatch(/ \d\d00$/);
+    const plates = rows("vehicles").map((row) => String(row.plate));
+    for (const plate of plates) expect(plate).not.toMatch(/demo/i);
+  });
+
+  it("keeps the demo lookups (plates, customer) stable", () => {
+    const ahmed = rows("customers").find((row) => row.id === "seed-cust-001")!;
+    expect(ahmed.name).toBe("أحمد محمود الشاذلي");
+    expect(rows("vehicles").filter((row) => row.customer_id === "seed-cust-001").map((row) => row.plate)).toEqual(["أ ب ج 1234", "س م ر 5678"]);
+    for (const [index, name] of [[2, "نور"], [3, "Omar"], [4, "سارة"], [5, "Karim"], [6, "هدى"], [7, "طارق"], [8, "Dina"]] as const) {
+      expect(String(rows("customers")[index - 1].name)).toContain(name);
+    }
+  });
+
+  it("has no visible example, demo or placeholder wording in seeded data", () => {
+    const banned = /\(example|\(\u0645\u062b\u0627\u0644|\u0646\u0635 \u062a\u062c\u0631\u064a\u0628\u064a|DEMO |example wording|example data|\(seed data\)/i;
+    const skip = new Set(["evidence_ref", "reason", "source_reference"]);
+    for (const [table, tableRows] of ds.tables) {
+      for (const row of tableRows) {
+        for (const [key, value] of Object.entries(row)) {
+          if (skip.has(key)) continue;
+          const text = value instanceof Json ? JSON.stringify(value.value) : typeof value === "string" ? value : "";
+          expect(banned.test(text), `${table}.${key}: ${text.slice(0, 80)}`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("never books the same car or the same customer twice close together and never repeats a full film on one car", () => {
+    const live = rows("bookings").filter((row) => row.status !== "cancelled" && row.status !== "no-show");
+    const byVehicle = new Map<string, string[]>();
+    for (const booking of live) byVehicle.set(String(booking.vehicle_id), [...(byVehicle.get(String(booking.vehicle_id)) ?? []), String(booking.dropoff_date)]);
+    for (const [vehicle, dates] of byVehicle) {
+      const sorted = [...dates].sort();
+      sorted.forEach((date, index) => { if (index) expect(Date.parse(date) - Date.parse(sorted[index - 1]), `${vehicle} ${date}`).toBeGreaterThanOrEqual(3 * 86_400_000); });
+    }
+    const films = new Map<string, number>();
+    for (const visit of world.visits.filter((item) => item.status === "confirmed" && (item.product.gradeKey || item.product.serviceId === "full-ppf"))) {
+      films.set(visit.vehicle.id, (films.get(visit.vehicle.id) ?? 0) + 1);
+    }
+    expect(Math.max(...films.values())).toBeLessThanOrEqual(2);
+    const warrantyKeys = rows("warranties").map((row) => `${row.vehicle_id}|${row.service_id}|${row.start_date}|${row.policy_id}|${row.component_id ?? ""}`);
+    expect(new Set(warrantyKeys).size).toBe(warrantyKeys.length);
+  });
+
+  it("spreads bookings and jobs over realistic statuses with a believable review queue and a populated today and tomorrow", () => {
+    const status = (value: string) => rows("bookings").filter((row) => row.status === value).length;
+    expect(status("confirmed")).toBeGreaterThan(300);
+    expect(status("cancelled")).toBeGreaterThan(20);
+    expect(status("no-show")).toBeGreaterThan(10);
+    const pending = rows("bookings").filter((row) => row.status === "pending");
+    expect(pending.length).toBeGreaterThanOrEqual(20);
+    expect(pending.length).toBeLessThanOrEqual(45);
+    expect(new Set(pending.map((row) => row.branch_id))).toEqual(new Set(["branch-a", "branch-b"]));
+    expect(pending.every((row) => String(row.dropoff_date) > "2026-11-21")).toBe(true);
+    for (const day of ["2026-11-21", "2026-11-22"]) {
+      for (const branch of ["branch-a", "branch-b"]) expect(rows("bookings").filter((row) => row.dropoff_date === day && row.branch_id === branch).length, `${day} ${branch}`).toBeGreaterThanOrEqual(2);
+    }
+    const services = new Set(rows("bookings").map((row) => row.service_id));
+    expect(services.size).toBeGreaterThanOrEqual(8);
+    const open = rows("jobs").filter((row) => !["delivered", "cancelled", "no-show"].includes(String(row.stage)));
+    expect(open.length).toBeGreaterThan(30);
+    expect(open.length).toBeLessThan(90);
+    for (const stage of ["booked", "received", "in-service", "qc", "ready"]) expect(open.some((row) => row.stage === stage), stage).toBe(true);
+    expect(rows("jobs").filter((row) => row.stage === "delivered").length).toBeGreaterThan(250);
+  });
+
+  it("gives the demo technician a realistic job set in the demo branch", () => {
+    const mine = rows("jobs").filter((row) => row.assigned_user_id === "demo-technician" && !["delivered", "cancelled", "no-show"].includes(String(row.stage)));
+    expect(mine.length).toBeGreaterThanOrEqual(6);
+    expect(mine.length).toBeLessThanOrEqual(10);
+    expect(mine.every((row) => row.branch_id === "branch-a")).toBe(true);
+    const stages = new Set(mine.map((row) => row.stage));
+    for (const stage of ["booked", "in-service", "ready"]) expect(stages.has(stage), stage).toBe(true);
+    const bookings = new Map(rows("bookings").map((row) => [String(row.id), row]));
+    expect(mine.some((row) => bookings.get(String(row.booking_id))?.dropoff_date === "2026-11-21")).toBe(true);
+    expect(mine.some((row) => String(bookings.get(String(row.booking_id))?.dropoff_date) > "2026-11-21")).toBe(true);
+    // The other technicians of branch A still carry work, so the board is not a one-person queue.
+    expect(rows("jobs").filter((row) => ["seed-tech-a2", "seed-tech-a3"].includes(String(row.assigned_user_id)) && !["delivered", "cancelled", "no-show"].includes(String(row.stage))).length).toBeGreaterThan(0);
+  });
+
+  it("keeps finance in believable magnitudes with a few refunds and no negative outstanding", () => {
+    const sum = (kind: string) => rows("operational_money_events").filter((row) => row.kind === kind).reduce((total, row) => total + Number(row.amount_minor), 0) / 100;
+    for (const kind of ["collection", "recognized-revenue", "direct-cost", "overhead"]) {
+      expect(sum(kind), kind).toBeGreaterThan(300_000);
+      expect(sum(kind), kind).toBeLessThan(12_000_000);
+    }
+    expect(sum("direct-cost")).toBeLessThan(sum("recognized-revenue"));
+    expect(sum("collection") - sum("refund")).toBeLessThan(sum("recognized-revenue") * 1.15);
+    expect(rows("operational_money_events").filter((row) => row.kind === "refund").length).toBeGreaterThanOrEqual(2);
+    const net = new Map<string, number>();
+    for (const event of rows("operational_money_events")) {
+      if (!event.quote_id || !["collection", "refund"].includes(String(event.kind))) continue;
+      net.set(String(event.quote_id), (net.get(String(event.quote_id)) ?? 0) + (event.kind === "refund" ? -1 : 1) * Number(event.amount_minor));
+    }
+    let quoted = 0, outstanding = 0;
+    for (const accepted of rows("quote_acceptance_events")) {
+      const total = Number(((accepted.accepted_snapshot as Json).value as { total: { minor: number } }).total.minor);
+      const paid = net.get(String(accepted.quote_id)) ?? 0;
+      quoted += total;
+      outstanding += Math.max(0, total - paid);
+    }
+    expect(outstanding / 100).toBeGreaterThan(100_000);
+    expect(outstanding / 100).toBeLessThan(3_500_000);
+    expect(outstanding).toBeLessThan(quoted * 0.6);
+    for (const invoice of rows("invoices")) expect(Number(invoice.paid_minor)).toBeLessThanOrEqual(Number(invoice.total_minor));
+  });
+
+  it("seeds the advertised promotions as valid, bilingual, current policy versions with reservations, allocations and pools that reference them", () => {
+    const versions = new Map(rows("commercial_policy_versions").filter((row) => row.family === "promotion-qualification").map((row) => [`${row.policy_id}|${row.version}`, row]));
+    const names = [...versions.values()].map((row) => (((row.value as Json).value) as { beneficiaryRule: { ar: string; en: string } }).beneficiaryRule);
+    expect(versions.size).toBe(6);
+    const text = names.map((name) => name.en).join(" | ");
+    for (const needle of ["44,999", "52,999", "39,999", "32,999", "10,000", "Fourth car free"]) expect(text, needle).toContain(needle);
+    for (const name of names) { expect(name.ar.length).toBeGreaterThan(5); expect(name.en.length).toBeGreaterThan(5); expect(/[\u0600-\u06FF]/.test(name.en)).toBe(false); expect(/[A-Za-z]{3}/.test(name.ar.replace(/EGP/g, ""))).toBe(false); }
+    const limited = [...versions.values()].find((row) => row.policy_id === "promotion-qualification:seed-ultimate-club")!;
+    expect(((limited.value as Json).value as { maximumUnits: number }).maximumUnits).toBe(15);
+    const referral = [...versions.values()].find((row) => row.policy_id === "promotion-qualification:seed-warranty-card-referral")!;
+    expect(((referral.value as Json).value as { recipient: { transferWarranty: boolean }; discountAllocation: { perVehicle: { minor: number } } }).discountAllocation.perVehicle.minor).toBe(1_000_000);
+    expect(((referral.value as Json).value as { recipient: { transferWarranty: boolean } }).recipient.transferWarranty).toBe(false);
+    const active = new Set(rows("commercial_policy_active").map((row) => `${row.policy_id}|${row.version}`));
+    const today = "2026-11-21";
+    for (const [key, row] of versions) {
+      expect(active.has(key), key).toBe(true);
+      expect(row.state).toBe("approved");
+      expect(String(row.effective_from) <= today, key).toBe(true);
+      if (row.effective_through) expect(String(row.effective_through) >= today, key).toBe(true);
+      expect(row.effective_through === null || String(row.effective_through) >= String(row.effective_from)).toBe(true);
+    }
+    for (const [table, column, versionColumn] of [["promotion_pools", "promotion_id", "policy_version"], ["promotion_qualifications", "promotion_id", "policy_version"], ["promotion_allocations", "promotion_id", "policy_version"], ["promotion_reservations", "promotion_id", "promotion_version"]] as const) {
+      expect(rows(table).length, table).toBeGreaterThan(0);
+      for (const row of rows(table)) expect(versions.has(`${row[column]}|${row[versionColumn]}`), `${table} ${row[column]}`).toBe(true);
+    }
+    const states = new Set(rows("promotion_reservations").map((row) => row.status));
+    for (const status of ["enquiry", "reserved", "scheduled", "redeemed", "cancelled", "expired"]) expect(states.has(status), status).toBe(true);
+    expect(new Set(rows("promotion_allocations").map((row) => row.status))).toEqual(new Set(["reserved", "consumed", "reversed"]));
+    expect(rows("promotion_reservations").filter((row) => row.status !== "enquiry").length).toBeGreaterThanOrEqual(20);
+    const grouped = rows("promotion_qualifications").filter((row) => (row.vehicle_ids as string[]).length === 3);
+    expect(grouped.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("marks unconfirmed adjacent services quietly and keeps confirmed prices unchanged", () => {
+    const unconfirmed = rows("catalogue_package_versions").filter((row) => String(row.package_id).startsWith("seed-pkg-draft-") && row.package_id !== "seed-pkg-draft-roof");
+    expect(unconfirmed.length).toBeGreaterThanOrEqual(6);
+    for (const row of unconfirmed) {
+      expect(row.state).toBe("draft");
+      const name = (row.name as Json).value as { ar: string; en: string };
+      expect(name.en).toMatch(/availability unconfirmed/);
+      expect(name.ar.length).toBeGreaterThan(5);
+    }
+    expect(rows("services").filter((row) => String(row.id).startsWith("seed-svc-") && row.active === false).every((row) => /unconfirmed/.test(String(row.price_label)))).toBe(true);
+  });
+
   it("requires both safeguards before purging", () => {
     expect(purgeGate(parseArgs([]), {}).mode).toBe("dry-run");
     expect(purgeGate(parseArgs(["--execute"]), {}).mode).toBe("dry-run");

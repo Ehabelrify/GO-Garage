@@ -76,10 +76,10 @@ async function seed() {
     );
 
     const demoStaff = [
-      ["demo-owner", "Owner@noemail.com", "Demo Owner", "owner", []],
-      ["demo-manager", "Manager@noemail.com", "Salma Nabil", "branch-manager", ["branch-a"]],
-      ["demo-reception", "Reception@noemail.com", "Karim Adel", "receptionist", ["branch-a"]],
-      ["demo-technician", "Technician@noemail.com", "Youssef Samir", "technician", ["branch-a"]],
+      ["demo-owner", "owner@noemail.com", "Sherif Abdallah", "owner", []],
+      ["demo-manager", "manager@noemail.com", "Salma Nabil", "branch-manager", ["branch-a"]],
+      ["demo-reception", "reception@noemail.com", "Karim Adel", "receptionist", ["branch-a"]],
+      ["demo-technician", "technician@noemail.com", "Youssef Samir", "technician", ["branch-a"]],
     ] as const;
     for (const [userId, email, name, role, branchIds] of demoStaff) {
       await client.query(
@@ -87,6 +87,15 @@ async function seed() {
          VALUES ($1, $2, $3, $4, $5::text[], 'active')
          ON CONFLICT (clerk_user_id) DO NOTHING`,
         [userId, email, name, role, branchIds],
+      );
+      // Databases seeded earlier carry the generic "Demo Owner" name: give it a person's name.
+      await client.query("UPDATE staff_memberships SET full_name = $2 WHERE clerk_user_id = $1 AND full_name = 'Demo Owner'", [userId, name]);
+      // Databases seeded earlier carry a mixed-case email (for example Owner@noemail.com): store it lowercase unless that would collide.
+      await client.query(
+        `UPDATE staff_memberships SET email = lower(email)
+         WHERE clerk_user_id = $1 AND email <> lower(email)
+           AND NOT EXISTS (SELECT 1 FROM staff_memberships o WHERE lower(o.email) = lower($2) AND o.clerk_user_id <> $1)`,
+        [userId, email],
       );
     }
     for (const service of initialState.services) {
@@ -194,6 +203,13 @@ async function seed() {
       }
     }
 
+    // Databases seeded earlier carry the legacy DEMO plates: replace them with the realistic ones.
+    for (const customer of initialState.customers) {
+      for (const vehicle of customer.vehicles) {
+        await client.query("UPDATE vehicles SET plate = $2 WHERE id = $1 AND plate LIKE 'DEMO %'", [vehicle.id, vehicle.plate]);
+      }
+    }
+
     for (const booking of initialState.bookings) {
       await client.query(
         `INSERT INTO customer_branches (customer_id, branch_id)
@@ -251,7 +267,7 @@ async function seed() {
         branchId: "branch-a",
         customerId: "customer-sample-1",
         vehicleId: "vehicle-sample-1",
-        label: "Mariam Hassan",
+        label: "مريم حسن",
         status: "open",
         unread: 2,
         bookingId: "booking-sample-1",
@@ -263,7 +279,7 @@ async function seed() {
         branchId: "branch-b",
         customerId: "customer-sample-2",
         vehicleId: "vehicle-sample-2",
-        label: "Omar Fawzy",
+        label: "Hossam Ibrahim",
         status: "pending",
         unread: 0,
         bookingId: "booking-sample-2",
@@ -275,7 +291,7 @@ async function seed() {
         branchId: "branch-a",
         customerId: "customer-sample-3",
         vehicleId: "vehicle-sample-3",
-        label: "Nour El-Sayed",
+        label: "نورهان السيد",
         status: "resolved",
         unread: 0,
         bookingId: "booking-sample-3",
@@ -292,7 +308,7 @@ async function seed() {
         [sample.id, sample.branchId, sample.label, sample.customerId, sample.vehicleId, sample.status, sample.unread, sample.bookingId],
       );
       const followup = sample.id === "wa-sample-open"
-        ? { id: `${sample.id}-bot`, kind: "bot", body: "Sample quote only. We can check a drop-off date using the branch capacity rules." }
+        ? { id: `${sample.id}-bot`, kind: "bot", body: "We can check a drop-off date using the branch capacity rules." }
         : sample.id === "wa-sample-pending"
           ? { id: `${sample.id}-customer`, kind: "customer", body: "Thanks. Please let me know if the estimate changes." }
           : { id: `${sample.id}-customer`, kind: "customer", body: "Thank you for the update." };

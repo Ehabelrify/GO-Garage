@@ -103,7 +103,7 @@ export function generateMessaging(world: World) {
         });
       }
     });
-    const events: Array<[string, string, string | null, Date]> = [["seeded-scenario", "Fictional development inbox scenario (seed data).", OWNER, base]];
+    const events: Array<[string, string, string | null, Date]> = [["seeded-scenario", "Conversation opened in the WhatsApp simulator.", OWNER, base]];
     if (status !== "open") events.push(["status-changed", `Status set to ${status}.`, staff, lastAt]);
     if (chat.kind === "special") events.push(["routed-to-owner", "Special request routed to the Owner.", managerOf(chat.branchId), new Date(times[2]?.getTime() ?? base.getTime())]);
     events.forEach(([type, details, actor, at], index) => {
