@@ -1,0 +1,20 @@
+/* Reference-only GO Stores brand tokens. Not imported by the application. */
+:root {
+  --go-graphite: #17191d;
+  --go-graphite-soft: #2a2e33;
+  --go-warm-white: #f6f4ef;
+  --go-surface: #ffffff;
+  --go-performance-red: #c82127;
+  --go-performance-red-dark: #98171b;
+  --go-yellow-gold: #f3b61f;
+  --go-yellow-gold-dark: #a86f00;
+  --go-brushed-silver: #b9bec4;
+  --go-line: #d6d4cf;
+  --go-muted: #676b70;
+
+  /* Semantic tones remain independent from the customer-facing brand. */
+  --go-info: #2d6fa3;
+  --go-success: #2d7a4f;
+  --go-warning: #9a6700;
+  --go-danger: #b42318;
+}
