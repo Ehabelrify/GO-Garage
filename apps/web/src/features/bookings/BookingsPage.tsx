@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { hasCapability } from "../../shared/capabilities";
+import { runBulk } from "../../shared/selection";
 import { CheckCircle2, Copy, ExternalLink, MessageCircle, Phone as PhoneIcon, Plus, UserX, XCircle } from "lucide-react";
 import { formatPlateDisplay, type Booking, type BranchId, type CreateCustomerInput } from "@garage/domain";
 import { bookingAvailabilityApi, unknownWriteOutcomeCopy, useGarageStore, type SlotAvailability } from "../../shared/store";
 import { dateLabel as dateText, serviceDisplay, timeLabel, type ModalConfig, type RecordPageProps } from "../../shared/ui";
 import {
-  Collapsible, ConfirmDialog, DataTable, DateText, DetailDrawer, EmptyState, Field, FilterBar, FormSection, PageHeader, RecordRef, RequiredNote, Select, StatusBadge, useUrlState,
+  BulkRunDialog, Collapsible, ConfirmDialog, DataTable, DateText, DetailDrawer, EmptyState, Field, FilterBar, FormSection, PageHeader, RecordRef, RequiredNote, Select, StatusBadge, useUrlState,
 } from "../../shared/components";
 import { applyDraftChange, dateRanges, defaultRange, draftReady, isoDate, matchesBooking, noShowJob, showBranchColumn, sortBookings, sortKey, telHref, whatsappHref, type BookingDraft, type DateRange } from "./booking-logic";
 import { ContactLinks, VehicleCell } from "./cells";
@@ -60,6 +61,7 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState<PendingAction>(null);
+  const [bulkConfirm, setBulkConfirm] = useState<Booking[] | null>(null);
   const [acting, setActing] = useState(false);
   const [moving, setMoving] = useState<{ date: string; time: string } | null>(null);
   const [moveAvailability, setMoveAvailability] = useState<SlotAvailability | null | "error">(null);
@@ -221,6 +223,7 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
       ]}
       onClear={clearFilters}
       resultCount={rows.length}
+      viewsId="bookings"
     />
 
     <DataTable
@@ -230,19 +233,25 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
       rowKey={(row) => row.id}
       selectedKey={record || null}
       onRowClick={(row) => setRecord(row.id)}
+      listId="bookings"
+      exportName="bookings"
+      bulk={canManage && !store.actor?.isDemo ? {
+        isSelectable: (row) => row.status === "pending",
+        actions: ({ rows: picked }) => <button type="button" className="btn btn-sm btn-primary" onClick={() => setBulkConfirm(picked)}>{t(`Confirm ${picked.length} bookings`, `تأكيد ${picked.length} حجز`)}</button>,
+      } : undefined}
       empty={state.bookings.length === 0
         ? <EmptyState title={t("No bookings yet", "لا توجد حجوزات بعد")} action={canManage ? <button type="button" className="btn btn-primary" onClick={openCreate}>{t("Add booking", "إضافة حجز")}</button> : undefined} />
         : <EmptyState variant="no-results" title={t("No matching bookings", "لا توجد حجوزات مطابقة")} action={<button type="button" className="btn" onClick={clearFilters}>{t("Clear filters", "مسح التصفية")}</button>} />}
       columns={[
-        { key: "when", header: t("Drop-off", "الاستلام"), primary: true, sortable: true, sortValue: sortKey, render: (row) => <span className="bk-when"><DateText value={row.dropoffDate} lang={lang} /><DateText value={row.dropoffTime} lang={lang} time={row.dropoffTime} className="bk-sub" /></span> },
-        { key: "customer", header: t("Customer", "العميل"), sortable: true, sortValue: (row) => customerName(row.customerId), render: (row) => <span className="bk-cell">
+        { key: "when", header: t("Drop-off", "الاستلام"), primary: true, csv: (row) => `${row.dropoffDate.slice(0, 10)} ${row.dropoffTime}`.trim(), sortable: true, sortValue: sortKey, render: (row) => <span className="bk-when"><DateText value={row.dropoffDate} lang={lang} /><DateText value={row.dropoffTime} lang={lang} time={row.dropoffTime} className="bk-sub" /></span> },
+        { key: "customer", header: t("Customer", "العميل"), csv: (row) => customerName(row.customerId), sortable: true, sortValue: (row) => customerName(row.customerId), render: (row) => <span className="bk-cell">
           <RecordRef type="customer" id={row.customerId} label={customerName(row.customerId)} hideIcon />
           {canCall && <ContactLinks phone={phoneOf(row.customerId)} lang={lang} />}
         </span> },
-        { key: "vehicle", header: t("Vehicle", "المركبة"), render: (row) => <VehicleCell id={row.vehicleId} plate={vehicleFor(row.customerId, row.vehicleId)?.plate} makeModel={vehicleFor(row.customerId, row.vehicleId)?.makeModel} /> },
-        { key: "service", header: t("Service", "الخدمة"), render: (row) => <bdi>{row.workSummary?.[lang] ?? serviceName(row.serviceId)}</bdi> },
+        { key: "vehicle", header: t("Vehicle", "المركبة"), csv: (row) => formatPlateDisplay(vehicleFor(row.customerId, row.vehicleId)?.plate ?? ""), render: (row) => <VehicleCell id={row.vehicleId} plate={vehicleFor(row.customerId, row.vehicleId)?.plate} makeModel={vehicleFor(row.customerId, row.vehicleId)?.makeModel} /> },
+        { key: "service", header: t("Service", "الخدمة"), csv: (row) => row.workSummary?.[lang] ?? serviceName(row.serviceId), render: (row) => <bdi>{row.workSummary?.[lang] ?? serviceName(row.serviceId)}</bdi> },
         ...(branchColumn ? [{ key: "branch", header: t("Branch", "الفرع"), render: (row: Booking) => <bdi>{branchName(row.branchId)}</bdi> }] : []),
-        { key: "status", header: t("Status", "الحالة"), sortable: true, sortValue: (row) => row.status, render: (row) => <StatusBadge status={row.status} domain="booking" lang={lang} /> },
+        { key: "status", header: t("Status", "الحالة"), csv: (row) => row.status, sortable: true, sortValue: (row) => row.status, render: (row) => <StatusBadge status={row.status} domain="booking" lang={lang} /> },
         { key: "actions", header: t("Actions", "إجراءات"), hideOnCard: false, render: (row: Booking) => {
           const phone = canCall ? phoneOf(row.customerId) : undefined;
           const plate = vehicleFor(row.customerId, row.vehicleId)?.plate;
@@ -263,6 +272,14 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
         } },
       ]}
     />
+
+    <BulkRunDialog open={bulkConfirm !== null} lang={lang} title={t(`Confirm ${bulkConfirm?.length ?? 0} bookings?`, `تأكيد ${bulkConfirm?.length ?? 0} حجز؟`)}
+      body={t("Each booking is checked on its own; any that cannot be confirmed are listed afterwards.", "يُفحص كل حجز على حدة، وتُعرض الحجوزات التي تعذر تأكيدها بعد ذلك.")}
+      confirmLabel={t("Confirm all", "تأكيد الكل")}
+      run={() => runBulk(bulkConfirm ?? [], (item) => item.id, async (item) => { const result = await store.confirmBooking(item.id); return result.ok ? { ok: true } : { ok: false, error: result.error }; })}
+      label={(key) => { const item = state.bookings.find((b) => b.id === key); return item ? `${customerName(item.customerId)} · ${vehicleFor(item.customerId, item.vehicleId)?.plate ?? ""}` : "-"; }}
+      errorText={(code) => message(code ?? "", { en: "Could not be confirmed.", ar: "تعذر التأكيد." })}
+      onFinished={() => setBulkConfirm(null)} onCancel={() => setBulkConfirm(null)} />
 
     {/* Detail */}
     <DetailDrawer
