@@ -29,3 +29,21 @@ describe("reclaimInvitation (P2T-022)", () => {
     expect(updateCall[1]).toEqual(["u1", "receptionist", ["b2"], { "bookings.manage": false }, "a@x.com", "Ann"]);
   });
 });
+
+import { claimInvitationInTransaction } from "./reclaim-invitation";
+describe("claimInvitationInTransaction (P2T-008)", () => {
+  it("claims and writes the audit row on the same client, with no email in the summary", async () => {
+    const client = runner([{ rows: [{ clerk_user_id: "u1", role: "receptionist" }], rowCount: 1 }, { rows: [], rowCount: 1 }]);
+    expect(await claimInvitationInTransaction(client, "u1", "a@x.com", "Ann")).toBe(true);
+    expect(client.query).toHaveBeenCalledTimes(2);
+    const [sql, params] = client.query.mock.calls[1];
+    expect(String(sql)).toMatch(/staff_customer_audit_events/);
+    expect(params.slice(1, 5)).toEqual(["staff", "u1", "claimed-invitation", null]);
+    expect(JSON.stringify(params)).not.toContain("a@x.com");
+  });
+  it("writes nothing when no invitation matches", async () => {
+    const client = runner([{ rows: [], rowCount: 0 }]);
+    expect(await claimInvitationInTransaction(client, "u1", "a@x.com", "Ann")).toBe(false);
+    expect(client.query).toHaveBeenCalledTimes(1);
+  });
+});

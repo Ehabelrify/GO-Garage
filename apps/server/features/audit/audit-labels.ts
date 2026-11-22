@@ -61,6 +61,7 @@ const actionLabels: Record<string, { en: string; ar: string }> = {
   generated: { en: "Generated", ar: "إنشاء" },
   created: { en: "Created", ar: "إنشاء" },
   edited: { en: "Edited", ar: "تعديل" },
+  "vehicle-added": { en: "Vehicle added", ar: "إضافة مركبة" },
   issued: { en: "Issued", ar: "إصدار" },
   "payment-recorded": { en: "Payment recorded", ar: "تسجيل دفعة" },
   voided: { en: "Voided", ar: "إلغاء" },

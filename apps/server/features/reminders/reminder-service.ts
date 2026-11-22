@@ -223,6 +223,19 @@ async function cancelStale(client: Runner): Promise<number> {
   return cancelled.rows.length;
 }
 
+/** P2T-009: cancels the due (including snoozed) reminders of a cancelled booking and its job, with a reminder_events row each. Runs in the caller's transaction. */
+export async function cancelForBooking(client: Runner, bookingId: string, actorId: string): Promise<number> {
+  const cancelled = await client.query<{ id: string }>(
+    `UPDATE reminders r SET status = 'cancelled', reason = 'booking-cancelled', updated_at = now()
+     WHERE r.environment_id = $1 AND r.status = 'due'
+       AND (r.booking_id = $2 OR r.job_id IN (SELECT j.id FROM jobs j WHERE j.booking_id = $2))
+     RETURNING r.id`, [env(), bookingId]);
+  for (const row of cancelled.rows) {
+    await client.query("INSERT INTO reminder_events (reminder_id, action, actor_id, details) VALUES ($1, 'cancelled', $2, 'booking-cancelled')", [row.id, actorId]);
+  }
+  return cancelled.rows.length;
+}
+
 /**
  * Idempotent generator. Safe to call on a timer: every candidate has a dedupe key (source + rule + date or revision), so repeated runs
  * never duplicate a reminder. Simulated only: marks reminders sent-simulated for rules with auto_send; it never calls a provider.

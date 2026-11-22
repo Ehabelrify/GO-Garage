@@ -6,6 +6,8 @@ import type { Branch, BranchId, Service } from "@garage/domain";
 import { initialState } from "../seed/seed-data";
 import { dateOnlyFromSql } from "../../infrastructure/database/date-only";
 import type { QuoteVersionRef, WorkComponent } from "@garage/domain";
+import { cancelTransportForBooking } from "../commercial/transport-service";
+import { cancelForBooking as cancelRemindersForBooking } from "../reminders/reminder-service";
 import { acceptedQuoteInTransaction, attachConfirmedQuoteSnapshot } from "../commercial/quote-booking";
 import { addLocalDays, assessConfiguredSlot, bookingAuthority, configuredAvailability, demandFromWork, hasIntervalCapacity, lockAvailability, occupancyByDay, validLocalTime } from "./availability-service";
 
@@ -246,7 +248,7 @@ export async function rescheduleConfirmedBooking(client: PoolClient, actor: Book
   await recordChange(client,actor,booking.id,input.idempotencyKey,"reschedule",{date,time:input.dropoffTime});
   return {status:"confirmed",bookingId:booking.id,jobId:booking.job_id};
 }
-export async function cancelConfirmedBooking(client: PoolClient, actor: BookingActor, input: {bookingId:string;idempotencyKey:string;reason:string}): Promise<{status:"cancelled"|"replayed";bookingId:string}|{status:"forbidden"|"invalid";code:string}> {
+export async function cancelConfirmedBooking(client: PoolClient, actor: BookingActor, input: {bookingId:string;idempotencyKey:string;reason:string;notifyCustomer?:boolean}): Promise<{status:"cancelled"|"replayed";bookingId:string}|{status:"forbidden"|"invalid";code:string}> {
   if (!input.bookingId || !input.idempotencyKey || !input.reason?.trim()) return {status:"invalid",code:"INVALID_CANCELLATION"};
   const discovered=await changeTarget(client,input.bookingId);
   if (!discovered) return {status:"invalid",code:"BOOKING_NOT_FOUND"};
@@ -262,7 +264,24 @@ export async function cancelConfirmedBooking(client: PoolClient, actor: BookingA
   await lockAvailability(client,booking.branch_id,[booking.dropoff_date,...occupied.rows.map(r=>r.occupied_date)],occupied.rows.map(r=>r.bay_type));
   await client.query("UPDATE bookings SET status='cancelled',updated_at=now() WHERE id=$1",[booking.id]);
   await client.query("UPDATE jobs SET stage='cancelled',updated_at=now() WHERE id=$1",[booking.job_id]);
-  await client.query("INSERT INTO job_events(id,job_id,from_stage,to_stage,actor_user_id,note) VALUES($1,$2,'booked','cancelled',$3,$4)",[`event-${randomUUID()}`,booking.job_id,actor.kind==="staff"?actor.userId:"customer-confirmation",input.reason.trim()]);
+  const actorId=actor.kind==="staff"?actor.userId:"customer-confirmation";
+  await client.query("INSERT INTO job_events(id,job_id,from_stage,to_stage,actor_user_id,note) VALUES($1,$2,'booked','cancelled',$3,$4)",[`event-${randomUUID()}`,booking.job_id,actorId,cancellationNote(input.reason.trim(),input.notifyCustomer)]);
+  await cancelBookingDownstream(client,booking.id,actorId,input.reason.trim());
   await recordChange(client,actor,booking.id,input.idempotencyKey,"cancel",{reason:input.reason.trim()});
   return {status:"cancelled",bookingId:booking.id};
+}
+
+/** Event note for a cancellation: the reason plus the staff choice about telling the customer (P2T-009; no message is sent yet). */
+export function cancellationNote(reason: string, notifyCustomer?: boolean): string {
+  return `${reason} [customer notification: ${notifyCustomer ? "requested" : "not requested"}]`;
+}
+
+/**
+ * P2T-009: downstream cleanup when a booking is cancelled, inside the caller's transaction. Cancels open transport requests and due
+ * or snoozed reminders. Promotion reservations and deposits are not touched here: a linked reservation blocks the cancel upstream (409).
+ */
+export async function cancelBookingDownstream(client: Pick<PoolClient, "query">, bookingId: string, actorId: string, reason: string): Promise<{ transportCancelled: number; remindersCancelled: number }> {
+  const transport = await cancelTransportForBooking(client, bookingId, actorId, reason);
+  const reminders = await cancelRemindersForBooking(client, bookingId, actorId);
+  return { transportCancelled: transport.length, remindersCancelled: reminders };
 }

@@ -32,3 +32,20 @@ export async function listTransport(context:ExecutionContext,actor:GarageActor){
 export async function readTransport(context:ExecutionContext,actor:GarageActor,id:string){return withTransaction(async client=>{const row=await get(client,context,id);access(actor,row.branch_id);const events=await client.query("SELECT revision,from_status,to_status,reason,evidence_ref IS NOT NULL AS has_evidence,occurred_at FROM transport_events WHERE transport_id=$1 ORDER BY revision",[id]);return{request:project(row),events:events.rows};});}
 export async function listTransportQueueItems(context:ExecutionContext,actor:GarageActor){const rows=await listTransport(context,actor);return rows.filter(row=>!["completed","cancelled"].includes(row.status)).map(row=>({kind:"transport",recordId:row.id,branchId:row.branchId,stage:row.status,nextAction:row.status==="exception"?"resolve-transport-exception":row.status==="confirmed"?"coordinate-committed-window":"review-transport",committedAt:row.committedWindow?.startsAt??null,waitingReason:row.missing[0]}));}
 export const transportContext=commercialContext;
+
+/**
+ * P2T-009: when a booking is cancelled, cancels its open transport requests (proposed, requested, confirmed) inside the caller's
+ * transaction and appends a transport event with the cancellation reason. Requests already in progress, in custody, completed,
+ * cancelled or in exception are left alone: custody history is never rewritten. Returns the cancelled request ids.
+ */
+export async function cancelTransportForBooking(client:Pick<PoolClient,"query">,bookingId:string,actorId:string,reason:string):Promise<string[]>{
+  const open=await client.query<{id:string;status:string;revision:number}>("SELECT id,status,revision FROM transport_requests WHERE booking_id=$1 AND status IN ('proposed','requested','confirmed') FOR UPDATE",[bookingId]);
+  const cancelled:string[]=[];
+  for(const row of open.rows){
+    const revision=row.revision+1;
+    await client.query("UPDATE transport_requests SET status='cancelled',revision=$2,updated_at=now() WHERE id=$1",[row.id,revision]);
+    await client.query("INSERT INTO transport_events(transport_id,revision,from_status,to_status,actor_id,reason) VALUES($1,$2,$3,'cancelled',$4,$5)",[row.id,revision,row.status,actorId,`Booking cancelled: ${reason}`.slice(0,300)]);
+    cancelled.push(row.id);
+  }
+  return cancelled;
+}

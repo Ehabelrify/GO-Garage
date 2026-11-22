@@ -30,3 +30,24 @@ export async function reclaimInvitation(client: QueryRunner, userId: string, nor
   await recordStaffCustomerAudit(client, { entityKind: "staff", entityId: userId, action: "claimed-invitation", summary: `Invitation claimed as ${String(invitation.role)}`, actorUserId: userId });
   return true;
 }
+
+/**
+ * P2T-008: the first-time claim of an invited row by a verified identity. The claim UPDATE and its audit row share the caller's
+ * transaction, so an audit failure rolls the claim back. Role and branches come only from the invitation row.
+ */
+export async function claimInvitationInTransaction(client: QueryRunner, userId: string, normalizedEmail: string, fullName: string): Promise<boolean> {
+  const claimed = await client.query(
+    `UPDATE staff_memberships
+        SET clerk_user_id = $1,
+            full_name = CASE WHEN $3 <> '' THEN $3 ELSE full_name END,
+            status = 'active',
+            updated_at = now()
+      WHERE status = 'invited' AND role <> 'owner' AND lower(email) = $2
+        AND NOT EXISTS (SELECT 1 FROM staff_memberships WHERE lower(email) = $2 AND status = 'active')
+      RETURNING clerk_user_id, role`,
+    [userId, normalizedEmail, fullName],
+  );
+  if (!claimed.rowCount) return false;
+  await recordStaffCustomerAudit(client, { entityKind: "staff", entityId: userId, action: "claimed-invitation", summary: `Invitation claimed as ${String(claimed.rows[0]?.role)}`, actorUserId: userId });
+  return true;
+}

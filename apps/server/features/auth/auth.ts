@@ -1,4 +1,4 @@
-import { reclaimInvitation } from "./reclaim-invitation";
+import { reclaimInvitation, claimInvitationInTransaction } from "./reclaim-invitation";
 import type { NextFunction, Request, Response } from "express";
 import { clerkClient, getAuth } from "@clerk/express";
 import { withTransaction, pool } from "../../infrastructure/database/db";
@@ -69,18 +69,8 @@ async function provisionFromVerifiedIdentity(userId: string): Promise<Membership
   // Invite-only: the verified email must match an owner pre-approved row
   // (status 'invited'). Claiming binds the Clerk user id to that row; role and
   // branches come only from the row, never from client or Clerk metadata.
-  const claimed = await pool.query<{ clerk_user_id: string }>(
-    `UPDATE staff_memberships
-        SET clerk_user_id = $1,
-            full_name = CASE WHEN $3 <> '' THEN $3 ELSE full_name END,
-            status = 'active',
-            updated_at = now()
-      WHERE status = 'invited' AND role <> 'owner' AND lower(email) = $2
-        AND NOT EXISTS (SELECT 1 FROM staff_memberships WHERE lower(email) = $2 AND status = 'active')
-      RETURNING clerk_user_id`,
-    [userId, normalizedEmail, fullName],
-  );
-  if (!claimed.rowCount) return undefined;
+  const claimed = await withTransaction((client) => claimInvitationInTransaction(client, userId, normalizedEmail, fullName));
+  if (!claimed) return undefined;
   return findMembership(userId);
 }
 
