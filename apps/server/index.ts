@@ -9,6 +9,7 @@ import { createServer as createViteServer } from "vite";
 import { CLERK_PROXY_PATH, clerkProxyMiddleware, getClerkProxyHost } from "./features/auth/clerkProxyMiddleware";
 import { createApiRouter } from "./features/operations/api";
 import { pool } from "./infrastructure/database/db";
+import { checkReadiness } from "./infrastructure/health/readiness";
 import { assertDatasetBoundary } from "./infrastructure/database/dataset-boundary";
 
 const app = express();
@@ -74,6 +75,8 @@ app.use("/api", limiter(API_GENERAL_LIMIT, "RATE_LIMITED"));
 app.use("/api/public/warranty-verification", limiter(PUBLIC_VERIFY_LIMIT, "RATE_LIMITED"));
 app.use("/api/provider/whatsapp", limiter(PROVIDER_WEBHOOK_LIMIT, "RATE_LIMITED"));
 app.post("/api/demo/session", limiter(DEMO_SESSION_LIMIT, "RATE_LIMITED"));
+// Readiness (database + schema), separate from the constant liveness answer at /api/health (P2T-014).
+app.get("/api/ready", async (_req, res) => { const result = await checkReadiness(pool); res.status(result.ready ? 200 : 503).json({ ready: result.ready, database: result.database, schema: result.schema }); });
 app.use("/api", createApiRouter());
 app.use((req, res, next) => {
   if (req.path.startsWith("/warranty/verify/")) {
