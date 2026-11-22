@@ -34,3 +34,6 @@ activity log, MIGRATIONS.md and this plan's status below.
 - W1, W2, W3, W4, W5 done and committed. Gate: typecheck, 1817 tests, build; CI on `873d92a` green including the database job.
 - Remaining from this plan: nothing that can be closed from source without an owner decision, a database or a browser. The "cannot be closed" list above is the backlog.
 - Next session: push, run Visual checks (new flows included), add database integration tests for the new queries, fix contrast from the named elements, then re-assess statuses toward Verified.
+
+## Addendum 23 Nov 00:15: the former open list, section 3
+Done: refund and reversal workflow and adjustment invoices (0041), remaining audit and first-claim transaction, cancel cleanup and notify choice, workshop reason UI and server rule, pickup revision read endpoint, refresh for raw-fetch writes, database integration suites (CI only), P2T-017 assessment. In progress: route matrix for the remaining routers (package A). Not done by design: P2T-017 splits (evidence does not justify them), booking-cancelled customer message, Reverse and Refund screens, P1-045 to P1-060 runtime proof (their database integration coverage is the new CI suites plus the owner Replit run).
