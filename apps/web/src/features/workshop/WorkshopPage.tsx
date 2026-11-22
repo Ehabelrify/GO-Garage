@@ -1,15 +1,16 @@
+import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { nextJobStages } from "@garage/domain";
 import type { GarageRole, Job, JobStage } from "@garage/domain";
 import { unknownWriteOutcomeCopy, useGarageStore } from "../../shared/store";
 import { dateLabel, stageNames, type RecordPageProps } from "../../shared/ui";
 import {
-  Collapsible, ConfirmDialog, DataTable, DetailDrawer, EmptyState, FilterBar, Notice, PageHeader, RecordRef,
-  Skeleton, StatusBadge, TabBar, useUrlState, type Column,
+  Collapsible, ConfirmDialog, DataTable, DateText, DetailDrawer, EmptyState, FilterBar, Notice, PageHeader, Plate, RecordRef,
+  Select, Skeleton, StatusBadge, TabBar, useUrlState, type Column,
 } from "../../shared/components";
 import {
-  actionsFor, boardStages, compareJobs, groupByStage, matchesJob, stageActionLabels, terminalStages,
-  type TechniciansState,
+  actionLabelFor, actionsFor, boardCount, boardStages, capColumn, columnTracks, compareJobs, groupByStage, isOverdue,
+  matchesJob, technicianCounts, terminalStages, type TechniciansState,
 } from "./workshop-logic";
 import "./WorkshopPage.css";
 
@@ -35,6 +36,8 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
   const [saving, setSaving] = useState("");
   const [confirm, setConfirm] = useState<{ job: Job; target: JobStage } | null>(null);
   const [moving, setMoving] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   useEffect(() => {
     if (!canAssign) return;
@@ -69,6 +72,18 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
     });
   }).sort((a, b) => compareJobs(a, b, pickupOf)), [state.jobs, query, stage, state.currentBranch, technicianFilter, isTechnician, store.actor, vehicleFor, customerName, serviceName, pickupOf]);
 
+  const baseJobs = useMemo(() => state.jobs.filter((job) => {
+    const vehicle = vehicleFor(job.customerId, job.vehicleId);
+    const searchable = `${vehicle?.plate ?? ""} ${vehicle?.makeModel ?? ""} ${customerName(job.customerId)} ${serviceName(job.serviceId)}`;
+    return matchesJob(job, searchable, { query, stage: "all", branch: state.currentBranch, technicianId: "all" });
+  }), [state.jobs, query, state.currentBranch, vehicleFor, customerName, serviceName]);
+  const techCounts = useMemo(() => technicianCounts(baseJobs), [baseJobs]);
+  const stageCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const job of baseJobs) counts[job.stage] = (counts[job.stage] ?? 0) + 1;
+    return counts;
+  }, [baseJobs]);
+
   const clearFilters = () => { setQuery(""); setStage("all"); setTechnicianFilter("all"); };
   const filtersActive = Boolean(query) || stage !== "all" || technicianFilter !== "all";
 
@@ -101,7 +116,8 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
   };
 
   const vehicleLabel = (job: Job) => vehicleFor(job.customerId, job.vehicleId)?.plate ?? t("Vehicle", "مركبة");
-  const actionLabel = (target: JobStage) => stageActionLabels[target][lang];
+  const actionLabel = (target: JobStage, technician = isTechnician) => actionLabelFor(target, technician)[lang];
+  const unassignedLabel = t("Unassigned", "غير مسند");
 
   const renderActions = (job: Job, big = false) => {
     const { primary, destructive } = actionsFor(nextJobStages(job.stage), isTechnician);
@@ -115,46 +131,64 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
   const open = openId ? state.jobs.find((job) => job.id === openId) : undefined;
 
   const columns: Column<Job>[] = [
-    { key: "plate", header: t("Vehicle", "المركبة"), primary: true, mono: true, sortable: true, sortValue: (j) => vehicleLabel(j), render: (j) => vehicleLabel(j) },
+    { key: "plate", header: t("Vehicle", "المركبة"), primary: true, sortable: true, sortValue: (j) => vehicleLabel(j), render: (j) => <Plate value={vehicleFor(j.customerId, j.vehicleId)?.plate} /> },
     { key: "customer", header: t("Customer", "العميل"), sortable: true, sortValue: (j) => customerName(j.customerId), render: (j) => customerName(j.customerId) },
     { key: "service", header: t("Service", "الخدمة"), render: (j) => state.bookings.find((b) => b.id === j.bookingId)?.workSummary?.[lang] ?? serviceName(j.serviceId) },
     { key: "stage", header: t("Stage", "المرحلة"), sortable: true, sortValue: (j) => stageNames[j.stage][lang], render: (j) => <StatusBadge status={j.stage} domain="job" lang={lang} /> },
     { key: "branch", header: t("Branch", "الفرع"), render: (j) => branchName(j.branchId) },
-    { key: "tech", header: t("Technician", "الفني"), render: (j) => techName(j.assignedUserId) || (j.assignedUserId ? t("Assigned", "مسند") : t("Unassigned", "غير مسند")) },
-    { key: "pickup", header: t("Pickup", "التسليم"), sortable: true, sortValue: pickupOf, render: (j) => { const p = pickupOf(j); return p.startsWith("9999") ? "—" : dateLabel(p, lang); } },
+    { key: "tech", header: t("Technician", "الفني"), render: (j) => techName(j.assignedUserId) || (j.assignedUserId ? t("Assigned", "مسند") : <span className="ws-pill">{unassignedLabel}</span>) },
+    { key: "pickup", header: t("Pickup", "التسليم"), sortable: true, sortValue: pickupOf, render: (j) => { const p = pickupOf(j); return p.startsWith("9999") ? "—" : <DateText value={p} lang={lang} />; } },
   ];
 
   const clearButton = <button type="button" className="btn btn-sm" onClick={clearFilters}>{t("Clear filters", "مسح التصفية")}</button>;
 
   const empty = isTechnician
-    ? <EmptyState title={t("No jobs assigned to you", "لا توجد أعمال مسندة إليك")} text={t("Ask a manager to assign a job.", "اطلب من المدير إسناد أمر عمل.")} />
+    ? <EmptyState title={t("No jobs assigned to you", "لا توجد أعمال مسندة إليك")} text={t("Ask a manager to assign a job, then refresh.", "اطلب من المدير إسناد أمر عمل ثم حدّث الصفحة.")}
+      action={<button type="button" className="btn btn-lg" onClick={() => void store.refresh()}>{t("Refresh", "تحديث")}</button>} />
     : filtersActive
       ? <EmptyState variant="no-results" title={t("No jobs match", "لا توجد أوامر مطابقة")} action={clearButton} />
       : <EmptyState title={t("No jobs yet", "لا توجد أوامر شغل بعد")} text={t("Jobs appear when a booking is confirmed.", "تظهر أوامر الشغل عند تأكيد الحجز.")} />;
 
+  const grouped = groupByStage(jobs);
+  const shownCount = !isTechnician && view !== "list" ? boardCount(grouped) : jobs.length;
   const header = <PageHeader
     title={isTechnician ? t("My jobs today", "أعمالي اليوم") : t("Workshop", "الورشة")}
-    meta={<span className="top-meta">{jobs.length} {t("jobs", "أوامر شغل")}</span>}
+    meta={<span className="top-meta">{shownCount} {t("jobs", "أوامر شغل")}</span>}
+    tabs={isTechnician ? undefined : <TabBar ariaLabel={t("View", "العرض")} value={view === "list" ? "list" : "board"} onChange={setView}
+      tabs={[{ id: "board", label: t("Board", "اللوحة") }, { id: "list", label: t("List", "القائمة") }]} />}
   />;
 
   if (store.status === "loading") return <>{header}<Skeleton rows={5} label={t("Loading", "جارٍ التحميل")} /></>;
   if (store.status === "error") return <>{header}<EmptyState variant="error" title={t("Could not load jobs", "تعذر تحميل أوامر الشغل")} action={<button type="button" className="btn btn-sm" onClick={() => window.location.reload()}>{t("Retry", "إعادة المحاولة")}</button>} /></>;
 
+  const assigneeNode = (job: Job) => {
+    const name = techName(job.assignedUserId);
+    if (name) return <bdi className="ws-assignee">{name}</bdi>;
+    if (job.assignedUserId) return <span className="ws-assignee">{t("Assigned", "مسند")}</span>;
+    if (!canAssign) return null;
+    return <button type="button" className="ws-pill ws-pill-action" onClick={() => setOpenId(job.id)}>{unassignedLabel} · {t("Assign", "إسناد")}</button>;
+  };
+
   const jobCard = (job: Job, compact: boolean) => {
     const vehicle = vehicleFor(job.customerId, job.vehicleId);
     const booking = state.bookings.find((b) => b.id === job.bookingId);
     const service = booking?.workSummary?.[lang] ?? serviceName(job.serviceId);
-    if (compact) return <button type="button" key={job.id} className="ws-card" onClick={() => setOpenId(job.id)}>
-      <span className="ws-plate">{vehicle?.plate ?? "—"}</span>
-      <span className="ws-sub"><bdi>{vehicle?.makeModel}</bdi><bdi>{customerName(job.customerId)}</bdi></span>
-      <span className="ws-card-foot"><span>{service}</span><span>{techName(job.assignedUserId) || (canAssign && !job.assignedUserId ? t("Unassigned", "غير مسند") : "")}</span></span>
-    </button>;
+    const overdue = booking ? isOverdue(booking.expectedPickup, job.stage, today) : false;
+    if (compact) return <article key={job.id} className="ws-card">
+      <button type="button" className="ws-open" onClick={() => setOpenId(job.id)}>
+        <span className="ws-plate-row"><Plate value={vehicle?.plate} />{overdue && <span className="ws-overdue">{t("Overdue", "متأخر")}</span>}</span>
+        <span className="ws-sub"><bdi>{vehicle?.makeModel}</bdi><bdi>{customerName(job.customerId)}</bdi></span>
+        <span className="ws-service">{service}</span>
+      </button>
+      {assigneeNode(job)}
+    </article>;
     return <article className="ws-tech-card" key={job.id}>
       <div className="ws-tech-head">
         <button type="button" className="ws-open" onClick={() => setOpenId(job.id)}>
-          <span className="ws-plate">{vehicle?.plate ?? "—"}</span>
+          <span className="ws-plate-row ws-plate-lg"><Plate value={vehicle?.plate} /></span>
           <span className="ws-sub"><bdi>{vehicle?.makeModel}</bdi><bdi>{customerName(job.customerId)}</bdi></span>
-          <span className="ws-sub">{service}{booking ? ` · ${t("Pickup", "التسليم")} ${dateLabel(booking.expectedPickup, lang)}` : ""}</span>
+          <span className="ws-service">{service}</span>
+          {booking && <span className="ws-sub">{t("Pickup", "التسليم")} <DateText value={booking.expectedPickup} lang={lang} />{overdue && <span className="ws-overdue">{t("Overdue", "متأخر")}</span>}</span>}
         </button>
         <StatusBadge status={job.stage} domain="job" lang={lang} />
       </div>
@@ -178,7 +212,7 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
         <dl className="ws-detail-grid">
           <div><dt>{t("Vehicle", "المركبة")}</dt><dd><RecordRef type="vehicle" id={open.vehicleId} label={vehicle?.plate} subtitle={vehicle?.makeModel} /></dd></div>
           <div><dt>{t("Customer", "العميل")}</dt><dd><RecordRef type="customer" id={open.customerId} label={customerName(open.customerId)} /></dd></div>
-          {booking && <div><dt>{t("Booking", "الحجز")}</dt><dd><RecordRef type="booking" id={booking.id} label={`${serviceName(booking.serviceId)} · ${dateLabel(booking.dropoffDate, lang)}`} /></dd></div>}
+          {booking && <div><dt>{t("Booking", "الحجز")}</dt><dd><RecordRef type="booking" id={booking.id} label={serviceName(booking.serviceId)} subtitle={dateLabel(booking.dropoffDate, lang)} /></dd></div>}
           {booking?.acceptedQuoteRef && <div><dt>{t("Accepted quote", "عرض السعر المقبول")}</dt><dd><RecordRef type="quote" id={booking.acceptedQuoteRef.quoteId} label={`${t("Quote", "عرض سعر")} · ${t("rev.", "إصدار")} ${booking.acceptedQuoteRef.revision}`} /></dd></div>}
           {warranties.map((w) => <div key={w.id}><dt>{t("Warranty", "الضمان")}</dt><dd><RecordRef type="warranty" id={w.id} label={w.policyName} /></dd></div>)}
         </dl>
@@ -186,9 +220,9 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
       <Collapsible title={t("Schedule", "الجدول")} defaultOpen>
         <dl className="ws-detail-grid">
           <div><dt>{t("Service", "الخدمة")}</dt><dd>{booking?.workSummary?.[lang] ?? serviceName(open.serviceId)}</dd></div>
-          <div><dt>{t("Drop-off", "الاستلام")}</dt><dd>{booking ? dateLabel(booking.dropoffDate, lang) : "—"}</dd></div>
-          <div><dt>{t("Expected pickup", "التسليم المتوقع")}</dt><dd>{booking ? dateLabel(booking.expectedPickup, lang) : "—"}</dd></div>
-          <div><dt>{t("Technician", "الفني")}</dt><dd>{techName(open.assignedUserId) || (open.assignedUserId ? t("Assigned", "مسند") : t("Unassigned", "غير مسند"))}</dd></div>
+          <div><dt>{t("Drop-off", "الاستلام")}</dt><dd>{booking ? <DateText value={booking.dropoffDate} lang={lang} /> : "—"}</dd></div>
+          <div><dt>{t("Expected pickup", "التسليم المتوقع")}</dt><dd>{booking ? <DateText value={booking.expectedPickup} lang={lang} /> : "—"}</dd></div>
+          <div><dt>{t("Technician", "الفني")}</dt><dd>{techName(open.assignedUserId) || (open.assignedUserId ? t("Assigned", "مسند") : unassignedLabel)}</dd></div>
         </dl>
       </Collapsible>
       {canAssign && <Collapsible title={t("Assign technician", "إسناد الفني")} defaultOpen={!open.assignedUserId}>
@@ -197,46 +231,53 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
           : techState !== "ready" ? <Skeleton rows={1} label={t("Loading", "جارٍ التحميل")} />
           : !branchTechs.length ? <p className="ws-reason">{t("No active technician in this branch.", "لا يوجد فني نشط في هذا الفرع.")}</p>
           : <div className="ws-assign"><div className="ws-assign-row">
-              <select className="field-select" aria-label={t("Technician", "الفني")} value={selected} disabled={!!saving} onChange={(e) => setPickedTech((c) => ({ ...c, [open.id]: e.target.value }))}>
-                <option value="">{t("Select technician", "اختر فنيًا")}</option>
-                {branchTechs.map((x) => <option key={x.userId} value={x.userId}>{x.name || t("Technician", "فني")}</option>)}
-              </select>
+              <Select className="field-select" label={t("Technician", "الفني")} value={selected} disabled={!!saving} onChange={(e) => setPickedTech((c) => ({ ...c, [open.id]: e.target.value }))}
+                options={[{ value: "", label: t("Select technician", "اختر فنيًا") }, ...branchTechs.map((x) => ({ value: x.userId, label: x.name || t("Technician", "فني") }))]} />
               <button type="button" className="btn btn-primary" disabled={!canSave} onClick={() => void assign(open)}>{saving === open.id ? t("Saving…", "جارٍ الحفظ…") : open.assignedUserId ? t("Update", "تحديث") : t("Assign", "إسناد")}</button>
             </div></div>}
       </Collapsible>}
       {history.length > 0 && <Collapsible title={t("History", "السجل")} count={history.length}>
-        <ul className="record-ref-list">{history.map((e) => <li className="record-ref-row" key={e.id}><span>{e.previousStage ? `${stageNames[e.previousStage][lang]} ← ` : ""}{stageNames[e.nextStage][lang]}<div className="record-ref-sub">{e.actorLabel} · {dateLabel(e.occurredAt, lang)}</div></span></li>)}</ul>
+        <ul className="record-ref-list">{history.map((e) => <li className="record-ref-row" key={e.id}><span>{e.previousStage ? `${stageNames[e.previousStage][lang]} ← ` : ""}{stageNames[e.nextStage][lang]}<div className="record-ref-sub">{e.actorLabel} · <DateText value={e.occurredAt} lang={lang} /></div></span></li>)}</ul>
       </Collapsible>}
     </>;
   };
 
-  const grouped = groupByStage(jobs);
-  const stageFilterOptions = Object.entries(stageNames).map(([value, label]) => ({ value, label: label[lang] }));
-  const techOptions = [{ value: "unassigned", label: t("Unassigned", "غير مسند") }, ...technicians.map((x) => ({ value: x.userId, label: x.name || t("Technician", "فني") }))];
+  const stageFilterOptions = [{ value: "all", label: `${t("All stages", "كل المراحل")} (${baseJobs.length})` }, ...Object.entries(stageNames).map(([value, label]) => ({ value, label: `${label[lang]} (${stageCounts[value] ?? 0})` }))];
+  const techOptions = [
+    { value: "all", label: `${t("All technicians", "كل الفنيين")} (${techCounts.all})` },
+    { value: "unassigned", label: `${unassignedLabel} (${techCounts.unassigned})` },
+    ...technicians.map((x) => ({ value: x.userId, label: `${x.name || t("Technician", "فني")} (${techCounts[x.userId] ?? 0})` })),
+  ];
+  const closedCount = terminalStages.reduce((n, st) => n + grouped[st].length, 0);
 
   return <>
     {header}
     {isTechnician
       ? <div className="ws-tech-list">{jobs.length ? jobs.map((job) => jobCard(job, false)) : empty}</div>
       : <>
-        <FilterBar lang={lang} resultCount={jobs.length} onClear={filtersActive ? clearFilters : undefined}
+        <FilterBar lang={lang} resultCount={shownCount} onClear={filtersActive ? clearFilters : undefined}
           search={{ value: query, onChange: setQuery, placeholder: t("Plate, customer or service", "اللوحة أو العميل أو الخدمة") }}
           filters={[
             ...(view === "list" ? [{ key: "stage", label: t("Stage", "المرحلة"), value: stage, options: stageFilterOptions, onChange: (v: string) => setStage(v as JobStage | "all") }] : []),
             ...(canAssign ? [{ key: "tech", label: t("Technician", "الفني"), value: technicianFilter, options: techOptions, onChange: setTechnicianFilter }] : []),
           ]} />
         {techState === "error" && <Notice tone="warning">{t("Technician list unavailable. Assignment is disabled.", "قائمة الفنيين غير متاحة. الإسناد معطل.")}</Notice>}
-        <TabBar ariaLabel={t("View", "العرض")} value={view === "list" ? "list" : "board"} onChange={setView}
-          tabs={[{ id: "board", label: t("Board", "اللوحة") }, { id: "list", label: t("List", "القائمة") }]} />
         {view === "list"
           ? <DataTable<Job> lang={lang} caption={t("Workshop jobs", "أوامر الشغل")} columns={columns} rows={jobs} rowKey={(j) => j.id} onRowClick={(j) => setOpenId(j.id)} selectedKey={openId || null} empty={empty} />
           : jobs.length === 0 ? empty
-          : <div className="ws-board">
-              {boardStages.map((s) => <section className="ws-col" key={s} aria-label={stageNames[s][lang]}>
-                <div className="ws-col-head"><span>{stageNames[s][lang]}</span><span className="ws-col-count">{grouped[s].length}</span></div>
-                {grouped[s].map((job) => jobCard(job, true))}
-              </section>)}
-              {terminalStages.some((s) => grouped[s].length) && <p className="ws-reason">{t("Closed jobs are in the List view.", "الأوامر المغلقة في عرض القائمة.")}</p>}
+          : <div className="ws-board" style={{ "--ws-tracks": columnTracks(grouped) } as CSSProperties}>
+              {boardStages.map((st) => {
+                const { shown, more } = capColumn(grouped[st], Boolean(expanded[st]));
+                return <section className="ws-col" key={st} aria-label={stageNames[st][lang]}>
+                  <div className="ws-col-head"><span>{stageNames[st][lang]}</span><span className="ws-col-count">{grouped[st].length}</span></div>
+                  <div className="ws-col-body">
+                    {shown.map((job) => jobCard(job, true))}
+                    {more > 0 && <button type="button" className="btn btn-sm btn-quiet ws-more" onClick={() => setExpanded((c) => ({ ...c, [st]: true }))}>+{more} {t("more", "أخرى")}</button>}
+                    {expanded[st] && more === 0 && grouped[st].length > 6 && <button type="button" className="btn btn-sm btn-quiet ws-more" onClick={() => setExpanded((c) => ({ ...c, [st]: false }))}>{t("Show less", "عرض أقل")}</button>}
+                  </div>
+                </section>;
+              })}
+              {closedCount > 0 && <p className="ws-reason">{t("Closed jobs are in the List view.", "الأوامر المغلقة في عرض القائمة.")}</p>}
             </div>}
       </>}
 

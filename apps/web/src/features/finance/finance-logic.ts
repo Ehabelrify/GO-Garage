@@ -234,3 +234,45 @@ export function errorText(failure: unknown, lang: Locale): string {
 export function signedMinor(kind: MoneyEventKind, minor: number): number {
   return kind === "refund" || kind === "direct-cost" || kind === "overhead" ? -Math.abs(minor) : Math.abs(minor);
 }
+
+/** Metrics where a higher number is bad news (costs, receivables): Delta gets `inverse`. */
+export const inverseMetrics: FinancialMetricId[] = ["outstanding", "direct-cost"];
+export const isInverseMetric = (id: FinancialMetricId): boolean => inverseMetrics.includes(id);
+
+/**
+ * Gap between recognized revenue and collections when both are shown for the same period.
+ * Collections is cash received (less refunds); recognized revenue follows the approved rule, so they legitimately differ.
+ */
+export function reconciliationGap(
+  metrics: Partial<Record<FinancialMetricId, { state: string; amount?: { minor: number; currency: string } }>>,
+): { gapMinor: number; currency: string } | null {
+  const collections = metrics.collections;
+  const revenue = metrics["recognized-revenue"];
+  if (!collections || !revenue || collections.state === "unavailable" || revenue.state === "unavailable" || !collections.amount || !revenue.amount) return null;
+  if (collections.amount.currency !== revenue.amount.currency) return null;
+  const gapMinor = revenue.amount.minor - collections.amount.minor;
+  return gapMinor === 0 ? null : { gapMinor, currency: collections.amount.currency };
+}
+
+/** Local date (YYYY-MM-DD) and time (HH:MM) of an ISO instant, for DateText. */
+export function localParts(value: string): { date: string; time: string } | null {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const two = (n: number) => String(n).padStart(2, "0");
+  return { date: `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`, time: `${two(date.getHours())}:${two(date.getMinutes())}` };
+}
+
+/** SVG polyline points for a tiny trend preview. Null with fewer than two numeric values. */
+export function sparklinePoints(values: Array<number | null>, width: number, height: number, pad = 2): string | null {
+  const points = values.map((value, index) => ({ value, index })).filter((item): item is { value: number; index: number } => item.value !== null && Number.isFinite(item.value));
+  if (points.length < 2) return null;
+  const min = Math.min(...points.map((p) => p.value));
+  const max = Math.max(...points.map((p) => p.value));
+  const span = max - min || 1;
+  const last = values.length - 1 || 1;
+  return points.map((p) => {
+    const x = pad + (p.index / last) * (width - pad * 2);
+    const y = max === min ? height / 2 : height - pad - ((p.value - min) / span) * (height - pad * 2);
+    return `${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}`;
+  }).join(" ");
+}

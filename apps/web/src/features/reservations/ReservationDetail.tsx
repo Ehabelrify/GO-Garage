@@ -1,8 +1,8 @@
-﻿import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Locale } from "@garage/domain";
 import { bookingAvailabilityApi, reservationApi, useGarageStore, type SlotAvailability } from "../../shared/store";
-import { Collapsible, ConfirmDialog, EmptyState, Field, Money, RecordRef, Skeleton, StatusBadge } from "../../shared/components";
-import { dateLabel } from "../../shared/ui";
+import { Amount, Collapsible, ConfirmDialog, DateText, EmptyState, Field, RecordRef, Skeleton, StatusBadge } from "../../shared/components";
+import { ReadOnlyNote } from "../quotes/access";
 import { commercialError } from "../quotes/commercial-errors";
 import { useLoader } from "../quotes/commercial-data";
 import { buildLookups, tr } from "../quotes/lookups";
@@ -27,11 +27,11 @@ const depositLabels: Record<string, { en: string; ar: string }> = {
 };
 
 /** Reservation drawer body: summary, schedule installation, deposit reference, authorised corrections, history. */
-export function ReservationDetail({ lang, id, onChanged }: { lang: Locale; id: string; onChanged: () => void }) {
+export function ReservationDetail({ lang, id, onChanged, canManage = false }: { lang: Locale; id: string; onChanged: () => void; canManage?: boolean }) {
   const t = tr(lang);
   const store = useGarageStore();
   const lookups = useMemo(() => buildLookups(store.state, lang), [store.state, lang]);
-  const canCorrect = store.actor?.role === "owner" || store.actor?.role === "branch-manager";
+  const canCorrect = canManage && (store.actor?.role === "owner" || store.actor?.role === "branch-manager");
   const state = useLoader(() => reservationApi.detail(id), null as Awaited<ReturnType<typeof reservationApi.detail>> | null, (error) => commercialError(error, lang));
   const [from, setFrom] = useState(todayIso());
   const [to, setTo] = useState(addDays(todayIso(), 14));
@@ -98,9 +98,10 @@ export function ReservationDetail({ lang, id, onChanged }: { lang: Locale; id: s
   const confirmed = !!reservation?.bookingId && (reservation.status === "scheduled" || reservation.status === "redeemed");
   const corrections = reservation ? availableCorrections(reservation) : [];
 
-  return <div className="qo-stack">
+  return <div className="qo-stack qo-drawer-pad">
     <div className="qo-row between">
       <StatusBadge status={reservation ? reservation.status : "enquiry"} lang={lang} domain="reservation" label={reservation ? undefined : t("Enquiry", "استفسار")} />
+      {!canManage && <ReadOnlyNote lang={lang} />}
       <strong>{confirmed ? t("Installation confirmed", "التركيب مؤكد") : reservation?.status === "reserved" ? t("Reserved, installation not booked", "محجوز، لم يُحجز موعد التركيب") : reservation ? t("Closed", "مغلق") : t("No reservation yet", "لا يوجد حجز بعد")}</strong>
     </div>
     {detail.state === "enquiry" && <p className="qo-muted">{t("Only an enquiry so far. Nothing is promised until approved reservation terms are in place.", "استفسار فقط حتى الآن. لا يوجد التزام قبل اعتماد شروط الحجز.")}</p>}
@@ -108,16 +109,16 @@ export function ReservationDetail({ lang, id, onChanged }: { lang: Locale; id: s
     <dl className="qo-kv">
       <dt>{t("Customer", "العميل")}</dt><dd>{customer ? <RecordRef type="customer" id={customer.id} label={customer.name} /> : "—"}</dd>
       <dt>{t("Vehicle", "المركبة")}</dt><dd>{vehicle ? <RecordRef type="vehicle" id={vehicle.vehicle.id} label={vehicle.vehicle.plate} subtitle={vehicle.vehicle.makeModel} /> : <bdi>{quote.vehicle.model}</bdi>}</dd>
-      <dt>{t("Quote", "عرض السعر")}</dt><dd><RecordRef type="quote" id={quote.ref.quoteId} label={`${t("Quote", "عرض سعر")} · ${customer?.name ?? ""}`} mode="link" /> · <Money minor={quote.total.minor} currency={quote.total.currency} lang={lang} /></dd>
+      <dt>{t("Quote", "عرض السعر")}</dt><dd><RecordRef type="quote" id={quote.ref.quoteId} label={`${t("Quote", "عرض سعر")} · ${customer?.name ?? ""}`} mode="link" /> · <Amount minor={quote.total.minor} currency={quote.total.currency} lang={lang} variant="detail" /></dd>
       {reservation && <><dt>{t("Promotion", "العرض الترويجي")}</dt><dd>{policyLabel(reservation.promotion, null, lang)}</dd>
-        <dt>{t("Valid", "الصلاحية")}</dt><dd>{dateLabel(reservation.effectiveOn, lang)} {t("to", "إلى")} {reservation.expiresOn ? dateLabel(reservation.expiresOn, lang) : t("no end date", "بدون تاريخ انتهاء")}</dd>
+        <dt>{t("Valid", "الصلاحية")}</dt><dd><DateText value={reservation.effectiveOn} lang={lang} /> {t("to", "إلى")} {reservation.expiresOn ? <DateText value={reservation.expiresOn} lang={lang} /> : t("no end date", "بدون تاريخ انتهاء")}</dd>
         <dt>{t("Deposit", "العربون")}</dt><dd>{(depositLabels[reservation.deposit.state] ?? depositLabels.unrecorded)[lang]}</dd>
         {reservation.bookingId && <><dt>{t("Booking", "الحجز")}</dt><dd><RecordRef type="booking" id={reservation.bookingId} label={t("Installation booking", "حجز التركيب")} mode="link" /></dd></>}</>}
     </dl>
 
     {message && <p role="status" className="qo-muted">{message}</p>}
 
-    {reservation?.status === "reserved" && <Collapsible title={t("Book installation", "حجز موعد التركيب")} defaultOpen>
+    {canManage && reservation?.status === "reserved" && <Collapsible title={t("Book installation", "حجز موعد التركيب")} defaultOpen>
       <div className="qo-stack">
         <div className="form-grid">
           <Field label={t("From", "من")}><input className="field-input" type="date" min={todayIso()} value={from} onChange={(event) => setFrom(event.target.value)} /></Field>
@@ -129,13 +130,13 @@ export function ReservationDetail({ lang, id, onChanged }: { lang: Locale; id: s
         {slots?.status === "available" && (slots.slots.length === 0
           ? <EmptyState variant="no-results" title={t("No free slots in this range", "لا توجد مواعيد متاحة في هذه الفترة")} />
           : groupSlotsByDay(slots.slots).map((day) => <div className="qo-day" key={day.date}>
-              <strong>{dateLabel(day.date, lang)}</strong>
+              <strong><DateText value={day.date} lang={lang} /></strong>
               <div className="qo-slots">{day.slots.map((slot) => <button key={`${slot.dropoffDate}:${slot.dropoffTime}`} type="button" className="btn btn-sm" disabled={busy} onClick={() => void schedule(slot)}><bdi className="mono">{slot.dropoffTime}</bdi></button>)}</div>
             </div>))}
       </div>
     </Collapsible>}
 
-    {reservation?.deposit.state === "unrecorded" && <Collapsible title={t("Deposit reference", "مرجع العربون")}>
+    {canManage && reservation?.deposit.state === "unrecorded" && <Collapsible title={t("Deposit reference", "مرجع العربون")}>
       <div className="qo-stack">
         <div className="form-grid">
           <Field label={t("Reference", "المرجع")} required hint="private:…"><input className="field-input" value={deposit} onChange={(event) => setDeposit(event.target.value)} /></Field>
@@ -153,7 +154,7 @@ export function ReservationDetail({ lang, id, onChanged }: { lang: Locale; id: s
       {detail.events.length === 0 ? <p className="qo-muted">{t("No history yet.", "لا يوجد سجل بعد.")}</p>
         : <ul className="qo-history">{detail.events.map((event) => <li key={event.revision}>
             <strong>{eventLabels[event.action]?.[lang] ?? event.action.replace(/[-_]+/g, " ")}</strong>
-            <span className="qo-muted">{dateLabel(event.occurred_at, lang)}</span>
+            <span className="qo-muted"><DateText value={event.occurred_at} lang={lang} /></span>
             {event.reason && <span>{event.reason}</span>}
           </li>)}</ul>}
     </Collapsible>

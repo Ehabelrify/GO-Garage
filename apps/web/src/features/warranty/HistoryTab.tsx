@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import { DataTable, EmptyState, FilterBar, type Column } from "../../shared/components";
+import { DataTable, DateText, EmptyState, FilterBar, type Column } from "../../shared/components";
 import type { WarrantyAuditEvent } from "@garage/domain";
-import { formatDateTime } from "./warranty-logic";
 import { auditActionLabel } from "./warranty-copy";
+import { visibleAuditEvents } from "./warranty-logic";
 import type { WarrantyScope } from "./warranty-scope";
 
 export function HistoryTab({ scope }: { scope: WarrantyScope }) {
@@ -11,17 +11,13 @@ export function HistoryTab({ scope }: { scope: WarrantyScope }) {
   const events = useMemo(() => {
     const warrantyIds = new Set(warranties.map((record) => record.id));
     const claimIds = new Set(claims.map((claim) => claim.id));
-    return state.warrantyAuditEvents.filter((event) =>
-      (event.entityType === "policy" && scope.isOwner) ||
-      (event.entityType === "warranty" && warrantyIds.has(event.entityId)) ||
-      (event.entityType === "claim" && claimIds.has(event.entityId)))
-      .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+    return visibleAuditEvents(state.warrantyAuditEvents, warrantyIds, claimIds, scope.isOwner);
   }, [state.warrantyAuditEvents, warranties, claims, scope.isOwner]);
   const rows = events.filter((event) => !query.trim() || `${auditActionLabel(event.action, lang)} ${event.details} ${event.actorLabel}`.toLowerCase().includes(query.trim().toLowerCase()));
   const kind = (event: WarrantyAuditEvent) => event.entityType === "policy" ? t("Policy", "السياسة") : event.entityType === "warranty" ? t("Warranty", "الضمان") : t("Claim", "المطالبة");
 
   const columns: Column<WarrantyAuditEvent>[] = [
-    { key: "when", header: t("When", "الوقت"), sortable: true, sortValue: (e) => e.occurredAt, render: (e) => formatDateTime(e.occurredAt, lang) },
+    { key: "when", header: t("When", "الوقت"), sortable: true, sortValue: (e) => e.occurredAt, render: (e) => <DateText value={e.occurredAt} lang={lang} /> },
     { key: "action", header: t("Action", "الإجراء"), primary: true, render: (e) => <>{auditActionLabel(e.action, lang)}{e.policyVersion ? ` · v${e.policyVersion}` : ""}</> },
     { key: "kind", header: t("On", "على"), render: kind },
     { key: "by", header: t("By", "بواسطة"), render: (e) => e.actorLabel },

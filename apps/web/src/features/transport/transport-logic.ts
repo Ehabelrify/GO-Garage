@@ -1,3 +1,4 @@
+import { plateMatchesQuery } from "@garage/domain";
 import type { TransportStatus } from "@garage/domain";
 
 /** Mirrors the server transition table; the server stays the authority. */
@@ -66,4 +67,24 @@ const errorCopy: Record<string, { en: string; ar: string }> = {
 /** Bilingual copy for a known server error code, else null. */
 export function transportErrorCopy(code: string | undefined): { en: string; ar: string } | null {
   return (code && errorCopy[code]) || null;
+}
+
+/** Splits an ISO timestamp into local YYYY-MM-DD and HH:MM for DateText, or null when invalid. */
+export function splitDateTime(iso: string): { date: string; time: string } | null {
+  const value = new Date(iso);
+  if (Number.isNaN(value.valueOf())) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return { date: `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`, time: `${pad(value.getHours())}:${pad(value.getMinutes())}` };
+}
+
+/** Transport list search: customer name, phone or plate (Arabic or Latin, spacing ignored). */
+export function matchesTransport(parts: { customerName: string; phone: string; plate: string }, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  const digits = needle.replace(/\D/g, "");
+  const compact = needle.replace(/\s/g, "");
+  return parts.customerName.toLowerCase().includes(needle)
+    || (digits.length > 0 && parts.phone.replace(/\D/g, "").includes(digits))
+    || plateMatchesQuery(parts.plate, needle)
+    || parts.plate.toLowerCase().replace(/\s/g, "").includes(compact);
 }

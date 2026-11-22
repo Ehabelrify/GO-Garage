@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Locale, QuoteDraftInput, QuoteVersionRef } from "@garage/domain";
 import { quoteApi, useGarageStore } from "../../shared/store";
-import { DetailDrawer, EmptyState, Notice, Skeleton } from "../../shared/components";
-import { dateLabel } from "../../shared/ui";
+import { DateText, DetailDrawer, EmptyState, Notice, Plate, Skeleton } from "../../shared/components";
 import { commercialError } from "./commercial-errors";
 import { buildLookups, tr } from "./lookups";
 import { CustomerVehiclePicker, type CustomerVehicleValue } from "./pickers";
@@ -94,7 +93,7 @@ export function CreateQuote({ lang, customerId, vehicleId, requestId, onClose, o
       <p className="qo-muted">{t("Which service is this quote for?", "لأي خدمة هذا العرض؟")}</p>
       <ul className="qo-picker-list">{phase.sources.map((source) => <li key={source.key}>
         <button type="button" className="qo-picker-item" onClick={() => void open(sourceRef(source))}>
-          <span><bdi>{sourceLabel(source)}</bdi> · <bdi className="mono">{lookups.plate(source.vehicleId)}</bdi></span><small>{dateLabel(source.date, lang)}</small>
+          <span><bdi>{sourceLabel(source)}</bdi> <Plate value={lookups.plate(source.vehicleId)} /></span><small><DateText value={source.date} lang={lang} /></small>
         </button></li>)}</ul>
       <div><button type="button" className="btn" onClick={blank}>{t("Blank quote instead", "عرض فارغ بدلاً من ذلك")}</button></div>
     </div>}

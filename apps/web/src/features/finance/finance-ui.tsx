@@ -1,14 +1,28 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Branch, Locale, QuoteRevision } from "@garage/domain";
 import { quoteApi, reservationApi, useGarageStore } from "../../shared/store";
+import { DateText, StatusBadge, type StatusDomain } from "../../shared/components";
+import { localParts } from "./finance-logic";
 
 export type T = (en: string, ar: string) => string;
 export const makeT = (lang: Locale): T => (en, ar) => (lang === "ar" ? ar : en);
 
 export type Tone = "neutral" | "info" | "success" | "warning" | "danger";
-/** Compact state pill using the shared `.status` look (tone-coloured, text always present). */
-export function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
-  return <span className="status" data-tone={tone}>{children}</span>;
+/** Representative registry entries so a finance pill gets the shared tone icon and colour; the label is always ours. */
+const toneStatus: Record<Tone, { status: string; domain: StatusDomain }> = {
+  neutral: { status: "closed", domain: "claim" }, info: { status: "under-review", domain: "claim" }, success: { status: "active", domain: "warranty" },
+  warning: { status: "open", domain: "claim" }, danger: { status: "denied", domain: "claim" },
+};
+/** Compact state badge on the shared StatusBadge (tone icon plus text, never colour alone). */
+export function Pill({ tone, lang, children }: { tone: Tone; lang: Locale; children: string }) {
+  const entry = toneStatus[tone];
+  return <StatusBadge status={entry.status} domain={entry.domain} lang={lang} label={children} />;
+}
+
+/** Date and time as one LTR isolate with Latin digits. */
+export function EventDate({ value, lang }: { value: string; lang: Locale }) {
+  const parts = localParts(value);
+  return parts ? <DateText value={parts.date} time={parts.time} lang={lang} /> : <span>—</span>;
 }
 
 export const dateTimeLabel = (value: string, lang: Locale) => {

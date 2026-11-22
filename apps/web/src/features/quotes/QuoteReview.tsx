@@ -1,8 +1,7 @@
 import { useState } from "react";
 import type { AcceptedQuoteSnapshot, Locale, PolicyRef, QuoteVersionRef } from "@garage/domain";
 import { quoteApi } from "../../shared/store";
-import { Collapsible, Field, Money, RecordRef, StatusBadge } from "../../shared/components";
-import { dateLabel } from "../../shared/ui";
+import { Amount, Collapsible, DateText, Field, RecordRef, StatusBadge } from "../../shared/components";
 import { commercialError, errorCode } from "./commercial-errors";
 import type { Lookups } from "./lookups";
 import { tr } from "./lookups";
@@ -29,10 +28,10 @@ export function QuoteSummaryView({ lang, quote, lookups }: { lang: Locale; quote
   return <div className="qo-stack">
     <dl className="qo-kv">
       <dt>{t("Customer", "العميل")}</dt><dd>{customer ? <RecordRef type="customer" id={customer.id} label={customer.name} /> : "—"}</dd>
-      <dt>{t("Vehicle", "المركبة")}</dt><dd>{vehicle ? <RecordRef type="vehicle" id={vehicle.vehicle.id} label={`${vehicle.vehicle.plate}`} subtitle={vehicle.vehicle.makeModel} /> : <bdi>{input.vehicle.model}</bdi>}</dd>
+      <dt>{t("Vehicle", "المركبة")}</dt><dd>{vehicle ? <RecordRef type="vehicle" id={vehicle.vehicle.id} label={vehicle.vehicle.plate} subtitle={vehicle.vehicle.makeModel} /> : <bdi>{input.vehicle.model}</bdi>}</dd>
       <dt>{t("Branch", "الفرع")}</dt><dd>{lookups.branchName(input.branchId) || "—"}</dd>
       <dt>{t("Price", "السعر")}</dt><dd>{priceOriginLabels[input.priceOrigin.kind][lang]}</dd>
-      <dt>{t("Valid through", "صالح حتى")}</dt><dd>{quote.validThrough ? dateLabel(quote.validThrough, lang) : "—"}{expired && <> <StatusBadge status="expired" lang={lang} domain="quote" /></>}</dd>
+      <dt>{t("Valid through", "صالح حتى")}</dt><dd><DateText value={quote.validThrough} lang={lang} />{expired && <> <StatusBadge status="expired" lang={lang} domain="quote" /></>}</dd>
       <dt>{t("Follow-up", "المتابعة")}</dt><dd>{followupLabels[quote.followup.status][lang]}</dd>
     </dl>
     <table className="qo-lines">
@@ -47,16 +46,16 @@ export function QuoteSummaryView({ lang, quote, lookups }: { lang: Locale; quote
               {addOns.map((name) => <span className="tag" key={name}>+ {name}</span>)}
             </div></td>
           <td className="num">{line.quantity}</td>
-          <td className="num"><Money minor={line.unitPrice.minor} currency={line.unitPrice.currency} lang={lang} /></td>
-          <td className="num"><Money minor={line.unitPrice.minor * line.quantity - line.discount.minor + (line.tax?.minor ?? 0)} currency={line.unitPrice.currency} lang={lang} /></td>
+          <td className="num"><Amount minor={line.unitPrice.minor} currency={line.unitPrice.currency} lang={lang} variant="detail" /></td>
+          <td className="num"><Amount minor={line.unitPrice.minor * line.quantity - line.discount.minor + (line.tax?.minor ?? 0)} currency={line.unitPrice.currency} lang={lang} variant="detail" /></td>
         </tr>;
       })}</tbody>
     </table>
     <div className="qo-totals">
-      <div><span>{t("Subtotal", "المجموع")}</span><Money minor={summary.subtotal} currency={summary.currency} lang={lang} /></div>
-      {summary.discount > 0 && <div><span>{t("Discount", "الخصم")}</span><Money minor={-summary.discount} currency={summary.currency} lang={lang} /></div>}
-      {summary.tax > 0 && <div><span>{t("Tax", "الضريبة")}</span><Money minor={summary.tax} currency={summary.currency} lang={lang} /></div>}
-      <div className="grand"><span>{t("Total", "الإجمالي")}</span><Money minor={total.minor} currency={total.currency} lang={lang} /></div>
+      <div><span>{t("Subtotal", "المجموع")}</span><Amount minor={summary.subtotal} currency={summary.currency} lang={lang} variant="detail" /></div>
+      {summary.discount > 0 && <div><span>{t("Discount", "الخصم")}</span><Amount minor={-summary.discount} currency={summary.currency} lang={lang} variant="detail" /></div>}
+      {summary.tax > 0 && <div><span>{t("Tax", "الضريبة")}</span><Amount minor={summary.tax} currency={summary.currency} lang={lang} variant="detail" /></div>}
+      <div className="grand"><span>{t("Total", "الإجمالي")}</span><Amount minor={total.minor} currency={total.currency} lang={lang} variant="detail" /></div>
     </div>
     {input.scope.some((entry) => entry.areas.length > 0 || entry.exclusions.length > 0) && <Collapsible title={t("Scope details", "تفاصيل النطاق")}>
       <dl className="qo-kv">{input.scope.filter((entry) => entry.areas.length > 0 || entry.exclusions.length > 0).map((entry) => [

@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Locale } from "@garage/domain";
 import { bookingAvailabilityApi, reservationApi, useGarageStore, type SlotAvailability } from "../../shared/store";
-import { Field, RecordRef } from "../../shared/components";
-import { dateLabel } from "../../shared/ui";
+import { DateText, Field, RecordRef } from "../../shared/components";
 import { commercialError } from "../quotes/commercial-errors";
 import { buildLookups, tr } from "../quotes/lookups";
 import { addDays, todayIso } from "../quotes/quote-logic";
@@ -56,7 +55,7 @@ export function GroupScheduler({ lang, rows, onDone }: { lang: Locale; rows: Res
       return <div className="qo-stack" key={row.id}>
         <div className="qo-row between">
           <RecordRef type="vehicle" id={row.vehicleId} label={vehicle?.vehicle.plate} subtitle={vehicle?.vehicle.makeModel} />
-          {picks[row.id] && <span className="tag">{dateLabel(picks[row.id].dropoffDate, lang)} · <bdi className="mono">{picks[row.id].dropoffTime}</bdi></span>}
+          {picks[row.id] && <span className="tag"><DateText value={picks[row.id].dropoffDate} lang={lang} /> · <bdi className="mono">{picks[row.id].dropoffTime}</bdi></span>}
         </div>
         <div className="qo-row">
           <Field label={t("From day", "من يوم")}><input className="field-input" type="date" min={todayIso()} value={day[row.id] ?? ""} onChange={(event) => setDay((current) => ({ ...current, [row.id]: event.target.value }))} /></Field>
@@ -66,7 +65,7 @@ export function GroupScheduler({ lang, rows, onDone }: { lang: Locale; rows: Res
         {slotInfo?.status === "available" && (slotInfo.slots.length === 0
           ? <p className="qo-muted">{t("No free slots in this week.", "لا توجد مواعيد متاحة هذا الأسبوع.")}</p>
           : groupSlotsByDay(slotInfo.slots).map((group) => <div className="qo-day" key={group.date}>
-              <strong>{dateLabel(group.date, lang)}</strong>
+              <strong><DateText value={group.date} lang={lang} /></strong>
               <div className="qo-slots">{group.slots.map((slot) => {
                 const on = picks[row.id]?.dropoffDate === slot.dropoffDate && picks[row.id]?.dropoffTime === slot.dropoffTime;
                 return <button key={`${slot.dropoffDate}:${slot.dropoffTime}`} type="button" className={`btn btn-sm${on ? " btn-primary" : ""}`} aria-pressed={on} onClick={() => setPicks((current) => ({ ...current, [row.id]: { dropoffDate: slot.dropoffDate, dropoffTime: slot.dropoffTime } }))}><bdi className="mono">{slot.dropoffTime}</bdi></button>;

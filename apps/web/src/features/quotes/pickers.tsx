@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { X } from "lucide-react";
 import type { Customer, Locale, QuoteRevision, QuoteVersionRef, Vehicle } from "@garage/domain";
-import { Money, StatusBadge } from "../../shared/components";
+import { Amount, Plate, StatusBadge } from "../../shared/components";
 import type { Lookups } from "./lookups";
 import { tr } from "./lookups";
 
@@ -25,7 +25,7 @@ export function CustomerVehiclePicker({ lang, customers, value, onChange, disabl
   const noVehicleCustomers = customers.length > 0 && options.length === 0;
   if (picked) {
     return <div className="qo-picked">
-      <span><bdi className="mono">{picked.vehicle.plate}</bdi> · <bdi>{picked.vehicle.makeModel}</bdi><br /><small className="qo-muted"><bdi>{picked.customer.name}</bdi></small></span>
+      <span><Plate value={picked.vehicle.plate} /> <bdi>{picked.vehicle.makeModel}</bdi><br /><small className="qo-muted"><bdi>{picked.customer.name}</bdi></small></span>
       {!disabled && <button type="button" className="btn btn-sm btn-quiet" onClick={() => onChange(empty)} aria-label={t("Change vehicle", "تغيير المركبة")}><X size={14} aria-hidden="true" />{t("Change", "تغيير")}</button>}
     </div>;
   }
@@ -34,7 +34,7 @@ export function CustomerVehiclePicker({ lang, customers, value, onChange, disabl
     {shown.length > 0
       ? <ul className="qo-picker-list">{shown.map(({ customer, vehicle }) => <li key={vehicle.id}>
           <button type="button" className="qo-picker-item" onClick={() => { onChange({ customerId: customer.id, vehicleId: vehicle.id }); setQuery(""); }}>
-            <span><bdi className="mono">{vehicle.plate}</bdi> · <bdi>{vehicle.makeModel}</bdi></span><small><bdi>{customer.name}</bdi></small>
+            <span><Plate value={vehicle.plate} /> <bdi>{vehicle.makeModel}</bdi></span><small><bdi>{customer.name}</bdi></small>
           </button>
         </li>)}</ul>
       : <p className="qo-muted">{noVehicleCustomers ? t("Customers have no vehicles yet. Add a vehicle in Customers first.", "لا توجد مركبات للعملاء بعد. أضف مركبة من صفحة العملاء أولاً.") : t("No match. Add the customer in Customers first.", "لا توجد نتيجة. أضف العميل من صفحة العملاء أولاً.")}</p>}
@@ -65,8 +65,8 @@ export function QuotePicker({ lang, quotes, lookups, selected, onChange, multipl
         const on = selected.some((ref) => same(ref, quote.ref));
         return <li key={`${quote.ref.quoteId}:${quote.ref.revision}`}>
           <button type="button" className="qo-picker-item" role={multiple ? "checkbox" : "radio"} aria-checked={on} onClick={() => toggle(quote)} style={on ? { background: "var(--teal-soft)", fontWeight: 600 } : undefined}>
-            <span><bdi>{lookups.customerName(quote.input.customerId) || t("Customer", "عميل")}</bdi> · <bdi className="mono">{lookups.plate(quote.input.vehicle.vehicleId) || quote.input.vehicle.model}</bdi></span>
-            <small>{quote.total && <Money minor={quote.total.minor} currency={quote.total.currency} lang={lang} />}{on ? ` · ${t("Selected", "محدد")}` : ""}</small>
+            <span><bdi>{lookups.customerName(quote.input.customerId) || t("Customer", "عميل")}</bdi> {lookups.plate(quote.input.vehicle.vehicleId) ? <Plate value={lookups.plate(quote.input.vehicle.vehicleId)} /> : <bdi>{quote.input.vehicle.model}</bdi>}</span>
+            <small>{quote.total && <Amount minor={quote.total.minor} currency={quote.total.currency} lang={lang} />}{on ? ` · ${t("Selected", "محدد")}` : ""}</small>
           </button>
         </li>;
       })}

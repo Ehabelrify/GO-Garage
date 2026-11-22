@@ -20,32 +20,32 @@
 .public-verification-header { display:flex; align-items:center; justify-content:space-between; min-height:72px; border-bottom:1px solid #e2e9e2; }
 .public-header-brand { display:flex; align-items:center; gap:9px; color:#36544a; }
 .public-header-brand strong { font-size:13px; letter-spacing:.035em; }
-.public-header-brand small { color:#77887e; font-size:9px; letter-spacing:.12em; }
+.public-header-brand small { color:#77887e; font-size: var(--fs-caption); letter-spacing:.12em; }
 .public-header-brand > span:nth-child(2) { color:#9aaa9e; }
 .public-brand-mark { display:grid; place-items:center; width:31px; height:31px; color:#326e5a; background:#e3eee5; }
 .public-language-switch { display:flex; gap:3px; padding:3px; border:1px solid #dce5dd; background:rgba(255,255,255,.64); }
-.public-language-switch button { padding:6px 9px; border:0; color:#6d8075; background:transparent; font:inherit; font-size:11px; cursor:pointer; }
+.public-language-switch button { padding:6px 9px; border:0; color:#6d8075; background:transparent; font:inherit; font-size: var(--fs-caption); cursor:pointer; }
 .public-language-switch button[aria-pressed="true"] { color:#315a49; background:#e7f0e8; font-weight:700; }
 .public-verification-stage { display:grid; justify-items:center; align-content:center; flex:1; width:min(100%,780px); margin:0 auto; padding:52px 0 60px; }
 .public-stage-heading { width:min(100%,590px); margin:0 0 22px; text-align:center; animation:pv-rise .48s ease-out both; }
-.public-stage-heading > span { color:#7b8e82; font-size:10px; font-weight:700; letter-spacing:.13em; }
+.public-stage-heading > span { color:#7b8e82; font-size: var(--fs-caption); font-weight:700; letter-spacing:.13em; }
 .public-stage-heading h2 { margin:8px 0 0; color:#334f43; font-size:clamp(19px,3vw,25px); font-weight:600; line-height:1.4; }
 .public-warranty-card { width:min(100%,520px); padding:25px clamp(20px,5vw,34px) 18px; border:1px solid var(--pv-line); background:var(--pv-surface); box-shadow:0 18px 54px rgba(37,67,52,.075); animation:pv-rise .48s .08s ease-out both; }
 .public-card-brand { display:flex; align-items:center; gap:9px; padding-bottom:18px; border-bottom:1px solid #e8eee8; }
 .public-card-brand > span:last-child { display:grid; gap:2px; }
-.public-card-brand strong { color:#3c5b4d; font-size:11px; letter-spacing:.09em; }
-.public-card-brand small { color:#8a998e; font-size:9px; letter-spacing:.11em; }
+.public-card-brand strong { color:#3c5b4d; font-size: var(--fs-caption); letter-spacing:.09em; }
+.public-card-brand small { color:#8a998e; font-size: var(--fs-caption); letter-spacing:.11em; }
 .public-card-status { display:flex; align-items:center; gap:13px; margin-top:22px; }
 .public-status-mark { display:grid; place-items:center; width:47px; height:47px; flex:none; color:var(--pv-green); background:var(--pv-green-soft); }
-.public-card-status > div > span { color:#75867c; font-size:10px; }
+.public-card-status > div > span { color:#75867c; font-size: var(--fs-caption); }
 .public-card-status h1 { margin:2px 0 0; color:#355346; font-size:20px; font-weight:650; line-height:1.35; }
 .public-card-intro { margin:16px 0 0; color:#6a7d72; font-size:12px; line-height:1.7; }
 .public-warranty-details { display:grid; gap:0; margin:16px 0 0; border-top:1px solid #e8eee8; }
 .public-warranty-details > div { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; padding:11px 0; border-bottom:1px solid #e8eee8; }
-.public-warranty-details dt { display:flex; align-items:center; gap:7px; flex:none; color:#73857a; font-size:11px; }
+.public-warranty-details dt { display:flex; align-items:center; gap:7px; flex:none; color:#73857a; font-size: var(--fs-caption); }
 .public-warranty-details dt svg { color:#789182; }
 .public-warranty-details dd { margin:0; color:#3d5649; font-size:12px; font-weight:600; text-align:end; }
-.public-card-foot { margin-top:15px; color:#829186; font-size:10px; text-align:center; }
+.public-card-foot { margin-top:15px; color:#829186; font-size: var(--fs-caption); text-align:center; }
 .public-warranty-card.status-expired .public-status-mark { color:var(--pv-amber); background:#f5f0e2; }
 .public-warranty-card.status-expired .public-card-status h1 { color:#775f32; }
 .public-warranty-card.status-void .public-status-mark { color:var(--pv-red); background:#f6eae7; }
@@ -63,7 +63,7 @@
 .public-verification-skeleton div:nth-child(2) { width:72%; height:48px; margin-top:12px; }
 .public-verification-skeleton div:nth-child(3) { height:70px; margin-top:4px; }
 .public-verification-skeleton div:last-child { width:55%; }
-.public-verification-footer { display:flex; justify-content:center; align-items:center; gap:7px; min-height:56px; border-top:1px solid #e2e9e2; color:#829187; font-size:10px; }
+.public-verification-footer { display:flex; justify-content:center; align-items:center; gap:7px; min-height:56px; border-top:1px solid #e2e9e2; color:#829187; font-size: var(--fs-caption); }
 .public-verification-footer svg { color:#648273; }
 @keyframes pv-rise { from { opacity:0; transform:translateY(9px); } to { opacity:1; transform:translateY(0); } }
 @keyframes pv-shimmer { to { background-position:-200% 0; } }

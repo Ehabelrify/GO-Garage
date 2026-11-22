@@ -3,7 +3,7 @@ import { useLocation, useSearchParams } from "wouter";
 import { Plus, ScanLine } from "lucide-react";
 import type { BranchId } from "@garage/domain";
 import {
-  DataTable, DetailDrawer, EmptyState, FilterBar, PageHeader, RecordRef, TabBar, TabPanel, resolveWarrantyCode, useUrlState,
+  DataTable, DateText, DetailDrawer, EmptyState, FilterBar, PageHeader, RecordRef, TabBar, TabPanel, resolveWarrantyCode, useUrlState,
   type Column, type ResolvedWarranty,
 } from "../../shared/components";
 import { hasCapability } from "../../shared/capabilities";
@@ -11,9 +11,9 @@ import { SpecialRequestsPanel } from "../special-requests/SpecialRequestsPanel";
 import { useGarageStore } from "../../shared/store";
 import { customerDisplay, type PageProps } from "../../shared/ui";
 import { CustomerForm, writeErrorMessage, type BranchOption } from "./CustomerForm";
-import { defaultFormBranch, filterCustomers, findByPlate, recordFromParams } from "./customers-logic";
+import { customerStats, defaultFormBranch, filterCustomers, findByPlate, recordFromParams, scopeNote } from "./customers-logic";
 import { CustomerDetail, VehicleDetail } from "./RecordDetail";
-import { PlateChips } from "./Record360View";
+import { PhoneCell, PlateChips } from "./Record360View";
 import "./customers.css";
 
 type Row = ReturnType<typeof filterCustomers>[number];
@@ -47,6 +47,7 @@ export function CustomersPage({ lang, t, state, notify }: CustomersPageProps) {
   const [query, setQuery] = useState("");
   const [language, setLanguage] = useState("all");
   const [adding, setAdding] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
   const [code, setCode] = useState("");
   const [lookup, setLookup] = useState<LookupState>({ status: "idle" });
   const [tabValue, setTab] = useUrlState("tab", "customers");
@@ -55,6 +56,13 @@ export function CustomersPage({ lang, t, state, notify }: CustomersPageProps) {
 
   const all = state.customers;
   const rows = useMemo(() => filterCustomers(all, query).filter((customer) => language === "all" || customer.language === language), [all, query, language]);
+  const stats = useMemo(() => customerStats(state.bookings, state.jobs, new Date().toISOString().slice(0, 10)), [state.bookings, state.jobs]);
+  const currentBranch = state.branches.find((item) => item.id === state.currentBranch);
+  const scope = scopeNote({
+    lang, role: actor?.role, currentBranch: state.currentBranch,
+    currentBranchName: currentBranch ? (lang === "ar" && currentBranch.nameAr ? currentBranch.nameAr : currentBranch.name) : undefined,
+    branchNames: branchOptions.map((branch) => branch.label),
+  });
   const loading = store.status === "loading" && all.length === 0;
   const clear = () => { setQuery(""); setLanguage("all"); };
 
@@ -89,8 +97,10 @@ export function CustomersPage({ lang, t, state, notify }: CustomersPageProps) {
 
   const columns: Column<Row>[] = [
     { key: "name", header: t("Customer", "العميل"), sortable: true, primary: true, sortValue: (row) => row.name, render: (row) => customerDisplay(row.name, lang) },
-    { key: "phone", header: t("Phone", "الهاتف"), mono: true, render: (row) => row.phone },
+    { key: "phone", header: t("Phone", "الهاتف"), mono: true, render: (row) => <PhoneCell phone={row.phone} lang={lang} /> },
     { key: "vehicles", header: t("Vehicles", "المركبات"), sortable: true, sortValue: (row) => row.vehicles.length, render: (row) => <PlateChips vehicles={row.vehicles.map((vehicle) => ({ id: vehicle.id, plate: vehicle.plate }))} lang={lang} /> },
+    { key: "lastVisit", header: t("Last visit", "آخر زيارة"), sortable: true, sortValue: (row) => stats.get(row.id)?.lastVisit ?? "", render: (row) => <DateText value={stats.get(row.id)?.lastVisit} lang={lang} /> },
+    { key: "openJobs", header: t("Open jobs", "أوامر مفتوحة"), numeric: true, sortable: true, sortValue: (row) => stats.get(row.id)?.openJobs ?? 0, render: (row) => stats.get(row.id)?.openJobs ?? 0 },
   ];
 
   const lookupNote = lookup.status === "busy" ? t("Looking up…", "جارٍ البحث…")
@@ -98,37 +108,42 @@ export function CustomersPage({ lang, t, state, notify }: CustomersPageProps) {
     : lookup.status === "error" ? t("Lookup failed. Try again.", "تعذر البحث. حاول مرة أخرى.")
     : "";
 
+  const addButton = canAdd ? <button type="button" className="btn btn-primary cust-nowrap" onClick={() => setAdding(true)}><Plus size={16} aria-hidden="true" />{t("Add customer", "إضافة عميل")}</button> : undefined;
+  const lookupLabel = t("Plate or QR lookup", "بحث باللوحة أو QR");
+
   return <>
-    {canSeeRequests && <TabBar ariaLabel={t("Customers", "العملاء")} idPrefix="cust" value={tab} onChange={setTab}
-      tabs={[{ id: "customers", label: t("Customers", "العملاء") }, { id: "requests", label: t("Special requests", "الطلبات الخاصة") }]} />}
-    <TabPanel idPrefix="cust" id="requests" active={tab === "requests"}><SpecialRequestsPanel lang={lang} notify={notify} /></TabPanel>
-    {tab === "customers" && <TabPanel idPrefix="cust" id="customers" active>
     <PageHeader
       title={t("Customers", "العملاء")}
-      meta={<span>{all.length} {t("customers", "عميل")}</span>}
-      actions={canAdd ? <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}><Plus size={16} aria-hidden="true" />{t("Add customer", "إضافة عميل")}</button> : undefined}
+      meta={tab === "customers" ? <span>{all.length} {t("customers", "عميل")} · {scope}</span> : undefined}
+      actions={tab === "customers" ? <>
+        <button type="button" className="btn cust-nowrap" aria-expanded={scanOpen} aria-label={lookupLabel} title={lookupLabel} onClick={() => setScanOpen((value) => !value)}><ScanLine size={18} aria-hidden="true" /></button>
+        {addButton}
+      </> : undefined}
+      tabs={canSeeRequests ? <TabBar ariaLabel={t("Customers", "العملاء")} idPrefix="cust" value={tab} onChange={setTab}
+        tabs={[{ id: "customers", label: t("Customers", "العملاء") }, { id: "requests", label: t("Special requests", "الطلبات الخاصة") }]} /> : undefined}
     />
+    <TabPanel idPrefix="cust" id="requests" active={tab === "requests"}><SpecialRequestsPanel lang={lang} notify={notify} /></TabPanel>
+    {tab === "customers" && <TabPanel idPrefix="cust" id="customers" active>
+    {scanOpen && <form className="cust-lookup" onSubmit={(event) => void scan(event)} role="search" aria-label={lookupLabel}>
+      <input className="field-input mono" dir="ltr" autoFocus value={code} onChange={(event) => { setCode(event.target.value); if (lookup.status !== "idle") setLookup({ status: "idle" }); }}
+        placeholder={t("Plate or warranty QR", "اللوحة أو QR الضمان")} aria-label={t("Plate or warranty QR code", "اللوحة أو رمز QR للضمان")} />
+      {code.trim() && <button type="submit" className="btn cust-nowrap" disabled={lookup.status === "busy"}>{t("Find", "بحث")}</button>}
+      {lookupNote && <p className="cust-lookup-note" role="status" data-tone={lookup.status === "error" ? "error" : undefined}>{lookupNote}</p>}
+      {lookup.status === "found" && <div className="cust-lookup-note" role="status">
+        <span className="plate-chips">
+          {lookup.result.customer && <RecordRef type="customer" id={lookup.result.customer.id} label={lookup.result.customer.title} mode="link" />}
+          {lookup.result.vehicle && <RecordRef type="vehicle" id={lookup.result.vehicle.id} label={lookup.result.vehicle.title} mode="link" />}
+          {lookup.result.warranty && <RecordRef type="warranty" id={lookup.result.warranty.id} label={lookup.result.warranty.title || undefined} badge={lookup.result.warranty.badge} />}
+        </span>
+      </div>}
+    </form>}
     <FilterBar
       lang={lang}
       search={{ value: query, onChange: setQuery, placeholder: t("Name, phone or plate", "الاسم أو الهاتف أو اللوحة") }}
       filters={[{ key: "language", label: t("Language", "اللغة"), value: language, onChange: setLanguage, options: [{ value: "all", label: t("All languages", "كل اللغات") }, { value: "ar", label: t("Arabic", "العربية") }, { value: "en", label: t("English", "الإنجليزية") }] }]}
       onClear={clear}
       resultCount={rows.length}
-    >
-      <form className="cust-lookup" onSubmit={(event) => void scan(event)} role="search" aria-label={t("Plate or QR lookup", "بحث باللوحة أو QR")}>
-        <input className="field-input mono" dir="ltr" value={code} onChange={(event) => { setCode(event.target.value); if (lookup.status !== "idle") setLookup({ status: "idle" }); }}
-          placeholder={t("Plate or warranty QR", "اللوحة أو QR الضمان")} aria-label={t("Plate or warranty QR code", "اللوحة أو رمز QR للضمان")} />
-        <button type="submit" className="btn" disabled={!code.trim() || lookup.status === "busy"}><ScanLine size={16} aria-hidden="true" />{t("Find", "بحث")}</button>
-        {lookupNote && <p className="cust-lookup-note" role="status" data-tone={lookup.status === "error" ? "error" : undefined}>{lookupNote}</p>}
-        {lookup.status === "found" && <div className="cust-lookup-note" role="status">
-          <span className="plate-chips">
-            {lookup.result.customer && <RecordRef type="customer" id={lookup.result.customer.id} label={lookup.result.customer.title} mode="link" />}
-            {lookup.result.vehicle && <RecordRef type="vehicle" id={lookup.result.vehicle.id} label={lookup.result.vehicle.title} mode="link" />}
-            {lookup.result.warranty && <RecordRef type="warranty" id={lookup.result.warranty.id} label={lookup.result.warranty.title || undefined} badge={lookup.result.warranty.badge} />}
-          </span>
-        </div>}
-      </form>
-    </FilterBar>
+    />
     <DataTable
       columns={columns}
       rows={rows}
@@ -141,7 +156,7 @@ export function CustomersPage({ lang, t, state, notify }: CustomersPageProps) {
       onRowClick={(row) => openCustomer(row.id)}
       initialSort={{ key: "name", direction: "asc" }}
       empty={all.length === 0
-        ? <EmptyState title={t("No customers yet", "لا يوجد عملاء بعد")} action={canAdd ? <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}><Plus size={16} aria-hidden="true" />{t("Add customer", "إضافة عميل")}</button> : undefined} />
+        ? <EmptyState title={t("No customers yet", "لا يوجد عملاء بعد")} text={scope} action={addButton} />
         : <EmptyState variant="no-results" title={t("No matching customers", "لا يوجد عملاء مطابقون")} action={<button type="button" className="btn" onClick={clear}>{t("Clear filters", "مسح التصفية")}</button>} />}
     />
     <DetailDrawer open={adding} onClose={() => setAdding(false)} lang={lang} title={t("Add customer", "إضافة عميل")}>

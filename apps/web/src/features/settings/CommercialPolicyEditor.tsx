@@ -235,7 +235,7 @@ export function CommercialPolicyEditor({ lang, policyId = "quote-acceptance:defa
           <Field label={t("Decimal places", "الخانات العشرية")} required><input className="field-input" type="number" min={0} max={6} value={text(value.minorUnitExponent)} onChange={(event) => change("minorUnitExponent", event.target.value)} /></Field>
           <Field label={t("Reporting time zone", "المنطقة الزمنية للتقارير")} required><input className="field-input" value={text(value.reportingTimezone)} onChange={(event) => change("reportingTimezone", event.target.value)} placeholder="Africa/Cairo" dir="ltr" /></Field>
           <Field label={t("Empty period means", "الفترة الخالية تعني")}>
-            <select className="field-select" value={text(value.emptyPeriod)} onChange={(event) => change("emptyPeriod", event.target.value)}>
+            <select className="select field-select" value={text(value.emptyPeriod)} onChange={(event) => change("emptyPeriod", event.target.value)}>
               <option value="unavailable">{t("Unavailable", "غير متاحة")}</option><option value="complete">{t("Complete", "مكتملة")}</option>
             </select>
           </Field>
@@ -261,7 +261,7 @@ export function CommercialPolicyEditor({ lang, policyId = "quote-acceptance:defa
         <FormSection title={t("Rules", "القواعد")}>
           <Field label={t("Quote valid for (days)", "صلاحية العرض (أيام)")} required><input className="field-input" type="number" min={1} step={1} value={text(value.validityDays)} onChange={(event) => change("validityDays", event.target.value)} /></Field>
           <Field label={t("Override role", "صلاحية الاستثناء")}>
-            <select className="field-select" value={text(value.overrideRole)} onChange={(event) => change("overrideRole", event.target.value || null)}>
+            <select className="select field-select" value={text(value.overrideRole)} onChange={(event) => change("overrideRole", event.target.value || null)}>
               <option value="">{t("None", "بدون")}</option><option value="owner">{t("Owner", "المالك")}</option><option value="branch-manager">{t("Branch manager", "مدير الفرع")}</option>
             </select>
           </Field>

@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { ArrowLeft, CarFront, FileText, Pencil, Plus, Sparkles } from "lucide-react";
-import type { GarageState, Locale } from "@garage/domain";
+import { formatPlateDisplay, type GarageState, type Locale } from "@garage/domain";
 import { Link } from "wouter";
 import { DetailDrawer, EmptyState, Notice, PageHeader, RecordRef, Skeleton } from "../../shared/components";
+import { hasCapability } from "../../shared/capabilities";
 import { useGarageStore } from "../../shared/store";
 import { customerDisplay } from "../../shared/ui";
 import { CustomerForm, writeErrorMessage } from "./CustomerForm";
@@ -22,11 +23,12 @@ function Back({ lang }: { lang: Locale }) {
   return <Link className="btn btn-quiet" href={listPath}><ArrowLeft size={16} aria-hidden="true" />{lang === "ar" ? "العملاء" : "Customers"}</Link>;
 }
 
+/** `back` is only true when the page header does not already carry the back link (no duplicate). */
 function LoadState({ result, lang, reload, back }: { result: ReturnType<typeof useRecord360>["state"]; lang: Locale; reload: () => void; back: boolean }) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   if (result.status === "loading") return <Skeleton rows={5} label={t("Loading", "جارٍ التحميل")} />;
   if (result.status === "ready") return null;
-  const action = <>{result.status === "error" && !result.forbidden && <button type="button" className="btn" onClick={reload}>{t("Retry", "إعادة المحاولة")}</button>}{back && <Back lang={lang} />}</>;
+  const action = <>{result.status === "error" && !result.forbidden && <button type="button" className="btn cust-nowrap" onClick={reload}>{t("Retry", "إعادة المحاولة")}</button>}{back && <Back lang={lang} />}</>;
   if (result.status === "missing") return <EmptyState title={t("Record not found", "السجل غير موجود")} text={t("It may have been removed or belongs to another branch.", "ربما حُذف أو يتبع فرعاً آخر.")} action={action} />;
   return <EmptyState variant="error" title={result.forbidden ? t("Not available for your role", "غير متاح لصلاحيتك") : t("Could not load this record", "تعذر تحميل السجل")} action={action} />;
 }
@@ -36,15 +38,17 @@ export function CustomerDetail({ lang, state, id, canEdit, notify }: DetailProps
   const store = useGarageStore();
   const { state: result, reload } = useRecord360("customer", id);
   const [drawer, setDrawer] = useState<"edit" | "vehicle" | "request" | "quote" | null>(null);
+  const canQuote = canEdit && hasCapability(store.actor, "quotes.manage");
 
+  const known = state.customers.find((item) => item.id === id);
   if (result.status !== "ready") return <>
-    <PageHeader title={t("Customer", "العميل")} actions={<Back lang={lang} />} />
-    <LoadState result={result} lang={lang} reload={reload} back />
+    <PageHeader title={known ? customerDisplay(known.name, lang) : t("Customer", "العميل")} eyebrow={known ? t("Customer", "العميل") : undefined} actions={<Back lang={lang} />} />
+    <LoadState result={result} lang={lang} reload={reload} back={false} />
   </>;
 
   const { customer, vehicles, vehiclesCount } = result.data;
   if (!customer) return <LoadState result={{ status: "missing" }} lang={lang} reload={reload} back />;
-  const local = state.customers.find((item) => item.id === customer.id);
+  const local = known;
   const shownVehicles = vehicles.length ? vehicles : (local?.vehicles ?? []).map((vehicle) => ({ id: vehicle.id, plate: vehicle.plate, make: vehicle.makeModel, model: "" }));
 
   const after = async (outcome: Awaited<ReturnType<typeof updateCustomer>>, done: string): Promise<string | null> => {
@@ -60,12 +64,13 @@ export function CustomerDetail({ lang, state, id, canEdit, notify }: DetailProps
     <PageHeader
       title={customerDisplay(customer.name, lang)}
       eyebrow={t("Customer", "العميل")}
+      meta={<span>{t(`${vehiclesCount} vehicles`, `${vehiclesCount} مركبة`)}</span>}
       actions={<>
         <Back lang={lang} />
-        {canEdit && <button type="button" className="btn" onClick={() => setDrawer("quote")}><FileText size={16} aria-hidden="true" />{t("Create quote", "إنشاء عرض سعر")}</button>}
-        {canEdit && <button type="button" className="btn" onClick={() => setDrawer("request")}><Sparkles size={16} aria-hidden="true" />{t("New special request", "طلب خاص جديد")}</button>}
-        {canEdit && <button type="button" className="btn" onClick={() => setDrawer("vehicle")}><Plus size={16} aria-hidden="true" />{t("Add vehicle", "إضافة مركبة")}</button>}
-        {canEdit && <button type="button" className="btn btn-primary" onClick={() => setDrawer("edit")}><Pencil size={16} aria-hidden="true" />{t("Edit", "تعديل")}</button>}
+        {canQuote && <button type="button" className="btn cust-nowrap" onClick={() => setDrawer("quote")}><FileText size={16} aria-hidden="true" />{t("Create quote", "إنشاء عرض سعر")}</button>}
+        {canEdit && <button type="button" className="btn cust-nowrap" onClick={() => setDrawer("request")}><Sparkles size={16} aria-hidden="true" />{t("New special request", "طلب خاص جديد")}</button>}
+        {canEdit && <button type="button" className="btn cust-nowrap" onClick={() => setDrawer("vehicle")}><Plus size={16} aria-hidden="true" />{t("Add vehicle", "إضافة مركبة")}</button>}
+        {canEdit && <button type="button" className="btn btn-primary cust-nowrap" onClick={() => setDrawer("edit")}><Pencil size={16} aria-hidden="true" />{t("Edit", "تعديل")}</button>}
       </>}
     />
     {customer.archived && <Notice tone="info">{t("This customer is archived.", "هذا العميل مؤرشف.")}</Notice>}
@@ -99,21 +104,23 @@ export function CustomerDetail({ lang, state, id, canEdit, notify }: DetailProps
 export function VehicleDetail({ lang, state, id, canEdit, notify }: DetailProps) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const [quoting, setQuoting] = useState(false);
+  const canQuote = canEdit && hasCapability(useGarageStore().actor, "quotes.manage");
   const { state: result, reload } = useRecord360("vehicle", id);
+  const knownPlate = state.customers.flatMap((item) => item.vehicles).find((item) => item.id === id)?.plate;
   if (result.status !== "ready") return <>
-    <PageHeader title={t("Vehicle", "المركبة")} actions={<Back lang={lang} />} />
-    <LoadState result={result} lang={lang} reload={reload} back />
+    <PageHeader title={knownPlate ? formatPlateDisplay(knownPlate) : t("Vehicle", "المركبة")} eyebrow={knownPlate ? t("Vehicle", "المركبة") : undefined} actions={<Back lang={lang} />} />
+    <LoadState result={result} lang={lang} reload={reload} back={false} />
   </>;
   const { vehicle, customer } = result.data;
   if (!vehicle) return <LoadState result={{ status: "missing" }} lang={lang} reload={reload} back />;
   return <>
     <PageHeader
       eyebrow={t("Vehicle", "المركبة")}
-      title={vehicle.plate}
+      title={formatPlateDisplay(vehicle.plate)}
       subtitle={[vehicleLabel(vehicle), vehicle.color].filter(Boolean).join(" · ") || undefined}
       actions={<>
         <Back lang={lang} />
-        {canEdit && customer && <button type="button" className="btn btn-primary" onClick={() => setQuoting(true)}><FileText size={16} aria-hidden="true" />{t("Create quote", "إنشاء عرض سعر")}</button>}
+        {canQuote && customer && <button type="button" className="btn btn-primary cust-nowrap" onClick={() => setQuoting(true)}><FileText size={16} aria-hidden="true" />{t("Create quote", "إنشاء عرض سعر")}</button>}
       </>}
     />
     <div className="cust-head-card">

@@ -3,42 +3,44 @@ import type { FinancialMetricId, FinancialReport, GarageState, Job, MetricValue,
 import { configuredNumber } from "@garage/domain";
 import { ArrowUpRight } from "lucide-react";
 import { financeApi, useGarageStore, workQueueApi } from "../../shared/store";
-import { dateLabel, pageBranchMatches, serviceDisplay, customerDisplay, type BranchPageProps } from "../../shared/ui";
-import { Collapsible, DataTable, EmptyState, FilterBar, Money, PageHeader, RecordRef, StatusBadge, type Column } from "../../shared/components";
-import type { RecordType } from "../../shared/record-types";
-import { isActiveJob, localIsoDate, monthStart, nextActionLabels, queueKinds, queueLabels, queueRecordType, queueTarget, sortQueue, summariseBranches, todayBookings, type BranchSummary } from "./overview-logic";
+import { pageBranchMatches, serviceDisplay, customerDisplay, type BranchPageProps } from "../../shared/ui";
+import { Amount, Collapsible, DataTable, DateText, Delta, EmptyState, PageHeader, Plate, RecordRef, StatusBadge, type Column } from "../../shared/components";
+import { isActiveJob, localIsoDate, monthStart, nextActionLabels, queueLabels, queuePath, queueTarget, selectAttention, groupQueue, summariseBranches, describeQueueRecord, todayBookings, type BranchSummary, type QueueLookup } from "./overview-logic";
 import "./overview.css";
 
 interface OverviewPageProps extends BranchPageProps {
   navigate: (path: string) => void;
 }
 
-const financeTiles: Array<{ id: FinancialMetricId; en: string; ar: string }> = [
-  { id: "collections", en: "Collections this month", ar: "المحصّل هذا الشهر" },
-  { id: "outstanding", en: "Outstanding balance", ar: "الرصيد المستحق" },
-  { id: "gross-profit", en: "Gross profit this month", ar: "مجمل ربح الشهر" },
+const ATTENTION_LIMIT = 10;
+const WORKSHOP_LIMIT = 8;
+
+const financeTiles: Array<{ id: FinancialMetricId; en: string; ar: string; inverse?: boolean }> = [
+  { id: "collections", en: "Collections", ar: "المحصّل" },
+  { id: "outstanding", en: "Outstanding balance", ar: "الرصيد المستحق", inverse: true },
+  { id: "gross-profit", en: "Gross profit", ar: "مجمل الربح" },
 ];
 
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : String(error); }
 
-function Tile({ label, value, foot, onOpen, tone }: { label: string; value: ReactNode; foot?: string; onOpen: () => void; tone?: "warning" }) {
+function Tile({ label, value, foot, onOpen, tone }: { label: string; value: ReactNode; foot?: ReactNode; onOpen: () => void; tone?: "warning" }) {
   return <button type="button" className="ov-tile" data-tone={tone} onClick={onOpen}>
-    <span className="ov-tile-label">{label}<ArrowUpRight size={14} aria-hidden="true" /></span>
+    <span className="ov-tile-label"><span className="ov-tile-label-text">{label}</span><ArrowUpRight size={14} aria-hidden="true" /></span>
     <span className="ov-tile-value">{value}</span>
     {foot && <span className="ov-tile-foot">{foot}</span>}
   </button>;
 }
 
 export function OverviewPage({ lang, t, state, navigate, branchName }: OverviewPageProps) {
-  const { actor } = useGarageStore();
+  const { actor, setCurrentBranch } = useGarageStore();
   const role = actor?.role;
   const isOwner = role === "owner";
   const isManager = role === "branch-manager";
   const isReception = role === "receptionist";
   const canSeeFinance = isOwner;
 
-  const [branchFilter, setBranchFilter] = useState<string>(state.currentBranch);
-  useEffect(() => { setBranchFilter(state.currentBranch); }, [state.currentBranch]);
+  // The topbar branch select is the only branch control; the page follows it.
+  const branchFilter: string = state.currentBranch;
   const inScope = (branchId: string) => branchFilter === "all" || branchFilter === branchId;
 
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -76,20 +78,24 @@ export function OverviewPage({ lang, t, state, navigate, branchName }: OverviewP
   const day = useMemo(() => todayBookings(bookings, today), [bookings, today]);
   const activeJobs = jobs.filter(isActiveJob);
   const readyCount = queue.filter((item) => item.kind === "ready-pickup").length;
-  const sortedQueue = useMemo(() => sortQueue(queue).filter((item) => kind === "all" || item.kind === kind), [queue, kind]);
+  const groups = useMemo(() => groupQueue(queue), [queue]);
+  const attention = useMemo(() => selectAttention(queue, kind, ATTENTION_LIMIT), [queue, kind]);
+  // A selected kind that no longer has items (branch change) falls back to all.
+  useEffect(() => { if (kind !== "all" && !groups.some((group) => group.kind === kind)) setKind("all"); }, [groups, kind]);
 
   const visibleBranches = state.branches.filter((branch) => pageBranchMatches({ ...state, currentBranch: "all" } as GarageState, branch.id));
   const summaries = useMemo(() => summariseBranches(visibleBranches.map((branch) => branch.id), state.jobs, state.bookings, queue, today), [visibleBranches.length, state.jobs, state.bookings, queue, today]);
   const showComparison = (isOwner || isManager) && visibleBranches.length > 1;
-  const canPickBranch = visibleBranches.length > 1;
+
+  const lookup: QueueLookup = useMemo(() => ({
+    bookings: state.bookings, jobs: state.jobs, claims: state.warrantyClaims, warranties: state.warranties, customers: state.customers,
+  }), [state.bookings, state.jobs, state.warrantyClaims, state.warranties, state.customers]);
 
   const customerOf = (customerId: string) => state.customers.find((customer) => customer.id === customerId);
   const personLabel = (customerId: string) => { const name = customerOf(customerId)?.name; return name ? customerDisplay(name, lang) : ""; };
   const plateOf = (customerId: string, vehicleId: string) => customerOf(customerId)?.vehicles.find((vehicle) => vehicle.id === vehicleId)?.plate ?? "";
-  const bookingLabel = (id: string) => { const b = state.bookings.find((x) => x.id === id); return b ? [personLabel(b.customerId), plateOf(b.customerId, b.vehicleId)].filter(Boolean).join(" · ") : undefined; };
-  const jobLabel = (id: string) => { const j = state.jobs.find((x) => x.id === id); return j ? [plateOf(j.customerId, j.vehicleId), personLabel(j.customerId)].filter(Boolean).join(" · ") : undefined; };
-  const recordLabel = (type: RecordType, id: string) => type === "booking" ? bookingLabel(id) : type === "job" ? jobLabel(id) : undefined;
   const stageText = (stage: string) => <StatusBadge status={stage} lang={lang} />;
+  const kindLabel = (value: string) => { const label = queueLabels[value]; return label ? t(label.en, label.ar) : value; };
   const actionText = (item: QueueItem) => {
     const known = item.nextAction ? nextActionLabels[item.nextAction] : undefined;
     if (known) return t(known.en, known.ar);
@@ -97,12 +103,25 @@ export function OverviewPage({ lang, t, state, navigate, branchName }: OverviewP
     return t("Open to review", "افتح للمراجعة");
   };
 
-  const kindOptions = [{ value: "all", label: t("All types", "كل الأنواع") }, ...queueKinds.map((value) => ({ value, label: t(queueLabels[value].en, queueLabels[value].ar) }))];
+  // Record cell: who (RecordRef), which car (Plate), when (DateText). Never a bare dash.
+  const recordCell = (item: QueueItem) => {
+    const info = describeQueueRecord(item, lookup);
+    const name = info.customerName ? customerDisplay(info.customerName, lang) : "";
+    return <span className="ov-record">
+      <span className="ov-record-main">
+        {info.type ? <RecordRef type={info.type} id={item.recordId} label={name || undefined} /> : <span className="ov-record-kind">{kindLabel(item.kind)}</span>}
+      </span>
+      <span className="ov-record-meta">
+        {info.plate && <Plate value={info.plate} />}
+        {info.date && <DateText value={info.date} lang={lang} />}
+        {!info.plate && !info.date && <span>{branchName(item.branchId)}</span>}
+      </span>
+    </span>;
+  };
 
   const attentionColumns: Column<QueueItem>[] = [
-    { key: "kind", header: t("Type", "النوع"), primary: true, render: (item) => { const label = queueLabels[item.kind]; return label ? t(label.en, label.ar) : item.kind; } },
-    { key: "record", header: t("Record", "السجل"), hideOnCard: false, render: (item) => { const type = queueRecordType(item.kind); return type ? <RecordRef type={type} id={item.recordId} label={recordLabel(type, item.recordId)} /> : <span className="ov-muted">—</span>; } },
-    ...(branchFilter === "all" ? [{ key: "branch", header: t("Branch", "الفرع"), render: (item: QueueItem) => branchName(item.branchId) } as Column<QueueItem>] : []),
+    { key: "record", header: t("Record", "السجل"), primary: true, hideOnCard: false, render: recordCell },
+    ...(branchFilter === "all" ? [{ key: "branch", header: t("Branch", "الفرع"), render: (item: QueueItem) => <span className="ov-nowrap">{branchName(item.branchId)}</span> } as Column<QueueItem>] : []),
     { key: "stage", header: t("Stage", "المرحلة"), render: (item) => stageText(item.stage) },
     { key: "next", header: t("Next step", "الخطوة التالية"), render: actionText },
   ];
@@ -121,28 +140,30 @@ export function OverviewPage({ lang, t, state, navigate, branchName }: OverviewP
   ];
 
   const jobColumns: Column<Job>[] = [
-    { key: "vehicle", header: t("Vehicle", "المركبة"), primary: true, render: (job) => <RecordRef type="job" id={job.id} label={jobLabel(job.id)} /> },
+    { key: "vehicle", header: t("Vehicle", "المركبة"), primary: true, render: (job) => <span className="ov-record"><span className="ov-record-main"><RecordRef type="job" id={job.id} label={personLabel(job.customerId) || undefined} /></span><span className="ov-record-meta"><Plate value={plateOf(job.customerId, job.vehicleId)} /></span></span> },
     { key: "service", header: t("Service", "الخدمة"), render: (job) => { const service = state.services.find((item) => item.id === job.serviceId); return service ? serviceDisplay(service.name, lang) : "—"; } },
-    { key: "branch", header: t("Branch", "الفرع"), render: (job) => branchName(job.branchId) },
+    { key: "branch", header: t("Branch", "الفرع"), render: (job) => <span className="ov-nowrap">{branchName(job.branchId)}</span> },
     { key: "stage", header: t("Stage", "المرحلة"), render: (job) => stageText(job.stage) },
-    { key: "updated", header: t("Updated", "آخر تحديث"), sortable: true, sortValue: (job) => job.updatedAt, render: (job) => dateLabel(job.updatedAt, lang) },
+    { key: "updated", header: t("Updated", "آخر تحديث"), sortable: true, sortValue: (job) => job.updatedAt, render: (job) => <DateText value={job.updatedAt} lang={lang} /> },
   ];
 
   type DayRow = (typeof day.dropoffs)[number];
-  const dayColumns = (timeHeader: string, timeOf: (row: DayRow) => string): Column<DayRow>[] => [
-    { key: "time", header: timeHeader, primary: true, mono: true, render: timeOf },
-    { key: "booking", header: t("Booking", "الحجز"), render: (row) => <RecordRef type="booking" id={row.id} label={bookingLabel(row.id)} /> },
+  const dayColumns = (timeHeader: string, timeCell: (row: DayRow) => ReactNode): Column<DayRow>[] => [
+    { key: "time", header: timeHeader, primary: true, render: timeCell },
     { key: "customer", header: t("Customer", "العميل"), render: (row) => <RecordRef type="customer" id={row.customerId} label={personLabel(row.customerId) || undefined} /> },
+    { key: "vehicle", header: t("Vehicle", "المركبة"), render: (row) => <Plate value={plateOf(row.customerId, row.vehicleId)} /> },
     { key: "status", header: t("Status", "الحالة"), render: (row) => <StatusBadge status={row.status} lang={lang} domain="booking" /> },
   ];
-  const dropoffTable = <DataTable<DayRow> lang={lang} caption={t("Today’s drop-offs", "تسليمات اليوم للورشة")} rows={day.dropoffs} rowKey={(row) => row.id} columns={dayColumns(t("Time", "الوقت"), (row) => row.dropoffTime)} onRowClick={(row) => navigate(`/workspace/bookings?record=${encodeURIComponent(row.id)}`)} empty={<EmptyState title={t("No drop-offs today", "لا توجد تسليمات اليوم")} />} />;
-  const pickupTable = <DataTable<DayRow> lang={lang} caption={t("Today’s pickups", "تسليمات اليوم للعملاء")} rows={day.pickups} rowKey={(row) => row.id} columns={dayColumns(t("Date", "التاريخ"), (row) => dateLabel(row.expectedPickup, lang))} onRowClick={(row) => navigate(`/workspace/bookings?record=${encodeURIComponent(row.id)}`)} empty={<EmptyState title={t("No pickups today", "لا توجد تسليمات للعملاء اليوم")} />} />;
+  const openBooking = (row: DayRow) => navigate(`/workspace/bookings?record=${encodeURIComponent(row.id)}`);
+  const dropoffTable = <DataTable<DayRow> lang={lang} caption={t("Today’s drop-offs", "تسليمات اليوم للورشة")} rows={day.dropoffs} rowKey={(row) => row.id} columns={dayColumns(t("Time", "الوقت"), (row) => <bdi dir="ltr" className="ov-nowrap">{row.dropoffTime}</bdi>)} onRowClick={openBooking} pageSize={10} pageSizes={[10, 25, 50]} empty={<EmptyState title={t("No drop-offs today", "لا توجد تسليمات اليوم")} />} />;
+  const pickupTable = <DataTable<DayRow> lang={lang} caption={t("Today’s pickups", "تسليمات اليوم للعملاء")} rows={day.pickups} rowKey={(row) => row.id} columns={dayColumns(t("Pickup", "التسليم"), (row) => <DateText value={row.expectedPickup} lang={lang} />)} onRowClick={openBooking} pageSize={10} pageSizes={[10, 25, 50]} empty={<EmptyState title={t("No pickups today", "لا توجد تسليمات للعملاء اليوم")} />} />;
 
-  const todaySection = <section className="ov-section" aria-label={t("Today", "اليوم")}>
-    <div className="ov-section-head"><h2>{t("Today", "اليوم")}</h2></div>
+  const todayTitle = isReception ? t("Arrivals and pickups", "الوصول والتسليم") : t("Today", "اليوم");
+  const todaySection = <section className="ov-section" aria-label={todayTitle}>
+    <div className="ov-section-head"><h2>{todayTitle}</h2><span className="ov-muted">{t(`${day.dropoffs.length} drop-offs · ${day.pickups.length} pickups`, `${day.dropoffs.length} وصول · ${day.pickups.length} تسليم`)}</span></div>
     <div className="ov-split">
-      <div><h3 className="ov-muted">{t("Drop-offs", "وصول السيارات")}</h3>{dropoffTable}</div>
-      <div><h3 className="ov-muted">{t("Pickups", "تسليم السيارات")}</h3>{pickupTable}</div>
+      <div className="ov-col"><h3 className="ov-sub">{t("Drop-offs", "وصول السيارات")}</h3>{dropoffTable}</div>
+      <div className="ov-col"><h3 className="ov-sub">{t("Pickups", "تسليم السيارات")}</h3>{pickupTable}</div>
     </div>
   </section>;
 
@@ -150,66 +171,72 @@ export function OverviewPage({ lang, t, state, navigate, branchName }: OverviewP
     if (reportState === "loading") return "…";
     const value: MetricValue | undefined = report?.metrics[id];
     if (!value || value.state === "unavailable") return "—";
-    return <Money minor={value.amount.minor} currency={value.amount.currency} lang={lang} />;
+    return <Amount variant="kpi" minor={value.amount.minor} currency={value.amount.currency} lang={lang} />;
   };
-  const metricFoot = (id: FinancialMetricId) => {
+  const metricFoot = (id: FinancialMetricId, inverse?: boolean): ReactNode => {
     const value = report?.metrics[id];
     if (reportState === "error") return t("Unavailable", "غير متاح");
     if (value?.state === "incomplete") return t("Incomplete data", "بيانات غير مكتملة");
     if (value?.state === "unavailable") return t("Not configured", "غير مُعدّ");
-    return t("Open Finance", "فتح المالية");
+    const comparison = report?.comparisons?.[id];
+    const percent = comparison && comparison.state === "available" ? comparison.percent : null;
+    return <span className="ov-foot-line">
+      <span>{t("This month", "هذا الشهر")}</span>
+      {percent !== null && <Delta value={percent} unit="percent" lang={lang} inverse={inverse} />}
+    </span>;
   };
 
   const title = isOwner ? t("Overview", "نظرة عامة") : isReception ? t("Today", "اليوم") : t("Branch overview", "نظرة على الفرع");
-  const branchSelect = canPickBranch
-    ? <label><span className="sr-only">{t("Branch", "الفرع")}</span><select className="filter-select ov-branch-select" value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)}>
-      <option value="all">{t("All branches", "كل الفروع")}</option>
-      {visibleBranches.map((branch) => <option key={branch.id} value={branch.id}>{branchName(branch.id)}</option>)}
-    </select></label>
-    : undefined;
 
-  const attentionSection = <section className="ov-section" aria-label={t("Needs attention", "يحتاج متابعة")}>
-    <div className="ov-section-head"><h2>{t("Needs attention", "يحتاج متابعة")}</h2></div>
-    <FilterBar lang={lang} filters={[{ key: "kind", label: t("Type", "النوع"), value: kind, options: kindOptions, onChange: setKind }]} onClear={() => setKind("all")} resultCount={queueLoading || queueError ? undefined : sortedQueue.length} />
-    <DataTable<QueueItem>
-      lang={lang}
-      caption={t("Needs attention", "يحتاج متابعة")}
-      columns={attentionColumns}
-      rows={sortedQueue}
-      rowKey={(item) => `${item.kind}:${item.recordId}`}
-      loading={queueLoading}
-      error={queueError || undefined}
-      onRetry={() => setQueueRetry((value) => value + 1)}
-      onRowClick={(item) => navigate(queueTarget(item))}
-      empty={kind !== "all"
-        ? <EmptyState variant="no-results" title={t("Nothing of this type", "لا توجد بنود من هذا النوع")} action={<button type="button" className="btn btn-sm" onClick={() => setKind("all")}>{t("Clear filters", "مسح التصفية")}</button>} />
-        : <EmptyState title={t("All clear", "لا شيء يحتاج متابعة")} />}
-    />
-  </section>;
+  const attentionBody = (() => {
+    if (queueLoading || queueError) {
+      return <DataTable<QueueItem> lang={lang} caption={t("Needs attention", "يحتاج متابعة")} columns={attentionColumns} rows={[]} rowKey={(item) => item.recordId} loading={queueLoading} error={queueError || undefined} onRetry={() => setQueueRetry((value) => value + 1)} paging={false} />;
+    }
+    if (queue.length === 0) return <EmptyState title={t("All clear", "لا شيء يحتاج متابعة")} text={t("Nothing is waiting for a decision.", "لا يوجد ما ينتظر قرارًا.")} />;
+    return <>
+      <div className="ov-chips" role="group" aria-label={t("Filter by type", "تصفية حسب النوع")}>
+        <button type="button" className="ov-chip" aria-pressed={kind === "all"} onClick={() => setKind("all")}>{t("All", "الكل")} <span className="ov-chip-count">{queue.length}</span></button>
+        {groups.map((group) => <button key={group.kind} type="button" className="ov-chip" aria-pressed={kind === group.kind} onClick={() => setKind(kind === group.kind ? "all" : group.kind)}>{kindLabel(group.kind)} <span className="ov-chip-count">{group.count}</span></button>)}
+      </div>
+      {attention.groups.map((group) => <div key={group.kind} className="ov-group">
+        <div className="ov-group-head">
+          <h3>{kindLabel(group.kind)} <span className="ov-chip-count">{group.count}</span></h3>
+          <button type="button" className="text-link" onClick={() => navigate(queuePath(group.kind))}>{t(`View all ${group.count}`, `عرض الكل (${group.count})`)}</button>
+        </div>
+        <DataTable<QueueItem> lang={lang} caption={kindLabel(group.kind)} columns={attentionColumns} rows={group.items} rowKey={(item) => `${item.kind}:${item.recordId}`} onRowClick={(item) => navigate(queueTarget(item))} paging={false} />
+      </div>)}
+      <p className="ov-muted ov-showing" aria-live="polite">{t(`Showing ${attention.shown} of ${kind === "all" ? queue.length : (groups.find((group) => group.kind === kind)?.count ?? 0)}`, `عرض ${attention.shown} من ${kind === "all" ? queue.length : (groups.find((group) => group.kind === kind)?.count ?? 0)}`)}</p>
+    </>;
+  })();
 
   return <>
-    <PageHeader title={title} subtitle={branchFilter === "all" ? t("All branches", "كل الفروع") : branchName(branchFilter)} actions={branchSelect} />
+    <PageHeader title={title} subtitle={branchFilter === "all" ? t("All branches", "كل الفروع") : branchName(branchFilter)} />
+
+    {todaySection}
 
     <div className="ov-tiles">
       <Tile label={t("Needs attention", "يحتاج متابعة")} value={queueLoading ? "…" : queue.length} tone={queue.length > 0 ? "warning" : undefined} onOpen={() => document.getElementById("ov-attention")?.scrollIntoView({ behavior: "smooth" })} />
       <Tile label={t("Active jobs", "أوامر نشطة")} value={activeJobs.length} onOpen={() => navigate("/workspace/workshop")} />
       <Tile label={t("Drop-offs today", "وصول اليوم")} value={day.dropoffs.length} onOpen={() => navigate("/workspace/bookings")} />
       <Tile label={t("Ready for pickup", "جاهز للتسليم")} value={queueLoading ? "…" : readyCount} onOpen={() => navigate("/workspace/workshop")} />
-      {canSeeFinance && financeTiles.map((tile) => <Tile key={tile.id} label={t(tile.en, tile.ar)} value={metricValue(tile.id)} foot={metricFoot(tile.id)} onOpen={() => navigate("/workspace/finance")} />)}
     </div>
+    {canSeeFinance && <div className="ov-tiles ov-tiles-money">
+      {financeTiles.map((tile) => <Tile key={tile.id} label={t(tile.en, tile.ar)} value={metricValue(tile.id)} foot={metricFoot(tile.id, tile.inverse)} onOpen={() => navigate("/workspace/finance")} />)}
+    </div>}
 
-    {isReception && todaySection}
-    <div id="ov-attention">{attentionSection}</div>
+    <div id="ov-attention"><section className="ov-section" aria-label={t("Needs attention", "يحتاج متابعة")}>
+      <div className="ov-section-head"><h2>{t("Needs attention", "يحتاج متابعة")}</h2></div>
+      {attentionBody}
+    </section></div>
 
     {showComparison && <section className="ov-section" aria-label={t("Branch comparison", "مقارنة الفروع")}>
       <div className="ov-section-head"><h2>{t("Branches", "الفروع")}</h2></div>
-      <DataTable<BranchSummary> lang={lang} caption={t("Branch comparison", "مقارنة الفروع")} columns={branchColumns} rows={summaries} rowKey={(row) => row.branchId} selectedKey={branchFilter} onRowClick={(row) => setBranchFilter(row.branchId)} empty={<EmptyState title={t("No branches", "لا توجد فروع")} />} />
+      <DataTable<BranchSummary> lang={lang} caption={t("Branch comparison", "مقارنة الفروع")} columns={branchColumns} rows={summaries} rowKey={(row) => row.branchId} selectedKey={branchFilter} onRowClick={(row) => setCurrentBranch(row.branchId as GarageState["currentBranch"])} paging={false} empty={<EmptyState title={t("No branches", "لا توجد فروع")} />} />
     </section>}
 
-    {!isReception && <Collapsible title={t("Today", "اليوم")} count={day.dropoffs.length + day.pickups.length}>{todaySection}</Collapsible>}
     <Collapsible title={t("Vehicles in the workshop", "المركبات في الورشة")} count={activeJobs.length}>
-      <DataTable<Job> lang={lang} caption={t("Vehicles in the workshop", "المركبات في الورشة")} columns={jobColumns} rows={activeJobs.slice(0, 8)} rowKey={(job) => job.id} onRowClick={(job) => navigate(`/workspace/workshop?record=${encodeURIComponent(job.id)}`)} empty={<EmptyState title={t("No active jobs", "لا توجد أوامر نشطة")} />} />
-      {activeJobs.length > 8 && <p><button type="button" className="text-link" onClick={() => navigate("/workspace/workshop")}>{t("Open workshop", "فتح الورشة")}</button></p>}
+      <DataTable<Job> lang={lang} caption={t("Vehicles in the workshop", "المركبات في الورشة")} columns={jobColumns} rows={activeJobs.slice(0, WORKSHOP_LIMIT)} rowKey={(job) => job.id} onRowClick={(job) => navigate(`/workspace/workshop?record=${encodeURIComponent(job.id)}`)} paging={false} empty={<EmptyState title={t("No active jobs", "لا توجد أوامر نشطة")} />} />
+      {activeJobs.length > WORKSHOP_LIMIT && <p><button type="button" className="text-link" onClick={() => navigate("/workspace/workshop")}>{t(`View all ${activeJobs.length}`, `عرض الكل (${activeJobs.length})`)}</button></p>}
     </Collapsible>
   </>;
 }

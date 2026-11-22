@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { hasCapability } from "../../shared/capabilities";
-import { Plus } from "lucide-react";
-import type { BranchId, CreateCustomerInput } from "@garage/domain";
+import { CheckCircle2, Copy, ExternalLink, MessageCircle, Phone as PhoneIcon, Plus, UserX, XCircle } from "lucide-react";
+import { formatPlateDisplay, type Booking, type BranchId, type CreateCustomerInput } from "@garage/domain";
 import { bookingAvailabilityApi, unknownWriteOutcomeCopy, useGarageStore, type SlotAvailability } from "../../shared/store";
-import { dateLabel, serviceDisplay, timeLabel, type ModalConfig, type RecordPageProps } from "../../shared/ui";
+import { dateLabel as dateText, serviceDisplay, timeLabel, type ModalConfig, type RecordPageProps } from "../../shared/ui";
 import {
-  Collapsible, ConfirmDialog, DataTable, DetailDrawer, EmptyState, Field, FilterBar, FormSection, PageHeader, RecordRef, RequiredNote, StatusBadge, useUrlState,
+  Collapsible, ConfirmDialog, DataTable, DateText, DetailDrawer, EmptyState, Field, FilterBar, FormSection, PageHeader, RecordRef, RequiredNote, Select, StatusBadge, useUrlState,
 } from "../../shared/components";
-import { applyDraftChange, dateRanges, draftReady, isoDate, matchesBooking, noShowJob, sortKey, type BookingDraft, type DateRange } from "./booking-logic";
+import { applyDraftChange, dateRanges, defaultRange, draftReady, isoDate, matchesBooking, noShowJob, showBranchColumn, sortBookings, sortKey, telHref, whatsappHref, type BookingDraft, type DateRange } from "./booking-logic";
+import { ContactLinks, VehicleCell } from "./cells";
+import { RowMenu } from "./RowMenu";
 import { CustomerVehiclePicker } from "./CustomerVehiclePicker";
 import { TransportPanel } from "../transport/TransportPanel";
 import "./bookings.css";
@@ -15,6 +17,8 @@ import "./bookings.css";
 interface BookingsPageProps extends RecordPageProps {
   /** Kept for the shell's prop contract; destructive actions now use ConfirmDialog. */
   confirmModal?: (config: ModalConfig | null) => void;
+  /** Tab strip (from BookingsAndTransport) rendered directly under the page title. */
+  tabs?: ReactNode;
 }
 
 const bookingErrorCopy: Record<string, { en: string; ar: string }> = {
@@ -34,11 +38,13 @@ const bookingErrorCopy: Record<string, { en: string; ar: string }> = {
 
 type PendingAction = { kind: "cancel" | "no-show"; bookingId: string } | null;
 
-export function BookingsPage({ lang, t, state, branchName, customerName, serviceName, vehicleFor, notify }: BookingsPageProps) {
+export function BookingsPage({ lang, t, state, branchName, customerName, serviceName, vehicleFor, notify, tabs }: BookingsPageProps) {
   const store = useGarageStore();
   const role = store.actor?.role;
   const canManage = hasCapability(store.actor, "bookings.manage");
   const canTransport = hasCapability(store.actor, "transport.coordinate");
+  // Phone numbers are customer contact data: show them only to actors who may read customers.
+  const canCall = hasCapability(store.actor, "customers.read") && !store.actor?.isDemo;
   const today = isoDate(new Date());
   const firstBranchId = (state.branches[0]?.id ?? "branch-a") as BranchId;
   const defaultBranch = (state.currentBranch === "all" ? firstBranchId : state.currentBranch) as BranchId;
@@ -46,7 +52,7 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
 
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
-  const [range, setRange] = useState<DateRange>("all");
+  const [range, setRange] = useState<DateRange>(defaultRange);
   const [record, setRecord] = useUrlState("record", "");
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState<BookingDraft>(emptyDraft);
@@ -63,20 +69,28 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
     return unknownWriteOutcomeCopy(code, lang) ?? t((copy ?? fallback).en, (copy ?? fallback).ar);
   };
 
-  const rows = useMemo(() => state.bookings
+  const rows = useMemo(() => sortBookings(state.bookings
     .filter((booking) => {
       const customer = state.customers.find((item) => item.id === booking.customerId);
       const vehicle = vehicleFor(booking.customerId, booking.vehicleId);
       return matchesBooking(booking, { customerName: customer?.name ?? "", phone: customer?.phone ?? "", plate: vehicle?.plate ?? "", makeModel: vehicle?.makeModel ?? "" },
         { query, status, range, branchId: state.currentBranch }, today);
-    })
-    .sort((a, b) => sortKey(b).localeCompare(sortKey(a))),
+    }), range),
   [state.bookings, state.customers, state.currentBranch, query, status, range, today, vehicleFor]);
 
   const selected = record ? state.bookings.find((booking) => booking.id === record) : undefined;
   const selectedVehicle = selected ? vehicleFor(selected.customerId, selected.vehicleId) : undefined;
   const selectedJob = selected ? state.jobs.find((job) => job.bookingId === selected.id) : undefined;
-  const clearFilters = () => { setQuery(""); setStatus("all"); setRange("all"); };
+  const clearFilters = () => { setQuery(""); setStatus("all"); setRange(defaultRange); };
+  const copyPlate = (plate: string | undefined) => {
+    if (!plate) return;
+    void navigator.clipboard?.writeText(formatPlateDisplay(plate)).then(
+      () => notify(t("Plate copied.", "تم نسخ اللوحة.")),
+      () => notify(t("Could not copy the plate.", "تعذر نسخ اللوحة.")),
+    );
+  };
+  const phoneOf = (customerId: string) => state.customers.find((item) => item.id === customerId)?.phone;
+  const branchColumn = showBranchColumn(state.branches.length, state.currentBranch);
 
   // Slot availability for the create form.
   useEffect(() => {
@@ -193,7 +207,9 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
   return <>
     <PageHeader
       title={t("Bookings", "الحجوزات")}
+      subtitle={t("Drop-offs, confirmations and transport.", "مواعيد الاستلام والتأكيدات والنقل.")}
       actions={canManage ? <button className="btn btn-primary" type="button" onClick={openCreate}><Plus size={16} aria-hidden="true" />{t("Add booking", "إضافة حجز")}</button> : undefined}
+      tabs={tabs}
     />
 
     <FilterBar
@@ -218,17 +234,33 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
         ? <EmptyState title={t("No bookings yet", "لا توجد حجوزات بعد")} action={canManage ? <button type="button" className="btn btn-primary" onClick={openCreate}>{t("Add booking", "إضافة حجز")}</button> : undefined} />
         : <EmptyState variant="no-results" title={t("No matching bookings", "لا توجد حجوزات مطابقة")} action={<button type="button" className="btn" onClick={clearFilters}>{t("Clear filters", "مسح التصفية")}</button>} />}
       columns={[
-        { key: "when", header: t("Drop-off", "الاستلام"), primary: true, sortable: true, sortValue: sortKey, render: (row) => <span><bdi>{dateLabel(row.dropoffDate, lang)}</bdi> <bdi dir="ltr">{timeLabel(row.dropoffTime, lang)}</bdi></span> },
-        { key: "customer", header: t("Customer / vehicle", "العميل / المركبة"), sortable: true, sortValue: (row) => customerName(row.customerId), render: (row) => <span>
-          <RecordRef type="customer" id={row.customerId} label={customerName(row.customerId)} hideIcon /><br />
-          <RecordRef type="vehicle" id={row.vehicleId} label={vehicleFor(row.customerId, row.vehicleId)?.plate} subtitle={vehicleFor(row.customerId, row.vehicleId)?.makeModel} hideIcon />
+        { key: "when", header: t("Drop-off", "الاستلام"), primary: true, sortable: true, sortValue: sortKey, render: (row) => <span className="bk-when"><DateText value={row.dropoffDate} lang={lang} /><DateText value={row.dropoffTime} lang={lang} time={row.dropoffTime} className="bk-sub" /></span> },
+        { key: "customer", header: t("Customer", "العميل"), sortable: true, sortValue: (row) => customerName(row.customerId), render: (row) => <span className="bk-cell">
+          <RecordRef type="customer" id={row.customerId} label={customerName(row.customerId)} hideIcon />
+          {canCall && <ContactLinks phone={phoneOf(row.customerId)} lang={lang} />}
         </span> },
-        { key: "service", header: t("Service", "الخدمة"), render: (row) => row.workSummary?.[lang] ?? serviceName(row.serviceId) },
-        { key: "branch", header: t("Branch", "الفرع"), render: (row) => branchName(row.branchId), hideOnCard: state.currentBranch !== "all" },
+        { key: "vehicle", header: t("Vehicle", "المركبة"), render: (row) => <VehicleCell id={row.vehicleId} plate={vehicleFor(row.customerId, row.vehicleId)?.plate} makeModel={vehicleFor(row.customerId, row.vehicleId)?.makeModel} /> },
+        { key: "service", header: t("Service", "الخدمة"), render: (row) => <bdi>{row.workSummary?.[lang] ?? serviceName(row.serviceId)}</bdi> },
+        ...(branchColumn ? [{ key: "branch", header: t("Branch", "الفرع"), render: (row: Booking) => <bdi>{branchName(row.branchId)}</bdi> }] : []),
         { key: "status", header: t("Status", "الحالة"), sortable: true, sortValue: (row) => row.status, render: (row) => <StatusBadge status={row.status} domain="booking" lang={lang} /> },
-        ...(canManage ? [{ key: "actions", header: "", hideOnCard: true, render: (row: (typeof rows)[number]) => row.status === "pending"
-          ? <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><button type="button" className="btn btn-sm btn-primary" onClick={() => void confirmBooking(row.id)}>{t("Confirm", "تأكيد")}</button></span>
-          : null }] : []),
+        { key: "actions", header: t("Actions", "إجراءات"), hideOnCard: false, render: (row: Booking) => {
+          const phone = canCall ? phoneOf(row.customerId) : undefined;
+          const plate = vehicleFor(row.customerId, row.vehicleId)?.plate;
+          const tel = telHref(phone);
+          const wa = whatsappHref(phone);
+          return <span className="bk-actions" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+            {canManage && row.status === "pending" && <button type="button" className="btn btn-sm btn-primary" onClick={() => void confirmBooking(row.id)}>{t("Confirm", "تأكيد")}</button>}
+            <RowMenu lang={lang} label={t("Row actions", "إجراءات الصف")} items={[
+              { key: "open", label: t("Open booking", "فتح الحجز"), icon: <ExternalLink size={16} aria-hidden="true" />, onSelect: () => setRecord(row.id) },
+              { key: "call", label: t("Call customer", "اتصال بالعميل"), icon: <PhoneIcon size={16} aria-hidden="true" />, href: tel ?? undefined, hidden: !tel },
+              { key: "wa", label: t("WhatsApp", "واتساب"), icon: <MessageCircle size={16} aria-hidden="true" />, href: wa ?? undefined, hidden: !wa },
+              { key: "plate", label: t("Copy plate", "نسخ اللوحة"), icon: <Copy size={16} aria-hidden="true" />, onSelect: () => copyPlate(plate), hidden: !plate },
+              { key: "confirm", label: t("Confirm", "تأكيد"), icon: <CheckCircle2 size={16} aria-hidden="true" />, onSelect: () => void confirmBooking(row.id), hidden: !(canManage && row.status === "pending") },
+              { key: "no-show", label: t("Mark no-show", "تسجيل لم يحضر"), icon: <UserX size={16} aria-hidden="true" />, onSelect: () => setPending({ kind: "no-show", bookingId: row.id }), hidden: !(canManage && noShowJob(row, state.jobs, role)) },
+              { key: "cancel", label: t("Cancel booking", "إلغاء الحجز"), icon: <XCircle size={16} aria-hidden="true" />, onSelect: () => setPending({ kind: "cancel", bookingId: row.id }), hidden: !(canManage && (row.status === "pending" || row.status === "confirmed")) },
+            ]} />
+          </span>;
+        } },
       ]}
     />
 
@@ -239,7 +271,7 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
       onClose={() => setRecord("")}
       wide
       title={selected ? customerName(selected.customerId) : t("Booking", "حجز")}
-      subtitle={selected ? `${dateLabel(selected.dropoffDate, lang)} · ${timeLabel(selected.dropoffTime, lang)}` : undefined}
+      subtitle={selected ? `${dateText(selected.dropoffDate, lang)} · ${timeLabel(selected.dropoffTime, lang)}` : undefined}
       footer={selected && canManage && (selected.status === "pending" || selected.status === "confirmed") ? <>
         {selected.status === "pending" && <button type="button" className="btn btn-primary" onClick={() => void confirmBooking(selected.id)}>{t("Confirm", "تأكيد")}</button>}
         {selected.status === "confirmed" && !moving && <button type="button" className="btn" onClick={() => setMoving({ date: selected.dropoffDate.slice(0, 10), time: "" })}>{t("Reschedule", "تغيير الموعد")}</button>}
@@ -253,11 +285,12 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
             <div><StatusBadge status={selected.status} domain="booking" lang={lang} /></div>
             <dl className="kv-grid">
               <div><dt>{t("Customer", "العميل")}</dt><dd><RecordRef type="customer" id={selected.customerId} label={customerName(selected.customerId)} /></dd></div>
-              <div><dt>{t("Vehicle", "المركبة")}</dt><dd><RecordRef type="vehicle" id={selected.vehicleId} label={selectedVehicle?.plate} subtitle={selectedVehicle?.makeModel} />{selectedVehicle && <><br /><small className="bk-muted"><bdi>{selectedVehicle.makeModel}</bdi></small></>}</dd></div>
-              <div><dt>{t("Service", "الخدمة")}</dt><dd>{selected.workSummary?.[lang] ?? serviceName(selected.serviceId)}</dd></div>
-              <div><dt>{t("Branch", "الفرع")}</dt><dd>{branchName(selected.branchId)}</dd></div>
-              <div><dt>{t("Drop-off", "الاستلام")}</dt><dd><bdi>{dateLabel(selected.dropoffDate, lang)}</bdi> <bdi dir="ltr">{timeLabel(selected.dropoffTime, lang)}</bdi></dd></div>
-              <div><dt>{t("Expected pickup", "التسليم المتوقع")}</dt><dd><bdi>{dateLabel(selected.expectedPickup, lang)}</bdi></dd></div>
+              {canCall && phoneOf(selected.customerId) && <div><dt>{t("Phone", "الهاتف")}</dt><dd><ContactLinks phone={phoneOf(selected.customerId)} lang={lang} /></dd></div>}
+              <div><dt>{t("Vehicle", "المركبة")}</dt><dd><VehicleCell id={selected.vehicleId} plate={selectedVehicle?.plate} makeModel={selectedVehicle?.makeModel} /></dd></div>
+              <div><dt>{t("Service", "الخدمة")}</dt><dd><bdi>{selected.workSummary?.[lang] ?? serviceName(selected.serviceId)}</bdi></dd></div>
+              <div><dt>{t("Branch", "الفرع")}</dt><dd><bdi>{branchName(selected.branchId)}</bdi></dd></div>
+              <div><dt>{t("Drop-off", "الاستلام")}</dt><dd><DateText value={selected.dropoffDate} lang={lang} time={selected.dropoffTime} /></dd></div>
+              <div><dt>{t("Expected pickup", "التسليم المتوقع")}</dt><dd><DateText value={selected.expectedPickup} lang={lang} /></dd></div>
             </dl>
             {(selected.acceptedQuoteRef || selectedJob) && <Collapsible title={t("Related", "مرتبط")} defaultOpen>
               <div className="bk-related">
@@ -309,15 +342,12 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
         </FormSection>
         <FormSection title={t("Service and time", "الخدمة والموعد")}>
           <Field label={t("Service", "الخدمة")} required>
-            <select className="field-select" value={draft.serviceId} onChange={(event) => update({ serviceId: event.target.value })}>
-              <option value="">{t("Choose a service", "اختر خدمة")}</option>
-              {state.services.map((service) => <option key={service.id} value={service.id}>{serviceDisplay(service.name, lang)}</option>)}
-            </select>
+            <Select className="field-select" value={draft.serviceId} onChange={(event) => update({ serviceId: event.target.value })}
+              options={[{ value: "", label: t("Choose a service", "اختر خدمة") }, ...state.services.map((service) => ({ value: service.id, label: serviceDisplay(service.name, lang) }))]} />
           </Field>
           {state.branches.length > 1 && <Field label={t("Branch", "الفرع")} required>
-            <select className="field-select" value={draft.branchId} onChange={(event) => update({ branchId: event.target.value as BranchId })}>
-              {state.branches.map((branch) => <option key={branch.id} value={branch.id}>{branchName(branch.id)}</option>)}
-            </select>
+            <Select className="field-select" value={draft.branchId} onChange={(event) => update({ branchId: event.target.value as BranchId })}
+              options={state.branches.map((branch) => ({ value: branch.id, label: branchName(branch.id) }))} />
           </Field>}
           <Field label={t("Drop-off date", "تاريخ الاستلام")} required><input className="field-input" type="date" min={today} value={draft.dropoffDate} onChange={(event) => update({ dropoffDate: event.target.value })} /></Field>
           <Field label={t("Time", "الوقت")} required full>

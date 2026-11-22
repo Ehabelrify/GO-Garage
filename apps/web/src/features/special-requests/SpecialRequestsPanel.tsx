@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import type { Locale } from "@garage/domain";
-import { DataTable, DetailDrawer, EmptyState, FilterBar, Money, RecordRef, StatusBadge, useUrlState, type Column } from "../../shared/components";
+import { Link } from "wouter";
+import { Amount, DataTable, DateText, DetailDrawer, EmptyState, FilterBar, Plate, RecordRef, StatusBadge, useUrlState, type Column } from "../../shared/components";
 import { hasCapability } from "../../shared/capabilities";
 import { useGarageStore } from "../../shared/store";
-import { dateLabel } from "../../shared/ui";
 import { CreateQuote } from "../quotes/CreateQuote";
 import { RequestDrawer } from "./RequestDrawer";
 import { RequestForm } from "./RequestForm";
@@ -50,12 +50,16 @@ export function SpecialRequestsPanel({ lang, notify }: { lang: Locale; notify: (
   const columns: Column<SpecialRequest>[] = [
     { key: "title", header: t("Request", "الطلب"), primary: true, sortable: true, sortValue: (row) => row.title, render: (row) => row.title },
     { key: "customer", header: t("Customer", "العميل"), sortable: true, sortValue: (row) => row.customerName, render: (row) => <RecordRef type="customer" id={row.customerId} label={row.customerName} /> },
-    { key: "vehicle", header: t("Vehicle", "المركبة"), render: (row) => <RecordRef type="vehicle" id={row.vehicleId} label={row.plate} /> },
-    { key: "date", header: t("Requested", "المطلوب"), sortable: true, sortValue: (row) => row.requestedFrom, render: (row) => <bdi>{dateRange(row.requestedFrom, row.requestedTo)}</bdi> },
-    { key: "price", header: t("Offer", "العرض"), numeric: true, render: (row) => row.reply?.quotedPrice ? <Money minor={row.reply.quotedPrice.minor} currency={row.reply.quotedPrice.currency} lang={lang} /> : "—" },
-    { key: "created", header: t("Created", "أُنشئ"), sortable: true, sortValue: (row) => row.createdAt, render: (row) => dateLabel(row.createdAt.slice(0, 10), lang) },
+    { key: "vehicle", header: t("Vehicle", "المركبة"), render: (row) => row.vehicleId ? <Link className="plate-link" href={`/workspace/customers?vehicle=${encodeURIComponent(row.vehicleId)}`}><Plate value={row.plate} /></Link> : <Plate value={row.plate} /> },
+    { key: "date", header: t("Requested", "المطلوب"), sortable: true, sortValue: (row) => row.requestedFrom, render: (row) => <bdi dir="ltr" className="date-text">{dateRange(row.requestedFrom, row.requestedTo)}</bdi> },
+    { key: "price", header: t("Offer", "العرض"), numeric: true, render: (row) => row.reply?.quotedPrice ? <Amount minor={row.reply.quotedPrice.minor} currency={row.reply.quotedPrice.currency} lang={lang} /> : "—" },
+    { key: "created", header: t("Created", "أُنشئ"), sortable: true, sortValue: (row) => row.createdAt, render: (row) => <DateText value={row.createdAt.slice(0, 10)} lang={lang} /> },
     { key: "status", header: t("Status", "الحالة"), sortable: true, sortValue: (row) => row.status, render: (row) => <StatusBadge status={row.status} lang={lang} domain="request" /> },
   ];
+
+  const scopeText = status === "open"
+    ? t(`Open requests: ${shown.length} of ${rows.length} total.`, `الطلبات المفتوحة: ${shown.length} من ${rows.length}.`)
+    : t(`Showing ${shown.length} of ${rows.length} requests.`, `عرض ${shown.length} من ${rows.length} طلب.`);
 
   return <div className="sr-stack">
     {canCreate && <div className="sr-row"><button type="button" className="btn btn-primary" onClick={() => setCreating(true)}><Plus size={16} aria-hidden="true" />{t("New special request", "طلب خاص جديد")}</button></div>}
@@ -64,14 +68,16 @@ export function SpecialRequestsPanel({ lang, notify }: { lang: Locale; notify: (
         { value: "open", label: t("Open (needs action)", "المفتوحة") }, { value: "all", label: t("All statuses", "كل الحالات") },
         ...requestStatuses.map((value) => ({ value, label: lang === "ar" ? statusAr[value] : value[0].toUpperCase() + value.slice(1).replace("-", " ") })),
       ] }]}
-      onClear={clear} resultCount={shown.length} />
+      onClear={clear} resultCount={shown.length}>
+      {rows.length > 0 && <span className="sr-muted">{scopeText}</span>}
+    </FilterBar>
     <DataTable<SpecialRequest> columns={columns} rows={shown} rowKey={(row) => row.id} lang={lang} caption={t("Special requests", "الطلبات الخاصة")}
       loading={loading} error={error ? t("Special requests could not be loaded.", "تعذر تحميل الطلبات الخاصة.") : null} onRetry={() => void load()}
       onRowClick={(row) => setRecord(row.id)} selectedKey={record || null}
       empty={rows.length === 0
         ? <EmptyState title={t("No special requests yet", "لا توجد طلبات خاصة بعد")} action={canCreate ? <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>{t("New special request", "طلب خاص جديد")}</button> : undefined} />
         : <EmptyState variant="no-results" title={t("No matching requests", "لا توجد طلبات مطابقة")} action={<button type="button" className="btn" onClick={clear}>{t("Clear filters", "مسح التصفية")}</button>} />} />
-    {record && <RequestDrawer lang={lang} id={record} canReview={canReview} canStaffAct={canCreate} onClose={() => setRecord("")} onChanged={() => void load()} onCreateQuote={(request) => setQuoteFor(request.id)} />}
+    {record && <RequestDrawer lang={lang} id={record} canReview={canReview} canStaffAct={canCreate} onClose={() => setRecord("")} onChanged={() => void load()} onCreateQuote={hasCapability(store.actor, "quotes.manage") ? (request) => setQuoteFor(request.id) : undefined} />}
     {quoteFor && <CreateQuote lang={lang} requestId={quoteFor} onClose={() => setQuoteFor(null)}
       onSaved={() => { setQuoteFor(null); notify(t("Draft quote saved.", "تم حفظ مسودة عرض السعر.")); void load(); }} />}
     <DetailDrawer open={creating} onClose={() => setCreating(false)} lang={lang} title={t("New special request", "طلب خاص جديد")}>

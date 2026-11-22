@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { effectiveAllowed, filterMembers, groupCapabilities, overrideCount, sameOverrides, toggleOverride, type StaffMember } from "./staff-logic";
+import { capabilityHints, capabilityLabels, effectiveAllowed, localisedName, filterMembers, groupCapabilities, overrideCount, sameOverrides, toggleOverride, type StaffMember } from "./staff-logic";
 
 const member = (patch: Partial<StaffMember>): StaffMember => ({ userId: "u1", email: "a@x.com", name: "Amal", role: "receptionist", branchIds: [], status: "active", ...patch });
 
@@ -31,5 +31,19 @@ describe("staff logic", () => {
   it("counts overrides", () => {
     expect(overrideCount(member({ permissions: { a: true, b: false } }))).toBe(2);
     expect(overrideCount(member({}))).toBe(0);
+  });
+  it("labels and groups the quotes capabilities", () => {
+    const groups = groupCapabilities(["quotes.view", "quotes.manage", "finance.view"]);
+    expect(groups.map((group) => group.id)).toEqual(["quotes", "business"]);
+    expect(capabilityLabels["quotes.view"].en).toMatch(/read only/);
+    expect(capabilityLabels["quotes.manage"].ar).toBeTruthy();
+    expect(capabilityHints["quotes.view"]).toBeTruthy();
+  });
+  it("shows one script for mixed-script names", () => {
+    const ar = "إسلام فتحي";
+    expect(localisedName(`${ar} (Islam Fathy)`, "en")).toBe("Islam Fathy");
+    expect(localisedName(`${ar} (Islam Fathy)`, "ar")).toBe(ar);
+    expect(localisedName("Islam Fathy (Owner)", "ar")).toBe("Islam Fathy (Owner)");
+    expect(localisedName("Amal", "en")).toBe("Amal");
   });
 });

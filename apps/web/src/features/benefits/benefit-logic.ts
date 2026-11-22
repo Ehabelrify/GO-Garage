@@ -1,4 +1,5 @@
 import type { BenefitEntitlement, BenefitLimit, Configured, Locale } from "@garage/domain";
+import { policyDisplayName } from "../quotes/policy-names";
 
 export type Bilingual = { ar: string; en: string };
 
@@ -40,12 +41,9 @@ export function limitText(limit: Configured<BenefitLimit>, lang: Locale): string
 export const totalUses = (limit: Configured<BenefitLimit>): number | null =>
   limit.state === "approved" && limit.value.kind === "quantity" ? limit.value.quantity : null;
 
-/** Name shown for a benefit: the policy id tail, humanised ("seed-free-wash" -> "Free wash"). */
+/** Name shown for a benefit, localised and humanised ("seed-vip-transport" -> "VIP transport" / Arabic name). */
 export function benefitName(benefit: { id: string }, lang: Locale): string {
-  const tail = benefit.id.includes(":") ? benefit.id.slice(benefit.id.indexOf(":") + 1) : benefit.id;
-  const cleaned = tail.replace(/^seed[-_]/, "").replace(/[-_]+/g, " ").trim();
-  const text = cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : "";
-  return text || (lang === "ar" ? "منفعة" : "Benefit");
+  return policyDisplayName(benefit.id, lang) || (lang === "ar" ? "منفعة" : "Benefit");
 }
 
 export interface BenefitFilter { query: string; status: string }
@@ -61,3 +59,39 @@ export function reasonText(reason: string, lang: Locale): string {
   if (!trimmed) return lang === "ar" ? "غير مؤهل" : "Not eligible";
   return /^[a-z0-9_-]+$/i.test(trimmed) ? trimmed.replace(/[-_]+/g, " ").replace(/^./, (c) => c.toUpperCase()) : trimmed;
 }
+
+/** Short allowance for chips and cells: "2 uses", "1 per month". */
+export function shortLimitText(limit: Configured<BenefitLimit>, lang: Locale): string {
+  if (limit.state !== "approved") return lang === "ar" ? "غير معتمد" : "Not approved";
+  const value = limit.value;
+  if (value.kind === "quantity") return lang === "ar" ? (value.quantity === 1 ? "استخدام واحد" : `${value.quantity} استخدامات`) : `${value.quantity} use${value.quantity === 1 ? "" : "s"}`;
+  if (value.kind === "recurring") return `${value.quantity} ${intervalLabel(value.interval, lang)}`;
+  return lang === "ar" ? "حسب السياسة" : "Per rule";
+}
+
+/** "1 of 2 used, 1 left" for fixed quantities; null when the total is not a fixed number. */
+export function usageText(limit: Configured<BenefitLimit>, used: number, lang: Locale): string | null {
+  const total = totalUses(limit);
+  if (total === null) return null;
+  const left = Math.max(0, total - used);
+  return lang === "ar" ? `${used} من ${total} مستخدم، المتبقي ${left}` : `${used} of ${total} used, ${left} left`;
+}
+
+export interface BenefitGroup { key: string; customerId: string; vehicleId: string; items: BenefitEntitlement[] }
+
+/** One row per customer and vehicle with all of their benefits (active first), instead of the same customer repeated. */
+export function groupBenefits(rows: BenefitEntitlement[]): BenefitGroup[] {
+  const groups = new Map<string, BenefitGroup>();
+  for (const row of rows) {
+    const key = `${row.customerId}:${row.vehicleId}`;
+    const group = groups.get(key) ?? { key, customerId: row.customerId, vehicleId: row.vehicleId, items: [] };
+    group.items.push(row);
+    groups.set(key, group);
+  }
+  const rank = (status: BenefitEntitlement["status"]) => (status === "active" ? 0 : status === "exhausted" ? 1 : 2);
+  return [...groups.values()].map((group) => ({ ...group, items: [...group.items].sort((a, b) => rank(a.status) - rank(b.status)) }));
+}
+
+/** Worst-to-best group status for sorting and the status filter: any active benefit makes the group active. */
+export const groupStatus = (group: BenefitGroup): BenefitEntitlement["status"] =>
+  group.items.some((item) => item.status === "active") ? "active" : group.items.some((item) => item.status === "exhausted") ? "exhausted" : "cancelled";

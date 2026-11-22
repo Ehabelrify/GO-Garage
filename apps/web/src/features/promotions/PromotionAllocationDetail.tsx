@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Locale } from "@garage/domain";
 import { promotionApi } from "../../shared/store";
-import { ConfirmDialog, EmptyState, Field, Money, Skeleton, StatusBadge } from "../../shared/components";
+import { Amount, ConfirmDialog, DateText, EmptyState, Field, Skeleton, StatusBadge } from "../../shared/components";
 import { commercialError } from "../quotes/commercial-errors";
 import { useLoader } from "../quotes/commercial-data";
 import { tr } from "../quotes/lookups";
@@ -47,10 +47,10 @@ export function PromotionAllocationDetail({ lang, id, onChanged }: { lang: Local
       <StatusBadge status={allocation.status} lang={lang} domain="reservation" label={actionLabels[allocation.status]?.[lang]} />
     </div>
     <dl className="qo-kv">
-      <dt>{t("Discount", "الخصم")}</dt><dd>{allocation.discount ? <Money minor={allocation.discount.minor} currency={allocation.discount.currency} lang={lang} /> : "—"}</dd>
+      <dt>{t("Discount", "الخصم")}</dt><dd>{allocation.discount ? <Amount minor={allocation.discount.minor} currency={allocation.discount.currency} lang={lang} variant="detail" /> : "—"}</dd>
       <dt>{t("Units used", "الوحدات المستخدمة")}</dt><dd>{used} / {pool.maximumUnits}</dd>
     </dl>
-    {history.length > 0 && <ul className="qo-history">{history.map((entry, index) => <li key={index}><strong>{actionLabels[entry.action]?.[lang] ?? entry.action.replace(/[-_]+/g, " ")}</strong><span className="qo-muted">{new Date(entry.at).toLocaleString(lang === "ar" ? "ar-EG-u-nu-latn" : "en-GB")}</span></li>)}</ul>}
+    {history.length > 0 && <ul className="qo-history">{history.map((entry, index) => <li key={index}><strong>{actionLabels[entry.action]?.[lang] ?? entry.action.replace(/[-_]+/g, " ")}</strong><span className="qo-muted"><DateText value={entry.at} lang={lang} /></span></li>)}</ul>}
     {allocation.status === "reserved" && <div><button type="button" className="btn btn-danger btn-sm" onClick={() => setReversing(true)}>{t("Reverse promotion", "عكس العرض")}</button></div>}
     {message && <p role="status" className="qo-muted">{message}</p>}
     <ConfirmDialog open={reversing} danger lang={lang} title={t("Reverse this promotion?", "عكس هذا العرض؟")} body={t("The units return to the pool. The history stays.", "تعود الوحدات إلى المخزون ويبقى السجل.")}

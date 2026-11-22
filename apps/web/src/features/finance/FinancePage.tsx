@@ -1,19 +1,19 @@
 import { useCallback, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { Info, Plus } from "lucide-react";
 import type { Branch, FinancialMetricId, FinancialReport, FinancialSourceRow, Locale, MetricComparison, MetricValue, MoneyEvent, ReportFilter } from "@garage/domain";
 import { financeApi, useGarageStore } from "../../shared/store";
 import {
-  Collapsible, DataTable, DetailDrawer, EmptyState, FilterBar, Money, Notice, PageHeader, RecordRef, Skeleton, TabBar, TabPanel, useUrlState,
+  Amount, Collapsible, DataTable, DetailDrawer, Delta, EmptyState, FilterBar, Notice, PageHeader, RecordRef, Skeleton, TabBar, TabPanel, useUrlState,
   type Column,
 } from "../../shared/components";
 import { FinanceRecordDetail } from "./FinanceRecordDetail";
 import { MoneyEventForm } from "./MoneyEventForm";
 import { AttestationPanel } from "./AttestationPanel";
 import {
-  allMetricIds, canViewFinance, canWriteFinance, emptyEventFilter, errorText, filterEvents, kindLabels, metricGroups, metricHints, metricLabels, moneyEventKinds,
+  allMetricIds, canViewFinance, isInverseMetric, reconciliationGap, sparklinePoints, canWriteFinance, emptyEventFilter, errorText, filterEvents, kindLabels, metricGroups, metricHints, metricLabels, moneyEventKinds,
   periodRange, provenanceLabel, reasonLabel, reportBranchOptions, signedMinor, sourceKindLabel, sourceMethodLabel, type EventFilter, type Period,
 } from "./finance-logic";
-import { dateTimeLabel, makeT, Pill, useFinanceLookups } from "./finance-ui";
+import { dateTimeLabel, EventDate, makeT, Pill, useFinanceLookups } from "./finance-ui";
 import { useLoad } from "./use-load";
 import "./finance.css";
 
@@ -64,10 +64,10 @@ export function FinancePage({ lang, branches }: { lang: Locale; branches: Branch
     <PageHeader
       title={t("Finance", "المالية")}
       subtitle={t("Operational figures from recorded sources. Not accounting.", "أرقام تشغيلية من مصادر مسجلة. ليست محاسبة.")}
-      actions={canWrite ? <button type="button" className="btn btn-primary" onClick={() => { setTab("events"); setAdding(true); }}><Plus size={16} aria-hidden="true" /> {t("Add money event", "إضافة حركة مالية")}</button> : undefined}
+      actions={canWrite ? <button type="button" className="btn btn-primary finance-add" onClick={() => { setTab("events"); setAdding(true); }}><Plus size={16} aria-hidden="true" />{t("Add money event", "إضافة حركة مالية")}</button> : undefined}
+      tabs={<TabBar tabs={tabs} value={tab} onChange={(id) => setTab(id)} ariaLabel={t("Finance sections", "أقسام المالية")} idPrefix="fin" />}
     />
     {toast && <div role="status" className="finance-toast">{toast}</div>}
-    <TabBar tabs={tabs} value={tab} onChange={(id) => setTab(id)} ariaLabel={t("Finance sections", "أقسام المالية")} idPrefix="fin" />
     <TabPanel idPrefix="fin" id="overview" active={tab === "overview"}>
       <OverviewTab lang={lang} filter={filter} period={period} setPeriod={(next) => { setPeriodValue(next); if (next !== "custom") setRange(periodRange(next)); }}
         range={range} setRange={(next) => { setPeriodValue("custom"); setRange(next); }} reportBranch={reportBranch} setReportBranch={setReportBranch}
@@ -115,6 +115,9 @@ function OverviewTab({ lang, filter, period, setPeriod, range, setRange, reportB
 }) {
   const t = makeT(lang);
   const report = useLoad<FinancialReport>(() => financeApi.report(filter), [filter.branchId, filter.from, filter.to, filter.groupBy]);
+  const lockedBranch = !branchChoice.all && branchChoice.branches.length === 1;
+  const gap = report.data ? reconciliationGap(report.data.metrics) : null;
+  const periodText = `${filter.from} – ${filter.to}`;
   const hasIncomplete = report.data && allMetricIds.some((id) => report.data!.metrics[id]?.state !== "available");
   const branchOptions = [...(branchChoice.all ? [{ value: "all", label: t("All branches", "كل الفروع") }] : []), ...branchChoice.branches.map((branch) => ({ value: branch.id, label: lookups.branchName(branch.id) }))];
   const periodOptions: Array<{ value: Period; label: string }> = [
@@ -125,8 +128,9 @@ function OverviewTab({ lang, filter, period, setPeriod, range, setRange, reportB
     <FilterBar lang={lang}
       filters={[
         { key: "period", label: t("Period", "الفترة"), value: period, options: periodOptions, onChange: (value) => setPeriod(value as Period), allValue: "__none" },
-        { key: "branch", label: t("Branch", "الفرع"), value: reportBranch, options: branchOptions, onChange: setReportBranch, allValue: branchChoice.all ? "all" : "__none" },
+        ...(lockedBranch ? [] : [{ key: "branch", label: t("Branch", "الفرع"), value: reportBranch, options: branchOptions, onChange: setReportBranch, allValue: branchChoice.all ? "all" : "__none" }]),
       ]}>
+      {lockedBranch && <span className="tag" title={t("Your branch", "فرعك")}>{t("Your branch", "فرعك")}: {lookups.branchName(branchChoice.branches[0].id)}</span>}
       {period === "custom" && <>
         <label><span className="sr-only">{t("From", "من")}</span><input className="filter-select" type="date" value={range.from} max={range.to} onChange={(event) => setRange({ ...range, from: event.target.value })} /></label>
         <label><span className="sr-only">{t("To", "إلى")}</span><input className="filter-select" type="date" value={range.to} min={range.from} onChange={(event) => setRange({ ...range, to: event.target.value })} /></label>
@@ -136,12 +140,17 @@ function OverviewTab({ lang, filter, period, setPeriod, range, setRange, reportB
     {report.error && <EmptyState variant="error" title={t("Could not load the report", "تعذر تحميل التقرير")} text={report.error} action={<button type="button" className="btn" onClick={report.reload}>{t("Retry", "إعادة المحاولة")}</button>} />}
     {report.data && !report.loading && <>
       {hasIncomplete && <Notice tone="info">{t("Figures marked incomplete or unavailable are not estimated.", "الأرقام غير المكتملة أو غير المتاحة لا يتم تقديرها.")}</Notice>}
+      <p className="finance-period"><span>{t("Figures for", "الأرقام عن")}</span> <bdi dir="ltr">{periodText}</bdi></p>
       {metricGroups.map((group) => <section className="finance-group" key={group.id} aria-label={group[lang]}>
         <h2 className="finance-group-title">{group[lang]}</h2>
         <div className="finance-metrics">
           {group.metrics.map((id) => <MetricCard key={id} id={id} value={report.data!.metrics[id]} comparison={report.data!.comparisons[id]} lang={lang} pipeline={group.id === "pipeline"} onSources={() => onSources(id)} />)}
         </div>
       </section>)}
+      {gap && <p className="finance-recon"><Info size={15} aria-hidden="true" /><span>{t(
+        "Collections is cash received minus refunds. Recognized revenue follows the approved rule (work done), so the two differ by",
+        "المحصّل هو النقد المستلم بعد الاسترداد. الإيراد المعترف به يتبع القاعدة المعتمدة (العمل المنجز)، لذلك يختلفان بمقدار")} <Amount variant="kpi" minor={Math.abs(gap.gapMinor)} currency={gap.currency} lang={lang} />.</span></p>}
+      <TrendPreview report={report.data} lang={lang} />
       <Collapsible title={t("Trend by period", "الاتجاه حسب الفترة")} count={report.data.trends.length}>
         <TrendTable report={report.data} lang={lang} />
       </Collapsible>
@@ -153,37 +162,70 @@ function OverviewTab({ lang, filter, period, setPeriod, range, setRange, reportB
 function MetricCard({ id, value, comparison, lang, pipeline, onSources }: { id: FinancialMetricId; value: MetricValue | undefined; comparison: MetricComparison | undefined; lang: Locale; pipeline: boolean; onSources: () => void }) {
   const t = makeT(lang);
   const state = value?.state ?? "unavailable";
-  return <article className={`finance-metric${pipeline ? " pipeline" : ""}`} data-state={state}>
+  const reasons = value && value.state !== "available" ? value.reasons : [];
+  const unavailableWhy = state === "unavailable"
+    ? (reasons.length ? reasons.map((reason) => reasonLabel(reason, lang)).join(" ") : t("No approved source for this figure yet.", "لا يوجد مصدر معتمد لهذا الرقم بعد."))
+    : "";
+  const inverse = isInverseMetric(id);
+  return <article className={`finance-metric${pipeline ? " pipeline" : ""}`} data-state={state} data-metric={id}>
     <div className="finance-metric-head">
       <h3>{metricLabels[id][lang]}</h3>
-      {state === "incomplete" && <Pill tone="warning">{t("Incomplete", "غير مكتمل")}</Pill>}
-      {state === "unavailable" && <Pill tone="neutral">{t("Unavailable", "غير متاح")}</Pill>}
+      {state === "incomplete" && <Pill lang={lang} tone="warning">{t("Incomplete", "غير مكتمل")}</Pill>}
+      {state === "unavailable" && <Pill lang={lang} tone="neutral">{t("Unavailable", "غير متاح")}</Pill>}
     </div>
     <div className="finance-metric-value">
-      {value && value.state !== "unavailable" ? <Money minor={value.amount.minor} currency={value.amount.currency} lang={lang} /> : <span aria-label={t("No figure", "لا يوجد رقم")}>—</span>}
+      {value && value.state !== "unavailable"
+        ? <Amount variant="kpi" minor={value.amount.minor} currency={value.amount.currency} lang={lang} />
+        : <span aria-label={t("No figure", "لا يوجد رقم")}>—</span>}
     </div>
     <p className="finance-metric-hint">{metricHints[id][lang]}</p>
-    {value && value.state !== "available" && value.reasons.length > 0 && <ul className="finance-reasons">{value.reasons.map((reason) => <li key={reason}>{reasonLabel(reason, lang)}</li>)}</ul>}
-    {value && value.state === "incomplete" && value.excludedSourceCount > 0 && <p className="finance-metric-hint">{t(`${value.excludedSourceCount} sources excluded`, `${value.excludedSourceCount} مصدر مستبعد`)}</p>}
-    <div className="finance-metric-foot">
+    <div className="finance-metric-note">
+      {state === "unavailable" && <p className="finance-why" role="note"><Info size={13} aria-hidden="true" />{unavailableWhy}</p>}
+      {state === "incomplete" && reasons.length > 0 && <ul className="finance-reasons">{reasons.map((reason) => <li key={reason}>{reasonLabel(reason, lang)}</li>)}</ul>}
+      {value && value.state === "incomplete" && value.excludedSourceCount > 0 && <p className="finance-metric-hint">{t(`${value.excludedSourceCount} sources excluded`, `${value.excludedSourceCount} مصدر مستبعد`)}</p>}
+    </div>
+    <div className="finance-metric-delta">
       {comparison?.state === "available"
-        ? <span className="finance-delta" data-dir={comparison.delta.minor < 0 ? "down" : comparison.delta.minor > 0 ? "up" : "flat"}>
-            <Money minor={comparison.delta.minor} currency={comparison.delta.currency} lang={lang} />{comparison.percent !== null && <bdi> ({comparison.percent > 0 ? "+" : ""}{Math.round(comparison.percent * 10) / 10}%)</bdi>} {t("vs previous period", "مقارنة بالفترة السابقة")}
-          </span>
-        : <span className="finance-delta">{t("No comparison", "لا توجد مقارنة")}</span>}
-      {value && value.state !== "unavailable" && value.sourceCount > 0 && <button type="button" className="btn btn-quiet btn-sm" onClick={onSources}>{t(`View ${value.sourceCount} sources`, `عرض ${value.sourceCount} مصدر`)}</button>}
+        ? <>
+            {comparison.percent !== null && <Delta value={comparison.percent} unit="percent" lang={lang} inverse={inverse} />}
+            <Delta value={comparison.delta.minor} unit="minor" currency={comparison.delta.currency} lang={lang} inverse={inverse} />
+            <span className="finance-delta-label">{t("vs previous period", "مقارنة بالفترة السابقة")}</span>
+          </>
+        : <span className="finance-delta-label">{t("No comparison", "لا توجد مقارنة")}</span>}
+    </div>
+    <div className="finance-metric-foot">
+      {value && value.state !== "unavailable" && value.sourceCount > 0
+        ? <button type="button" className="btn btn-quiet btn-sm" onClick={onSources}>{t(`View ${value.sourceCount} sources`, `عرض ${value.sourceCount} مصدر`)}</button>
+        : <span className="finance-delta-label">{t("No sources to show", "لا توجد مصادر للعرض")}</span>}
     </div>
   </article>;
+}
+
+/** Collapsed-trend preview: one sparkline per headline figure so the accordion is not a blank label. */
+function TrendPreview({ report, lang }: { report: FinancialReport; lang: Locale }) {
+  const t = makeT(lang);
+  const shown: FinancialMetricId[] = ["collections", "recognized-revenue", "net-profit"];
+  const lines = shown.map((id) => {
+    const values = report.trends.map((row) => { const v = row.metrics[id]; return v && v.state !== "unavailable" ? v.amount.minor : null; });
+    return { id, points: sparklinePoints(values, 120, 28) };
+  }).filter((line) => line.points);
+  if (!lines.length) return null;
+  return <div className="finance-spark-row">
+    {lines.map((line) => <figure key={line.id} className="finance-spark">
+      <figcaption>{metricLabels[line.id][lang]}</figcaption>
+      <svg viewBox="0 0 120 28" role="img" aria-label={`${metricLabels[line.id][lang]}: ${t("trend over the period", "الاتجاه خلال الفترة")}`} preserveAspectRatio="none"><polyline points={line.points!} fill="none" stroke="currentColor" strokeWidth="1.5" vectorEffect="non-scaling-stroke" /></svg>
+    </figure>)}
+  </div>;
 }
 
 function TrendTable({ report, lang }: { report: FinancialReport; lang: Locale }) {
   const t = makeT(lang);
   const shown: FinancialMetricId[] = ["collections", "direct-cost", "recognized-revenue", "net-profit"];
   const columns: Column<FinancialReport["trends"][number]>[] = [
-    { key: "bucket", header: t("Period", "الفترة"), render: (row) => <bdi>{row.bucket}</bdi>, primary: true, sortable: true, sortValue: (row) => row.bucket },
+    { key: "bucket", header: t("Period", "الفترة"), render: (row) => <bdi dir="ltr">{row.bucket}</bdi>, primary: true, sortable: true, sortValue: (row) => row.bucket },
     ...shown.map((id) => ({
       key: id, header: metricLabels[id][lang], numeric: true,
-      render: (row: FinancialReport["trends"][number]) => { const value = row.metrics[id]; return value && value.state !== "unavailable" ? <Money minor={value.amount.minor} currency={value.amount.currency} lang={lang} /> : "—"; },
+      render: (row: FinancialReport["trends"][number]) => { const value = row.metrics[id]; return value && value.state !== "unavailable" ? <Amount minor={value.amount.minor} currency={value.amount.currency} lang={lang} /> : "—"; },
     })),
   ];
   return <DataTable columns={columns} rows={report.trends} rowKey={(row) => row.bucket} lang={lang} caption={t("Trend by period", "الاتجاه حسب الفترة")} empty={<EmptyState title={t("No data in this period", "لا توجد بيانات في هذه الفترة")} />} />;
@@ -198,9 +240,9 @@ function EventsTab({ lang, events, lookups, branchChoice, selectedId, onOpen, ca
   const rows = useMemo(() => filterEvents(events.data ?? [], filter), [events.data, filter]);
   const patch = (next: Partial<EventFilter>) => setFilter((current) => ({ ...current, ...next }));
   const columns: Column<MoneyEvent>[] = [
-    { key: "date", header: t("Date", "التاريخ"), render: (row) => dateTimeLabel(row.effectiveAt, lang), sortable: true, sortValue: (row) => row.effectiveAt, primary: true },
+    { key: "date", header: t("Date", "التاريخ"), render: (row) => <EventDate value={row.effectiveAt} lang={lang} />, sortable: true, sortValue: (row) => row.effectiveAt, primary: true },
     { key: "kind", header: t("Type", "النوع"), render: (row) => kindLabels[row.kind][lang], sortable: true, sortValue: (row) => kindLabels[row.kind][lang] },
-    { key: "amount", header: t("Amount", "المبلغ"), numeric: true, render: (row) => <Money minor={signedMinor(row.kind, row.amount.minor)} currency={row.amount.currency} lang={lang} />, sortable: true, sortValue: (row) => signedMinor(row.kind, row.amount.minor) },
+    { key: "amount", header: t("Amount", "المبلغ"), numeric: true, render: (row) => <Amount minor={signedMinor(row.kind, row.amount.minor)} currency={row.amount.currency} lang={lang} />, sortable: true, sortValue: (row) => signedMinor(row.kind, row.amount.minor) },
     { key: "branch", header: t("Branch", "الفرع"), render: (row) => lookups.branchName(row.branchId) },
     { key: "source", header: t("Method", "الطريقة"), render: (row) => <>{sourceMethodLabel(row.sourceMethod, lang)} <bdi className="mono">{row.sourceReference}</bdi></> },
     { key: "links", header: t("Linked to", "مرتبط بـ"), hideOnCard: false, render: (row) => <span className="finance-links">
@@ -210,7 +252,7 @@ function EventsTab({ lang, events, lookups, branchChoice, selectedId, onOpen, ca
       {row.reservationId && <RecordRef type="reservation" id={row.reservationId} label={lookups.reservationLabel(row.reservationId)} />}
       {!row.customerId && !row.quoteId && !row.jobId && !row.reservationId && "—"}
     </span> },
-    { key: "status", header: t("Status", "الحالة"), render: (row) => <Pill tone={row.reversed ? "neutral" : "success"}>{row.reversed ? t("Reversed", "معكوس") : t("Recorded", "مسجل")}</Pill> },
+    { key: "status", header: t("Status", "الحالة"), render: (row) => <Pill lang={lang} tone={row.reversed ? "neutral" : "success"}>{row.reversed ? t("Reversed", "معكوس") : t("Recorded", "مسجل")}</Pill> },
   ];
   const filtered = rows.length !== (events.data?.length ?? 0);
   return <>
@@ -253,16 +295,16 @@ function RecordsTab({ lang, filter, metric, setMetric, lookups }: { lang: Locale
     } catch (failure) { setMoreError(errorText(failure, lang)); }
   }, [cursor, filter, metric, key, more.rows, lang]);
   const columns: Column<FinancialSourceRow>[] = [
-    { key: "date", header: t("Date", "التاريخ"), render: (row) => dateTimeLabel(row.effectiveAt, lang), sortable: true, sortValue: (row) => row.effectiveAt, primary: true },
+    { key: "date", header: t("Date", "التاريخ"), render: (row) => <EventDate value={row.effectiveAt} lang={lang} />, sortable: true, sortValue: (row) => row.effectiveAt, primary: true },
     { key: "kind", header: t("Source", "المصدر"), render: (row) => sourceKindLabel(row.sourceKind, lang) },
-    { key: "amount", header: t("Amount", "المبلغ"), numeric: true, render: (row) => <Money minor={row.amount.minor} currency={row.amount.currency} lang={lang} />, sortable: true, sortValue: (row) => row.amount.minor },
+    { key: "amount", header: t("Amount", "المبلغ"), numeric: true, render: (row) => <Amount minor={row.amount.minor} currency={row.amount.currency} lang={lang} />, sortable: true, sortValue: (row) => row.amount.minor },
     { key: "branch", header: t("Branch", "الفرع"), render: (row) => lookups.branchName(row.branchId) },
     { key: "quote", header: t("Quote", "عرض السعر"), render: (row) => row.relatedQuoteId ? <RecordRef type="quote" id={row.relatedQuoteId} label={lookups.quoteLabel(row.relatedQuoteId)} /> : "—" },
     { key: "provenance", header: t("Basis", "الأساس"), render: (row) => provenanceLabel(row.provenance, lang) },
   ];
   return <>
     <FilterBar lang={lang} filters={[{ key: "metric", label: t("Figure", "الرقم"), value: metric, allValue: "__none", onChange: (value) => setMetric(value as FinancialMetricId), options: allMetricIds.map((id) => ({ value: id, label: metricLabels[id][lang] })) }]} resultCount={first.data ? rows.length : undefined}>
-      <span className="form-hint">{t("Uses the period and branch from Overview.", "يستخدم الفترة والفرع من النظرة العامة.")} <bdi>{filter.from} – {filter.to}</bdi></span>
+      <span className="form-hint">{t("Uses the period and branch from Overview.", "يستخدم الفترة والفرع من النظرة العامة.")} <bdi dir="ltr">{filter.from} – {filter.to}</bdi></span>
     </FilterBar>
     <DataTable columns={columns} rows={rows} rowKey={(row) => row.id} lang={lang} caption={t("Source records", "سجلات المصدر")}
       loading={first.loading} error={first.error ? errorText(new Error(first.error), lang) : null} onRetry={first.reload}

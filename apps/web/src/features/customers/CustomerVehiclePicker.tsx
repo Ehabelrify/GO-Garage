@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Plus, X } from "lucide-react";
 import type { Customer, Locale } from "@garage/domain";
-import { DetailDrawer } from "../../shared/components";
+import { DetailDrawer, Phone, Plate } from "../../shared/components";
 import { useGarageStore } from "../../shared/store";
 import { customerDisplay } from "../../shared/ui";
 import { CustomerForm, writeErrorMessage, type BranchOption } from "./CustomerForm";
@@ -110,8 +110,8 @@ export function CustomerVehiclePicker({ lang, value, onChange, withVehicle = tru
           {open && <ul className="cvp-list" id={listId} role="listbox" aria-labelledby={labelId}>
             {matches.map((customer, index) => <li key={customer.id} role="presentation">
               <button type="button" role="option" id={`${listId}-${customer.id}`} aria-selected={index === active} data-active={index === active} className="cvp-option" onClick={() => choose(customer)} onMouseEnter={() => setActive(index)}>
-                <span className="cvp-option-main"><strong>{customerDisplay(customer.name, lang)}</strong><bdi className="cvp-option-sub mono">{customer.phone}</bdi></span>
-                <span className="plate-chips">{customer.vehicles.slice(0, 3).map((vehicle) => <bdi className="plate-chip mono" key={vehicle.id}>{vehicle.plate}</bdi>)}</span>
+                <span className="cvp-option-main"><strong>{customerDisplay(customer.name, lang)}</strong><span className="cvp-option-sub"><Phone value={customer.phone} /></span></span>
+                <span className="plate-chips">{customer.vehicles.slice(0, 3).map((vehicle) => <Plate key={vehicle.id} value={vehicle.plate} />)}</span>
               </button>
             </li>)}
             {matches.length === 0 && <li className="cvp-empty" role="presentation">{store.status === "loading" ? t("Loading…", "جارٍ التحميل…") : t("No match", "لا توجد نتيجة")}</li>}

@@ -1,9 +1,10 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Globe, Lock, Phone } from "lucide-react";
+import { Globe, Lock, MessageCircle } from "lucide-react";
+import { Link } from "wouter";
 import type { GarageState, Locale } from "@garage/domain";
-import { Accordion, EmptyState, Money, RecordRef, StatusBadge, TabBar, type AccordionSection } from "../../shared/components";
+import { Accordion, Amount, DateText, EmptyState, Phone, Plate, RecordRef, StatusBadge, TabBar, formatPhone, type AccordionSection } from "../../shared/components";
 import {
-  buildTimeline, describeItem, sectionKeys, shortDate, telHref,
+  buildTimeline, describeItem, sectionKeys,
   type DescribeEnv, type Parsed360, type SectionKey, type SectionRow, type TimelineEntry,
 } from "./customers-logic";
 import "./customers.css";
@@ -48,7 +49,7 @@ function ItemRow({ row, lang }: { row: SectionRow; lang: Locale }) {
       {row.subtitle && <span className="cust-row-sub">{row.subtitle}</span>}
     </span>
     {row.links && row.links.length > 0 && <span className="cust-row-links">{row.links.map((link) => <RecordRef key={`${link.type}:${link.id}`} type={link.type} id={link.id} mode="link" />)}</span>}
-    {row.amount && <Money minor={row.amount.minor} currency={row.amount.currency} lang={lang} />}
+    {row.amount && <Amount minor={row.amount.minor} currency={row.amount.currency} lang={lang} variant="detail" />}
     {row.status && <StatusBadge status={row.status} lang={lang} domain={row.domain} />}
   </li>;
 }
@@ -104,7 +105,7 @@ export function SectionsView({ data, state, lang }: { data: Parsed360; state: Ga
               {timeline.dated.map((entry) => <TimelineItem key={`${entry.section}:${entry.id}`} entry={entry} lang={lang} />)}
             </ol>
             {timeline.undated.length > 0 && <>
-              <h3 className="form-section-title" style={{ marginBlockStart: 16 }}>{t("No date", "بدون تاريخ")}</h3>
+              <h3 className="form-section-title cust-undated">{t("No date", "بدون تاريخ")}</h3>
               <ol className="cust-timeline">{timeline.undated.map((entry) => <TimelineItem key={`${entry.section}:${entry.id}`} entry={entry} lang={lang} />)}</ol>
             </>}
           </>}
@@ -114,7 +115,7 @@ export function SectionsView({ data, state, lang }: { data: Parsed360; state: Ga
 function TimelineItem({ entry, lang }: { entry: TimelineEntry; lang: Locale }) {
   const type = lang === "ar" ? sectionTitles[entry.section].ar : sectionTitles[entry.section].en;
   return <li className="cust-timeline-item">
-    <span className="cust-timeline-date">{shortDate(entry.date, lang) ?? "—"}</span>
+    <span className="cust-timeline-date"><DateText value={entry.date} lang={lang} /></span>
     <span className="cust-timeline-type">{type}</span>
     {entry.type ? <RecordRef type={entry.type} id={entry.id} label={entry.label} subtitle={entry.subtitle} badge={entry.status} /> : <strong>{entry.label}</strong>}
     {entry.status && <StatusBadge status={entry.status} lang={lang} domain={entry.domain} />}
@@ -123,17 +124,27 @@ function TimelineItem({ entry, lang }: { entry: TimelineEntry; lang: Locale }) {
 
 export function PlateChips({ vehicles, lang }: { vehicles: Array<{ id: string; plate: string; make?: string; model?: string }>; lang: Locale }) {
   if (vehicles.length === 0) return <span className="cust-muted">{lang === "ar" ? "لا توجد مركبات" : "No vehicles"}</span>;
-  return <div className="plate-chips">{vehicles.map((vehicle) => <RecordRef key={vehicle.id} type="vehicle" id={vehicle.id} label={vehicle.plate} mode="link" />)}</div>;
+  return <div className="plate-chips">{vehicles.map((vehicle) => <Link key={vehicle.id} className="plate-link" href={`/workspace/customers?vehicle=${encodeURIComponent(vehicle.id)}`}><Plate value={vehicle.plate} /></Link>)}</div>;
 }
 
 export function Fact({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
   return <span className="cust-fact">{icon}{children}</span>;
 }
 
+/** Phone as a tel: link plus a WhatsApp link (wa.me). Both are LTR isolates, so they read correctly in Arabic. */
+export function PhoneCell({ phone, lang }: { phone: string | null; lang: Locale }) {
+  if (!phone) return <span className="cust-muted">—</span>;
+  const label = lang === "ar" ? "واتساب" : "WhatsApp";
+  return <span className="cust-phone">
+    <Phone value={phone} link />
+    <a className="cust-wa" href={`https://wa.me/${formatPhone(phone).replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer" aria-label={`${label} ${formatPhone(phone)}`} title={label}><MessageCircle size={15} aria-hidden="true" /></a>
+  </span>;
+}
+
 export function ContactFacts({ phone, language, lang, consent }: { phone: string | null; language?: string; lang: Locale; consent?: string }) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   return <p className="cust-facts">
-    <Fact icon={<Phone size={15} aria-hidden="true" />}>{phone ? <a href={telHref(phone)} dir="ltr" className="mono">{phone}</a> : <span className="cust-muted">{t("Hidden", "مخفي")}</span>}</Fact>
+    <Fact>{phone ? <PhoneCell phone={phone} lang={lang} /> : <span className="cust-muted">{t("Hidden", "مخفي")}</span>}</Fact>
     {language && <Fact icon={<Globe size={15} aria-hidden="true" />}>{language === "ar" ? t("Arabic", "العربية") : t("English", "الإنجليزية")}</Fact>}
     {consent && <Fact>{t("Messaging", "المراسلة")}: <StatusBadge status={["granted", "revoked", "expired", "missing"].includes(consent) ? consent : "unknown"} domain="consent" lang={lang} /></Fact>}
   </p>;

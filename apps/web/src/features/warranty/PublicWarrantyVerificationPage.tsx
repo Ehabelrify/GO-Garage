@@ -27,7 +27,7 @@ const statusCopy: Record<WarrantyStatus, { en: string; ar: string }> = {
 
 function dateText(value: string, lang: Locale) {
   const date = new Date(`${value.slice(0, 10)}T12:00:00`);
-  return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat(lang === "ar" ? "ar-EG" : "en-GB", {
+  return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat(lang === "ar" ? "ar-EG-u-nu-latn" : "en-GB", {
     day: "numeric", month: "long", year: "numeric",
   }).format(date);
 }

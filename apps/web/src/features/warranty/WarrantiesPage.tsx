@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ClipboardCheck, Plus } from "lucide-react";
 import { EmptyState, PageHeader, TabBar, TabPanel, useUrlState } from "../../shared/components";
 import type { PageProps } from "../../shared/ui";
@@ -10,6 +10,7 @@ import { InvoicesTab } from "./InvoicesTab";
 import { IssueCoverage } from "./IssueCoverage";
 import { QrTab } from "./QrTab";
 import { useWarrantyScope } from "./warranty-scope";
+import { visibleAuditEvents, warrantyTabCounts } from "./warranty-logic";
 import "./warranty.css";
 
 const tabIds = ["coverage", "claims", "invoices", "qr", "history"] as const;
@@ -29,26 +30,35 @@ export function WarrantiesPage(props: PageProps) {
 
   useEffect(() => { setIssuing(false); setClaimFor(null); }, [scope.userId, scope.dataset]);
 
+  const invoiceCount = useMemo(
+    () => scope.state.warrantyInvoiceDrafts.filter((invoice) => scope.warranties.some((r) => r.id === invoice.warrantyId)).length,
+    [scope.state.warrantyInvoiceDrafts, scope.warranties],
+  );
+  const historyCount = useMemo(
+    () => visibleAuditEvents(scope.state.warrantyAuditEvents, new Set(scope.warranties.map((r) => r.id)), new Set(scope.claims.map((c) => c.id)), scope.isOwner).length,
+    [scope.state.warrantyAuditEvents, scope.warranties, scope.claims, scope.isOwner],
+  );
+
   if (scope.store.actor?.role === "technician") {
     return <EmptyState variant="no-data" title={t("Warranty is not available for your role", "الضمان غير متاح لدورك")} />;
   }
 
-  const openClaims = scope.claims.filter((claim) => claim.status === "open" || claim.status === "under-review").length;
+  const counts = warrantyTabCounts({ coverage: scope.warranties.length, claims: scope.claims.length, invoices: invoiceCount, history: historyCount });
   const tabs = [
-    { id: "coverage", label: t("Coverage", "التغطية"), count: scope.warranties.length },
-    { id: "claims", label: t("Claims", "المطالبات"), count: openClaims },
-    { id: "invoices", label: t("Invoices", "الفواتير"), count: scope.state.warrantyInvoiceDrafts.filter((invoice) => scope.warranties.some((r) => r.id === invoice.warrantyId)).length },
-    { id: "qr", label: t("QR cards", "كروت QR") },
-    { id: "history", label: t("History", "السجل") },
+    { id: "coverage", label: t("Coverage", "التغطية"), count: counts.coverage },
+    { id: "claims", label: t("Claims", "المطالبات"), count: counts.claims },
+    { id: "invoices", label: t("Invoices", "الفواتير"), count: counts.invoices },
+    { id: "qr", label: t("QR cards", "كروت QR"), count: counts.qr },
+    { id: "history", label: t("History", "السجل"), count: counts.history },
   ];
 
   return <div className="warranty-page">
     <PageHeader title={t("Warranties", "الضمانات")}
       actions={<>
-        <button className="btn" type="button" onClick={() => setClaimFor("")}><ClipboardCheck size={15} />{t("Open claim", "فتح مطالبة")}</button>
-        {scope.canIssue && <button className="btn btn-primary" type="button" onClick={() => setIssuing(true)}><Plus size={15} />{t("Issue coverage", "إصدار تغطية")}</button>}
-      </>} />
-    <TabBar tabs={tabs} value={tab} onChange={changeTab} ariaLabel={t("Warranty sections", "أقسام الضمان")} idPrefix="warranty" />
+        <button className={`btn w-nowrap${scope.canIssue ? "" : " btn-primary"}`} type="button" onClick={() => setClaimFor("")}><ClipboardCheck size={15} aria-hidden="true" />{t("Open claim", "فتح مطالبة")}</button>
+        {scope.canIssue && <button className="btn btn-primary w-nowrap" type="button" onClick={() => setIssuing(true)}><Plus size={15} aria-hidden="true" />{t("Issue coverage", "إصدار تغطية")}</button>}
+      </>}
+      tabs={<TabBar tabs={tabs} value={tab} onChange={changeTab} ariaLabel={t("Warranty sections", "أقسام الضمان")} idPrefix="warranty" />} />
     <TabPanel idPrefix="warranty" id="coverage" active={tab === "coverage"}>
       <CoverageTab scope={scope} onIssue={() => setIssuing(true)} onNewClaim={(id) => setClaimFor(id)}
         onOpenClaim={(id) => { setRawTab("claims"); setRecord(id); }} />

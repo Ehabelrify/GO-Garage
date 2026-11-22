@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { RefreshCw, UserCheck } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Lock, RefreshCw, UserCheck } from "lucide-react";
 import type { GarageRole, GarageState } from "@garage/domain";
 import { useGarageStore } from "../../shared/store";
 import type { Lang, ModalConfig, Translator } from "../../shared/ui";
@@ -7,7 +7,7 @@ import {
   Collapsible, ConfirmDialog, DataTable, DetailDrawer, EmptyState, FilterBar, Field, FormSection, Notice, PageHeader, RequiredNote, StatusBadge,
 } from "../../shared/components";
 import {
-  capabilityLabels, effectiveAllowed, filterMembers, groupCapabilities, isDemoMember, overrideCount, sameOverrides, toggleOverride,
+  capabilityHints, capabilityLabels, effectiveAllowed, filterMembers, groupCapabilities, isDemoMember, localisedName, overrideCount, sameOverrides, toggleOverride,
   type CapabilityInfo, type StaffInvitation, type StaffMember,
 } from "./staff-logic";
 import "../settings/settings.css";
@@ -53,6 +53,8 @@ export function StaffPage({ lang, t, state, notify, embedded }: StaffPageProps) 
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [matrixOpen, setMatrixOpen] = useState(false);
+  const matrixRef = useRef<HTMLDivElement>(null);
 
   const [approveOpen, setApproveOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -162,11 +164,18 @@ export function StaffPage({ lang, t, state, notify, embedded }: StaffPageProps) 
     ? <button className="btn btn-primary" type="button" onClick={() => { setError(""); setApproveOpen(true); }}><UserCheck size={16} />{t("Approve email", "اعتمد بريد")}</button>
     : null;
   const refreshButton = <button className="btn" type="button" onClick={() => void load()} disabled={loading}><RefreshCw size={15} />{t("Refresh", "تحديث")}</button>;
-  const actions = <>{refreshButton}{approveButton}</>;
+  const showMatrix = () => {
+    setMatrixOpen(true);
+    window.setTimeout(() => matrixRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }), 0);
+  };
+  const matrixLink = <button className="btn btn-quiet" type="button" onClick={showMatrix}>{t("Role permissions", "صلاحيات الأدوار")}</button>;
+  const actions = <>{matrixLink}{refreshButton}{approveButton}</>;
+  const memberName = (item: StaffMember) => localisedName(item.name, lang);
 
   const capabilityInfo = payload.capabilities;
   const groups = capabilityInfo ? groupCapabilities(capabilityInfo.all) : [];
   const capLabel = (capability: string) => { const label = capabilityLabels[capability]; return label ? label[lang] : capability; };
+  const capHint = (capability: string) => capabilityHints[capability]?.[lang];
   const original = (member?.permissions ?? {}) as Record<string, boolean>;
   const dirty = member ? !sameOverrides(draft, original) : false;
 
@@ -174,10 +183,10 @@ export function StaffPage({ lang, t, state, notify, embedded }: StaffPageProps) 
     {embedded
       ? <div className="st-toolbar section-gap-none">{actions}</div>
       : <PageHeader title={t("Staff access", "صلاحيات الفريق")} subtitle={t("Approve work emails by role and branch. Access is checked on every request.", "اعتمد بريد الشغل حسب الدور والفرع. الصلاحيات بتتراجع مع كل طلب.")} actions={actions} />}
-    {isDemo && <Notice tone="info">{t("Role previews use fixed permissions; staff changes are off.", "معاينة الأدوار بصلاحيات ثابتة؛ تغييرات الفريق متوقفة.")}</Notice>}
+    {isDemo && <Notice tone="info">{t("Read-only in role preview. Approving emails and editing permissions are off.", "للقراءة فقط في معاينة الأدوار. اعتماد البريد وتعديل الصلاحيات متوقفان.")}</Notice>}
     {error && !approveOpen && !member && <div className="form-error" role="alert">{error}</div>}
 
-    <section className="panel section-gap" aria-label={t("Team", "الفريق")}>
+    <section className="st-flat section-gap" aria-label={t("Team", "الفريق")}>
       <FilterBar
         lang={lang}
         search={{ value: query, onChange: setQuery, placeholder: t("Search name or email", "ابحث بالاسم أو البريد") }}
@@ -200,11 +209,13 @@ export function StaffPage({ lang, t, state, notify, embedded }: StaffPageProps) 
         selectedKey={memberId}
         initialSort={{ key: "name", direction: "asc" }}
         columns={[
-          { key: "name", header: t("Member", "العضو"), primary: true, sortable: true, sortValue: (row) => row.name || row.email,
-            render: (row) => <span className="st-member-cell"><span>{row.name || row.email || t("Unnamed", "بدون اسم")}</span>{row.name && row.email && <small>{row.email}</small>}{isDemoMember(row) && <small>{t("Demo account", "حساب تجريبي")}</small>}</span> },
+          { key: "name", header: t("Member", "العضو"), primary: true, sortable: true, sortValue: (row) => memberName(row) || row.email,
+            render: (row) => <span className="st-member-cell"><span>{memberName(row) || row.email || t("Unnamed", "بدون اسم")}</span>{row.name && row.email && <small dir="ltr">{row.email}</small>}{isDemoMember(row) && <small>{t("Demo account", "حساب تجريبي")}</small>}</span> },
           { key: "role", header: t("Role", "الدور"), sortable: true, sortValue: (row) => roleLabel(row.role), render: (row) => roleLabel(row.role) },
           { key: "branches", header: t("Branches", "الفروع"), render: memberBranches },
-          { key: "custom", header: t("Permissions", "الصلاحيات"), hideOnCard: true, render: (row) => row.role === "owner" ? t("Full access", "كل الصلاحيات") : overrideCount(row) ? t(`${overrideCount(row)} custom`, `${overrideCount(row)} مخصصة`) : t("Role default", "افتراضي الدور") },
+          { key: "custom", header: t("Permissions", "الصلاحيات"), hideOnCard: true, render: (row) => row.role === "owner"
+            ? <span className="st-member-note"><Lock size={12} aria-hidden="true" />{t("Full access, read-only", "كل الصلاحيات، للقراءة فقط")}</span>
+            : overrideCount(row) ? t(`${overrideCount(row)} custom`, `${overrideCount(row)} مخصصة`) : t("Same as role", "حسب الدور") },
           { key: "status", header: t("Status", "الحالة"), render: (row) => <StatusBadge status={row.status} domain="staff" lang={lang} /> },
         ]}
         empty={payload.members.length === 0
@@ -213,7 +224,7 @@ export function StaffPage({ lang, t, state, notify, embedded }: StaffPageProps) 
       />
     </section>
 
-    {!isDemo && <section className="panel section-gap" aria-label={t("Pending approvals", "موافقات معلقة")}>
+    {!isDemo && <section className="st-flat section-gap" aria-label={t("Pending approvals", "موافقات معلقة")}>
       <h2 className="st-h2">{t("Pending approvals", "موافقات معلقة")}</h2>
       <DataTable<StaffInvitation>
         lang={lang}
@@ -232,8 +243,8 @@ export function StaffPage({ lang, t, state, notify, embedded }: StaffPageProps) 
       />
     </section>}
 
-    {capabilityInfo && <div className="section-gap">
-      <Collapsible title={t("What each role can do", "ما يستطيع كل دور فعله")}>
+    {capabilityInfo && <div className="section-gap" ref={matrixRef} id="staff-role-matrix">
+      <Collapsible title={t("What each role can do", "ما يستطيع كل دور فعله")} open={matrixOpen} onToggle={setMatrixOpen}>
         <div className="st-matrix-wrap">
           <table className="st-matrix">
             <caption className="sr-only">{t("Role defaults", "افتراضات الأدوار")}</caption>
@@ -242,10 +253,10 @@ export function StaffPage({ lang, t, state, notify, embedded }: StaffPageProps) 
               {(["owner", ...roles.map((item) => item.id)] as GarageRole[]).map((id) => <th scope="col" className="st-switch" key={id}>{roleLabel(id)}</th>)}
             </tr></thead>
             <tbody>{capabilityInfo.all.map((capability) => <tr key={capability}>
-              <th scope="row">{capLabel(capability)}</th>
+              <th scope="row">{capLabel(capability)}{capHint(capability) && <span className="st-matrix-hint">{capHint(capability)}</span>}</th>
               {(["owner", ...roles.map((item) => item.id)] as GarageRole[]).map((id) => {
                 const on = id === "owner" || (capabilityInfo.roleDefaults[id]?.includes(capability) ?? false);
-                return <td className="st-switch" key={id}><span aria-label={on ? t("Yes", "أيوه") : t("No", "لا")}>{on ? "✓" : "—"}</span></td>;
+                return <td className="st-switch" key={id}><span className={on ? "st-yes" : "st-no"} aria-label={on ? t("Yes", "أيوه") : t("No", "لا")}>{on ? "✓" : "—"}</span></td>;
               })}
             </tr>)}</tbody>
           </table>
@@ -269,7 +280,7 @@ export function StaffPage({ lang, t, state, notify, embedded }: StaffPageProps) 
             <input className="field-input" type="email" autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@gmail.com" dir="ltr" />
           </Field>
           <Field label={t("Role", "الدور")} required hint={t("Owner access cannot be approved here.", "صلاحية المالك مش بتتمنح من هنا.")}>
-            <select className="field-select" value={role} onChange={(event) => setRole(event.target.value as typeof role)}>
+            <select className="select field-select" value={role} onChange={(event) => setRole(event.target.value as typeof role)}>
               {roles.map((item) => <option key={item.id} value={item.id}>{t(item.en, item.ar)}</option>)}
             </select>
           </Field>
@@ -292,7 +303,7 @@ export function StaffPage({ lang, t, state, notify, embedded }: StaffPageProps) 
       onClose={closeMember}
       lang={lang}
       wide
-      title={member ? (member.name || member.email) : ""}
+      title={member ? (memberName(member) || member.email) : ""}
       subtitle={member ? `${roleLabel(member.role)} · ${memberBranches(member)}` : undefined}
       footer={member && editable(member) && capabilityInfo ? <>
         <button type="button" className="btn btn-danger" disabled={saving} onClick={() => setRemoveTarget(member)}>{t("Remove access", "سحب الصلاحية")}</button>
@@ -309,7 +320,7 @@ export function StaffPage({ lang, t, state, notify, embedded }: StaffPageProps) 
         </dl>
         {error && <div className="form-error" role="alert">{error}</div>}
         {member.role === "owner"
-          ? <p className="form-hint">{t("Owners always have every permission.", "المالك لديه كل الصلاحيات دائمًاً.")}</p>
+          ? <p className="form-hint st-member-note"><Lock size={12} aria-hidden="true" />{t("Owner permissions are fixed and cannot be edited.", "صلاحيات المالك ثابتة ولا يمكن تعديلها.")}</p>
           : capabilityInfo
             ? groups.map((group) => <Collapsible key={group.id} title={group[lang]} defaultOpen>
               <div className="st-matrix-wrap"><table className="st-matrix">
@@ -320,8 +331,8 @@ export function StaffPage({ lang, t, state, notify, embedded }: StaffPageProps) 
                   const locked = capabilityInfo.ownerOnly.includes(capability);
                   const on = effectiveAllowed(capabilityInfo.roleDefaults[member.role] ?? [], draft, capability);
                   return <tr key={capability} data-changed={capability in draft ? "true" : "false"}>
-                    <th scope="row">{capLabel(capability)}{locked && <span className="st-lock"> · {t("Owner only", "للمالك فقط")}</span>}</th>
-                    <td className="st-switch">{base ? "✓" : "—"}</td>
+                    <th scope="row">{capLabel(capability)}{locked && <span className="st-lock"> · {t("Owner only", "للمالك فقط")}</span>}{capHint(capability) && <span className="st-matrix-hint">{capHint(capability)}</span>}</th>
+                    <td className="st-switch"><span className={base ? "st-yes" : "st-no"}>{base ? "✓" : "—"}</span></td>
                     <td className="st-switch"><input type="checkbox" aria-label={capLabel(capability)} checked={on} disabled={locked || saving || !editable(member)}
                       onChange={(event) => setDraft((current) => toggleOverride(current, capability, event.target.checked, base))} /></td>
                   </tr>;

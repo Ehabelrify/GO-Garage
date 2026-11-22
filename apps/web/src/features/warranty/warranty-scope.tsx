@@ -4,7 +4,7 @@ import type { GarageState, Locale, WarrantyClaim, WarrantyRecord } from "@garage
 import { RecordRef } from "../../shared/components";
 import { useGarageStore } from "../../shared/store";
 import { branchDisplay, customerDisplay, serviceDisplay, type PageProps, type Translator } from "../../shared/ui";
-import { branchAllowed } from "./warranty-logic";
+import { branchAllowed, policyDisplayName } from "./warranty-logic";
 import { errorCopy } from "./warranty-copy";
 
 /** Everything a warranty tab needs: who the actor is, which records they may see and display helpers. */
@@ -90,7 +90,7 @@ export function JobLink({ scope, jobId }: { scope: WarrantyScope; jobId: string 
 }
 
 export function WarrantyLink({ scope, record }: { scope: WarrantyScope; record: WarrantyRecord }) {
-  return <RecordRef type="warranty" id={record.id} label={record.policyName} subtitle={scope.customerName(record.customerId)} />;
+  return <RecordRef type="warranty" id={record.id} label={policyDisplayName(record.policyName)} subtitle={scope.customerName(record.customerId)} />;
 }
 
 export function ClaimLink({ claim }: { claim: WarrantyClaim }) {

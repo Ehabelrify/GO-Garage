@@ -1,11 +1,10 @@
-import { PageHeader } from "../../shared/components";
 import type { Lang } from "../../shared/ui";
 import { TransportPanel } from "./TransportPanel";
 
-/** Standalone Transport page (still routable; also embedded as a booking tab). */
+/** Standalone Transport page (still routable; also embedded as the Transport tab and in each booking drawer). */
 export function TransportPage({ lang }: { lang: Lang }) {
+  const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   return <div dir={lang === "ar" ? "rtl" : "ltr"}>
-    <PageHeader title={lang === "ar" ? "النقل" : "Transport"} subtitle={lang === "ar" ? "طلبات الاستلام والإعادة للحجوزات القائمة." : "Pickup and return requests for existing bookings."} />
-    <TransportPanel lang={lang} />
+    <TransportPanel lang={lang} header={{ title: t("Transport", "النقل"), subtitle: t("Pickup and return requests for bookings.", "طلبات الاستلام والإعادة للحجوزات.") }} />
   </div>;
 }

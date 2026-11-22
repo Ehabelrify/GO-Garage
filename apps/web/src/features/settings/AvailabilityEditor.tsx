@@ -87,7 +87,7 @@ export function AvailabilityEditor({ branches, lang, notify }: { branches: { id:
     <div className="st-toolbar">
       <label className="st-inline-field">
         <span className="field-label">{t("Branch", "الفرع")}</span>
-        <select className="field-select" value={branchId} onChange={(event) => setBranchId(event.target.value)}>
+        <select className="select field-select" value={branchId} onChange={(event) => setBranchId(event.target.value)}>
           {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
         </select>
       </label>

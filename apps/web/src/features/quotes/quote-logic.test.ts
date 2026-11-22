@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PackageVersion, QuoteLine } from "@garage/domain";
-import { buildCatalogueLines, defaultValidThrough, filterQuotes, isExpired, latestPerQuote, policyLabel, summariseLines, validThroughProblem, type QuoteRow } from "./quote-logic";
+import { buildCatalogueLines, daysBetween, defaultValidThrough, expiresSoonLabel, filterQuotes, hasOpenFollowup, isExpired, latestPerQuote, policyLabel, quoteAttentionKey, summariseLines, upcomingFirstKey, validThroughProblem, type QuoteRow } from "./quote-logic";
 import { blankItem, buildDraftInput, itemsFromInput, parseMajor } from "./quote-build";
 import { commercialError } from "./commercial-errors";
 import { toPromotion } from "./commercial-data";
@@ -155,6 +155,40 @@ describe("labels and errors", () => {
   });
   it("reads a promotion policy into a readable summary", () => {
     const info = toPromotion({ id: "promotion-qualification:seed-four-cars", version: 1 }, { evidenceKinds: ["grouped-vehicles"], maximumUnits: 10, grouping: { minimumVehicles: 3, maximumVehicles: 4 }, evidenceVerification: { authorizedRoles: ["owner"] } });
-    expect(info).toMatchObject({ name: "Four cars", minVehicles: 3, maxVehicles: 4, maximumUnits: 10, verifierRoles: ["owner"] });
+    expect(info).toMatchObject({ name: "Fourth car free", minVehicles: 3, maxVehicles: 4, maximumUnits: 10, verifierRoles: ["owner"] });
+  });
+});
+
+describe("dates and ordering", () => {
+  it("counts whole days and accepts date-times", () => {
+    expect(daysBetween("2026-11-22", "2026-11-25T10:00:00Z")).toBe(3);
+    expect(daysBetween("2026-11-22", "2026-11-20")).toBe(-2);
+  });
+  it("puts upcoming dates first, then past dates most recent first, and empty dates last", () => {
+    const keys = ["2026-12-01", "2026-11-22", "2026-11-01", "2026-10-01"].map((date) => upcomingFirstKey(date, "2026-11-22") as number);
+    expect([...keys].sort((a, b) => a - b)).toEqual([keys[1], keys[0], keys[2], keys[3]]);
+    expect(upcomingFirstKey(null)).toBeNull();
+  });
+  it("ranks offered quotes by expiry and everything else after them", () => {
+    const row = (state: QuoteRow["state"], validThrough: string | null) => ({ state, validThrough });
+    const soon = quoteAttentionKey(row("offered", "2026-11-24"), "2026-11-22");
+    const later = quoteAttentionKey(row("offered", "2026-12-24"), "2026-11-22");
+    const expired = quoteAttentionKey(row("offered", "2026-11-01"), "2026-11-22");
+    expect(soon).toBeLessThan(later);
+    expect(later).toBeLessThan(expired);
+    expect(expired).toBeLessThan(quoteAttentionKey(row("accepted", "2026-11-24"), "2026-11-22"));
+  });
+  it("only shows the follow-up column for work somebody still owes", () => {
+    const base = { requestedAt: "x", responsibleUserId: null, answeredAt: null, promisedResponseAt: null };
+    expect(hasOpenFollowup({ state: "offered", followup: { ...base, status: "requested" } })).toBe(true);
+    expect(hasOpenFollowup({ state: "offered", followup: { ...base, status: "answered" } })).toBe(false);
+    expect(hasOpenFollowup({ state: "draft", followup: { ...base, status: "requested" } })).toBe(false);
+  });
+  it("words the expiry warning in both languages", () => {
+    expect(expiresSoonLabel("2026-11-22", "en", "2026-11-22")).toBe("Expires today");
+    expect(expiresSoonLabel("2026-11-25", "en", "2026-11-22")).toBe("Expires in 3 days");
+    expect(expiresSoonLabel("2026-11-23", "ar", "2026-11-22")).toBe("ينتهي غداً");
+    expect(expiresSoonLabel("2026-12-30", "en", "2026-11-22")).toBeNull();
+    expect(expiresSoonLabel("2026-11-01", "en", "2026-11-22")).toBeNull();
   });
 });

@@ -2,9 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, Eye } from "lucide-react";
 import type { Locale, TransportStatus } from "@garage/domain";
 import { transportApi, type TransportDetailData } from "../../shared/store";
-import { Collapsible, ConfirmDialog, EmptyState, Field, Money, RecordRef, Skeleton, StatusBadge } from "../../shared/components";
-import { dateLabel, timeLabel } from "../../shared/ui";
-import { checkCommitment, directionLabels, isDestructive, modeLabels, needsCommitment, nextByStatus, reasonRequired, transitionVerbs, transportErrorCopy } from "./transport-logic";
+import { Collapsible, ConfirmDialog, DateText, EmptyState, Field, Money, Phone, RecordRef, Skeleton, StatusBadge } from "../../shared/components";
+import { checkCommitment, directionLabels, isDestructive, modeLabels, needsCommitment, nextByStatus, reasonRequired, splitDateTime, transitionVerbs, transportErrorCopy } from "./transport-logic";
 import "../bookings/bookings.css";
 
 export interface TransportDetailProps {
@@ -18,13 +17,10 @@ export interface TransportDetailProps {
   vehicleLabel?: string;
 }
 
-const fmtDateTime = (iso: string, lang: Locale) => {
-  const date = new Date(iso);
-  if (Number.isNaN(date.valueOf())) return iso;
-  const day = iso.slice(0, 10);
-  const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-  return `${dateLabel(day, lang)} ${timeLabel(time, lang)}`;
-};
+function WindowText({ iso, lang }: { iso: string; lang: Locale }) {
+  const parts = splitDateTime(iso);
+  return parts ? <DateText value={parts.date} time={parts.time} lang={lang} /> : <bdi dir="ltr">{iso}</bdi>;
+}
 
 /** Transport request detail: embeddable (booking tab) or inside a drawer. */
 export function TransportDetail({ id, lang, onChanged, canCoordinate = true, canReadContact = true, customerLabel, vehicleLabel }: TransportDetailProps) {
@@ -109,13 +105,13 @@ export function TransportDetail({ id, lang, onChanged, canCoordinate = true, can
       <div><dt>{t("Fee", "الرسوم")}</dt><dd>{item.fee ? <Money minor={item.fee.minor} currency={item.fee.currency} lang={lang} /> : t("Not set", "غير محددة")}</dd></div>
       <div><dt>{t("Provider", "مقدم الخدمة")}</dt><dd>{item.providerId ? t("Assigned", "معيّن") : t("Not assigned", "غير معيّن")}</dd></div>
       <div><dt>{t("Policy", "السياسة")}</dt><dd>{item.policy ? t("Approved", "معتمدة") : t("Not configured", "غير مهيأة")}</dd></div>
-      <div className="full"><dt>{t("Committed window", "النافذة الملتزم بها")}</dt><dd>{item.committedWindow ? <><bdi>{fmtDateTime(item.committedWindow.startsAt, lang)}</bdi> – <bdi>{fmtDateTime(item.committedWindow.endsAt, lang)}</bdi></> : t("Estimate only, no commitment yet", "تقدير فقط، لا التزام بعد")}</dd></div>
+      <div className="full"><dt>{t("Committed window", "النافذة الملتزم بها")}</dt><dd>{item.committedWindow ? <><WindowText iso={item.committedWindow.startsAt} lang={lang} /> – <WindowText iso={item.committedWindow.endsAt} lang={lang} /></> : t("Estimate only, no commitment yet", "تقدير فقط، لا التزام بعد")}</dd></div>
     </dl>
     {item.missing.length > 0 && <Collapsible title={t("Missing before commitment", "نواقص قبل الالتزام")} count={item.missing.length}><ul className="bk-history">{item.missing.map((entry) => <li key={entry}>{entry}</li>)}</ul></Collapsible>}
 
     {canReadContact && <Collapsible title={t("Private contact", "بيانات الاتصال الخاصة")}>
       {contact
-        ? <dl className="kv-grid"><div><dt>{t("Contact", "الاتصال")}</dt><dd><bdi dir="ltr">{contact.contact}</bdi></dd></div><div><dt>{t("Location", "الموقع")}</dt><dd>{contact.location}</dd></div>{contact.instructions && <div className="full"><dt>{t("Instructions", "التعليمات")}</dt><dd>{contact.instructions}</dd></div>}</dl>
+        ? <dl className="kv-grid"><div><dt>{t("Contact", "الاتصال")}</dt><dd><Phone value={contact.contact} link /></dd></div><div><dt>{t("Location", "الموقع")}</dt><dd>{contact.location}</dd></div>{contact.instructions && <div className="full"><dt>{t("Instructions", "التعليمات")}</dt><dd>{contact.instructions}</dd></div>}</dl>
         : <button type="button" className="btn btn-sm" onClick={() => void reveal()}><Eye size={14} aria-hidden="true" />{t("Show contact details", "إظهار بيانات الاتصال")}</button>}
     </Collapsible>}
 
@@ -127,7 +123,7 @@ export function TransportDetail({ id, lang, onChanged, canCoordinate = true, can
     <Collapsible title={t("History", "السجل")} count={detail.events.length}>
       <ul className="bk-history">{detail.events.map((event) => <li key={event.revision}>
         <span className="bk-arrow">{event.from_status ? <StatusBadge status={event.from_status} domain="transport" lang={lang} /> : <span className="tag">{t("New", "جديد")}</span>}<ArrowRight size={13} className="bk-arrow-icon" aria-hidden="true" /><StatusBadge status={event.to_status} domain="transport" lang={lang} /></span>
-        <span className="bk-muted"><bdi>{fmtDateTime(event.occurred_at, lang)}</bdi>{event.reason ? ` · ${event.reason}` : ""}{event.has_evidence ? ` · ${t("evidence recorded", "تم تسجيل الدليل")}` : ""}</span>
+        <span className="bk-muted"><WindowText iso={event.occurred_at} lang={lang} />{event.reason ? ` · ${event.reason}` : ""}{event.has_evidence ? ` · ${t("evidence recorded", "تم تسجيل الدليل")}` : ""}</span>
       </li>)}</ul>
     </Collapsible>
 

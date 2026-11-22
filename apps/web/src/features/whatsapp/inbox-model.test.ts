@@ -61,3 +61,19 @@ describe("eventTitle", () => {
     expect(eventTitle("booking_linked", "en")).toBe("Booking linked");
   });
 });
+
+import { groupMessagesByDay, localStamp, quickReplies } from "./inbox-model";
+describe("inbox stamps and grouping", () => {
+  it("formats a local stamp with Latin digits", () => {
+    const d = new Date(2026, 10, 5, 9, 7);
+    expect(localStamp(d.toISOString())).toBe("2026-11-05T09:07");
+    expect(localStamp("not a date")).toBe("not a date");
+  });
+  it("groups consecutive messages by day", () => {
+    const groups = groupMessagesByDay([{ s: "2026-11-05T09:00" }, { s: "2026-11-05T10:00" }, { s: "2026-11-06T08:00" }], (m) => m.s);
+    expect(groups.map((g) => [g.day, g.items.length])).toEqual([["2026-11-05", 2], ["2026-11-06", 1]]);
+  });
+  it("has bilingual quick replies", () => {
+    for (const reply of quickReplies) { expect(reply.en).toBeTruthy(); expect(reply.ar).toBeTruthy(); }
+  });
+});

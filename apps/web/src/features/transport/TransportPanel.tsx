@@ -1,27 +1,31 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { hasCapability } from "../../shared/capabilities";
 import { Plus } from "lucide-react";
 import type { Locale, TransportDirection, TransportMode, TransportRequest } from "@garage/domain";
 import { transportApi, useGarageStore } from "../../shared/store";
-import { DataTable, DetailDrawer, EmptyState, Field, FilterBar, FormSection, RecordRef, RequiredNote, StatusBadge } from "../../shared/components";
+import { DataTable, DateText, DetailDrawer, EmptyState, Field, FilterBar, FormSection, PageHeader, RecordRef, RequiredNote, Select, StatusBadge } from "../../shared/components";
 import { customerDisplay, dateLabel } from "../../shared/ui";
 import { TransportDetail } from "./TransportDetail";
-import { directionLabels, modeLabels, transportErrorCopy } from "./transport-logic";
+import { ContactLinks, VehicleCell } from "../bookings/cells";
+import { directionLabels, matchesTransport, modeLabels, splitDateTime, transportErrorCopy } from "./transport-logic";
 import "../bookings/bookings.css";
 
 export interface TransportPanelProps {
   lang: Locale;
   /** When set, the panel is scoped to one booking (booking drawer tab) and creating needs no booking choice. */
   bookingId?: string;
+  /** Standalone use: renders the page header (H1, subtitle, primary action, tabs) above the list. */
+  header?: { title: string; subtitle?: string; tabs?: ReactNode };
 }
 
 /** Transport list + create + detail. Embeddable in a booking, or used standalone by TransportPage. */
-export function TransportPanel({ lang, bookingId }: TransportPanelProps) {
+export function TransportPanel({ lang, bookingId, header }: TransportPanelProps) {
   const t = (en: string, ar: string) => (lang === "ar" ? ar : en);
   const store = useGarageStore();
   const state = store.state;
   const canCoordinate = hasCapability(store.actor, "transport.coordinate");
   const canReadContact = canCoordinate && !store.actor?.isDemo;
+  const canReadPhone = hasCapability(store.actor, "customers.read") && !store.actor?.isDemo;
 
   const [items, setItems] = useState<TransportRequest[] | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -54,6 +58,7 @@ export function TransportPanel({ lang, bookingId }: TransportPanelProps) {
   const bookings = useMemo(() => (state?.bookings ?? []).filter((booking) => (state?.currentBranch === "all" || booking.branchId === state?.currentBranch) && booking.status !== "cancelled" && booking.status !== "no-show"), [state?.bookings, state?.currentBranch]);
   const customerOf = (customerId: string) => state?.customers.find((customer) => customer.id === customerId);
   const vehicleOf = (customerId: string, vehicleId: string) => customerOf(customerId)?.vehicles.find((vehicle) => vehicle.id === vehicleId);
+  const bookingOf = (id: string) => state?.bookings.find((entry) => entry.id === id);
   const bookingLabel = (id: string) => {
     const booking = state?.bookings.find((entry) => entry.id === id);
     if (!booking) return t("Booking", "حجز");
@@ -63,7 +68,7 @@ export function TransportPanel({ lang, bookingId }: TransportPanelProps) {
 
   const rows = useMemo(() => (items ?? [])
     .filter((item) => (!bookingId || item.bookingId === bookingId) && (statusFilter === "all" || item.status === statusFilter))
-    .filter((item) => !query.trim() || `${customerOf(item.customerId)?.name ?? ""} ${vehicleOf(item.customerId, item.vehicleId)?.plate ?? ""}`.toLowerCase().includes(query.trim().toLowerCase())),
+    .filter((item) => matchesTransport({ customerName: customerOf(item.customerId)?.name ?? "", phone: canReadPhone ? customerOf(item.customerId)?.phone ?? "" : "", plate: vehicleOf(item.customerId, item.vehicleId)?.plate ?? "" }, query)),
   [items, bookingId, statusFilter, query, state?.customers]);
 
   const resetForm = () => { setChosenBooking(bookingId ?? ""); setDirection("pickup"); setMode("driver"); setContact(""); setLocation(""); setInstructions(""); setFormError(""); };
@@ -89,16 +94,19 @@ export function TransportPanel({ lang, bookingId }: TransportPanelProps) {
   const statusOptions = ["proposed", "requested", "confirmed", "pickup-in-progress", "in-custody", "completed", "cancelled", "exception"];
   const selectedItem = items?.find((item) => item.id === selected);
 
+  const newButton = <button type="button" className="btn btn-primary" onClick={() => { resetForm(); setCreating(true); }}><Plus size={16} aria-hidden="true" />{t("New request", "طلب جديد")}</button>;
+
   return <div className="bk-stack">
-    <div className="action-row" style={{ justifyContent: "space-between" }}>
+    {header && <PageHeader title={header.title} subtitle={header.subtitle} actions={canCoordinate ? newButton : undefined} tabs={header.tabs} />}
+    <div className="bk-toolbar">
       <FilterBar
         lang={lang}
-        search={bookingId ? undefined : { value: query, onChange: setQuery, placeholder: t("Search customer or plate", "ابحث بالعميل أو اللوحة") }}
+        search={bookingId ? undefined : { value: query, onChange: setQuery, placeholder: t("Search name, phone or plate", "ابحث بالاسم أو الهاتف أو اللوحة") }}
         filters={[{ key: "status", label: t("Status", "الحالة"), value: statusFilter, onChange: setStatusFilter, options: [{ value: "all", label: t("All statuses", "كل الحالات") }, ...statusOptions.map((value) => ({ value, label: value }))].map((option) => option.value === "all" ? option : { ...option, label: statusLabelFor(option.value, lang) }) }]}
         onClear={() => { setQuery(""); setStatusFilter("all"); }}
         resultCount={rows.length}
       />
-      {canCoordinate && <button type="button" className="btn btn-primary" onClick={() => { resetForm(); setCreating(true); }}><Plus size={16} aria-hidden="true" />{t("New request", "طلب جديد")}</button>}
+      {canCoordinate && !header && newButton}
     </div>
     {notice && <p className="bk-muted" role="status">{notice}</p>}
     <DataTable<TransportRequest>
@@ -115,9 +123,13 @@ export function TransportPanel({ lang, bookingId }: TransportPanelProps) {
         ? <EmptyState variant="no-results" title={t("No matching requests", "لا توجد طلبات مطابقة")} action={<button type="button" className="btn" onClick={() => { setQuery(""); setStatusFilter("all"); }}>{t("Clear filters", "مسح التصفية")}</button>} />
         : <EmptyState title={t("No transport requests yet", "لا توجد طلبات نقل بعد")} action={canCoordinate ? <button type="button" className="btn btn-primary" onClick={() => { resetForm(); setCreating(true); }}>{t("New request", "طلب جديد")}</button> : undefined} />}
       columns={[
-        { key: "customer", header: t("Customer / vehicle", "العميل / المركبة"), primary: true, render: (row) => <span><RecordRef type="customer" id={row.customerId} label={(() => { const c = customerOf(row.customerId); return c ? customerDisplay(c.name, lang) : undefined; })()} hideIcon /><br /><RecordRef type="vehicle" id={row.vehicleId} label={vehicleOf(row.customerId, row.vehicleId)?.plate} hideIcon /></span>, sortable: true, sortValue: (row) => customerOf(row.customerId)?.name },
-        { key: "type", header: t("Type", "النوع"), render: (row) => `${directionLabels[row.direction][lang]} · ${modeLabels[row.mode][lang]}` },
-        ...(bookingId ? [] : [{ key: "booking", header: t("Booking", "الحجز"), render: (row: TransportRequest) => <RecordRef type="booking" id={row.bookingId} label={bookingLabel(row.bookingId)} hideIcon /> }]),
+        { key: "customer", header: t("Customer", "العميل"), primary: true, sortable: true, sortValue: (row) => customerOf(row.customerId)?.name,
+          render: (row) => { const c = customerOf(row.customerId); return <span className="bk-cell"><RecordRef type="customer" id={row.customerId} label={c ? customerDisplay(c.name, lang) : undefined} hideIcon />{canReadPhone && <ContactLinks phone={c?.phone} lang={lang} />}</span>; } },
+        { key: "vehicle", header: t("Vehicle", "المركبة"), render: (row) => { const v = vehicleOf(row.customerId, row.vehicleId); return <VehicleCell id={row.vehicleId} plate={v?.plate} makeModel={v?.makeModel} />; } },
+        { key: "type", header: t("Type", "النوع"), sortable: true, sortValue: (row) => row.direction, render: (row) => <span className="bk-type"><span>{directionLabels[row.direction][lang]}</span><span className="bk-sub">{modeLabels[row.mode][lang]}</span></span> },
+        ...(bookingId ? [] : [{ key: "booking", header: t("Booking date", "موعد الحجز"), sortable: true, sortValue: (row: TransportRequest) => bookingOf(row.bookingId)?.dropoffDate,
+          render: (row: TransportRequest) => { const b = bookingOf(row.bookingId); return b ? <span className="bk-cell"><DateText value={b.dropoffDate} lang={lang} time={b.dropoffTime} /><RecordRef type="booking" id={row.bookingId} label={t("Open booking", "فتح الحجز")} hideIcon /></span> : <RecordRef type="booking" id={row.bookingId} hideIcon />; } }]),
+        { key: "window", header: t("Pickup window", "نافذة الاستلام"), render: (row) => { const w = row.committedWindow ? splitDateTime(row.committedWindow.startsAt) : null; return w ? <DateText value={w.date} lang={lang} time={w.time} /> : <span className="bk-muted">{t("Not committed", "غير ملتزم")}</span>; } },
         { key: "status", header: t("Status", "الحالة"), render: (row) => <StatusBadge status={row.status} domain="transport" lang={lang} />, sortable: true, sortValue: (row) => row.status },
       ]}
     />
@@ -132,20 +144,16 @@ export function TransportPanel({ lang, bookingId }: TransportPanelProps) {
         <RequiredNote text={t("Required", "مطلوب")} />
         <FormSection title={t("Request", "الطلب")} columns={1}>
           {!bookingId && <Field label={t("Booking", "الحجز")} required>
-            <select className="field-select" value={chosenBooking} onChange={(event) => setChosenBooking(event.target.value)}>
-              <option value="">{t("Choose a booking", "اختر حجزاً")}</option>
-              {bookings.map((booking) => <option key={booking.id} value={booking.id}>{bookingLabel(booking.id)}</option>)}
-            </select>
+            <Select className="field-select" value={chosenBooking} onChange={(event) => setChosenBooking(event.target.value)}
+              options={[{ value: "", label: t("Choose a booking", "اختر حجزاً") }, ...bookings.map((booking) => ({ value: booking.id, label: bookingLabel(booking.id) }))]} />
           </Field>}
           <Field label={t("Type", "النوع")}>
-            <select className="field-select" value={direction} onChange={(event) => setDirection(event.target.value as TransportDirection)}>
-              {(Object.keys(directionLabels) as TransportDirection[]).map((key) => <option key={key} value={key}>{directionLabels[key][lang]}</option>)}
-            </select>
+            <Select className="field-select" value={direction} onChange={(event) => setDirection(event.target.value as TransportDirection)}
+              options={(Object.keys(directionLabels) as TransportDirection[]).map((key) => ({ value: key, label: directionLabels[key][lang] }))} />
           </Field>
           <Field label={t("Method", "الوسيلة")}>
-            <select className="field-select" value={mode} onChange={(event) => setMode(event.target.value as TransportMode)}>
-              {(Object.keys(modeLabels) as TransportMode[]).map((key) => <option key={key} value={key}>{modeLabels[key][lang]}</option>)}
-            </select>
+            <Select className="field-select" value={mode} onChange={(event) => setMode(event.target.value as TransportMode)}
+              options={(Object.keys(modeLabels) as TransportMode[]).map((key) => ({ value: key, label: modeLabels[key][lang] }))} />
           </Field>
         </FormSection>
         <FormSection title={t("Private details", "بيانات خاصة")} columns={1}>

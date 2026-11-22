@@ -1,18 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Locale } from "@garage/domain";
 import { benefitApi, useGarageStore } from "../../shared/store";
-import { Collapsible, ConfirmDialog, EmptyState, Field, FormSection, RecordRef, Skeleton, StatusBadge } from "../../shared/components";
+import { Collapsible, ConfirmDialog, DateText, EmptyState, Field, FormSection, RecordRef, Skeleton, StatusBadge } from "../../shared/components";
 import { dateLabel } from "../../shared/ui";
+import { ReadOnlyNote } from "../quotes/access";
 import { commercialError } from "../quotes/commercial-errors";
 import { useLoader } from "../quotes/commercial-data";
 import { buildLookups, tr } from "../quotes/lookups";
 import { isProtectedRef, todayIso } from "../quotes/quote-logic";
-import { activationLabels, benefitName, cancellationLabels, expiryText, limitText, reasonText, totalUses, transferLabels } from "./benefit-logic";
+import { activationLabels, benefitName, cancellationLabels, expiryText, limitText, reasonText, totalUses, transferLabels, usageText } from "./benefit-logic";
 
 type Check = { state: string; reasons: string[] } | null;
 
 /** Benefit drawer body: terms in plain words, check eligibility, record use, reverse a use. */
-export function BenefitDetail({ id, lang, onChanged }: { id: string; lang: Locale; onChanged: () => void }) {
+export function BenefitDetail({ id, lang, onChanged, canManage = false }: { id: string; lang: Locale; onChanged: () => void; canManage?: boolean }) {
   const t = tr(lang);
   const store = useGarageStore();
   const lookups = useMemo(() => buildLookups(store.state, lang), [store.state, lang]);
@@ -29,7 +30,7 @@ export function BenefitDetail({ id, lang, onChanged }: { id: string; lang: Local
   const [reversing, setReversing] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [evidence, setEvidence] = useState("");
-  const canReverse = store.actor?.role === "owner" || store.actor?.role === "branch-manager";
+  const canReverse = canManage && (store.actor?.role === "owner" || store.actor?.role === "branch-manager");
 
   useEffect(() => { if (item && !branchId) setBranchId(item.branchIds[0] ?? ""); }, [item, branchId]);
 
@@ -72,10 +73,13 @@ export function BenefitDetail({ id, lang, onChanged }: { id: string; lang: Local
   const used = detail.history.filter((entry) => !entry.reversed).reduce((sum, entry) => sum + entry.quantity, 0);
   const total = totalUses(item.limit);
   const date = (iso: string) => dateLabel(iso, lang);
-  const active = item.status === "active";
+  const active = item.status === "active" && canManage;
+  const usage = usageText(item.limit, used, lang);
 
-  return <div className="qo-stack">
-    <div className="qo-row between"><StatusBadge status={item.status} lang={lang} domain="benefit" /><span className="qo-muted">{limitText(item.limit, lang)}{total !== null && ` · ${t(`${used} used`, `${used} مستخدم`)}`}</span></div>
+  return <div className="qo-stack qo-drawer-pad">
+    <div className="qo-row between"><StatusBadge status={item.status} lang={lang} domain="benefit" /><span className="qo-muted">{usage ?? limitText(item.limit, lang)}</span></div>
+    {total !== null && <span className="qo-meter" role="img" aria-label={usage ?? ""}><span style={{ inlineSize: `${Math.min(100, Math.round((used / Math.max(1, total)) * 100))}%` }} /></span>}
+    {!canManage && <ReadOnlyNote lang={lang} />}
     <dl className="qo-kv">
       <dt>{t("Customer", "العميل")}</dt><dd>{customer ? <RecordRef type="customer" id={customer.id} label={customer.name} /> : "—"}</dd>
       <dt>{t("Vehicle", "المركبة")}</dt><dd>{vehicle ? <RecordRef type="vehicle" id={vehicle.vehicle.id} label={vehicle.vehicle.plate} subtitle={vehicle.vehicle.makeModel} /> : "—"}</dd>
@@ -112,7 +116,7 @@ export function BenefitDetail({ id, lang, onChanged }: { id: string; lang: Local
     <Collapsible title={t("Use history", "سجل الاستخدام")} count={detail.history.length} defaultOpen={detail.history.length > 0}>
       {detail.history.length === 0 ? <p className="qo-muted">{t("Not used yet.", "لم تُستخدم بعد.")}</p>
         : <ul className="qo-history">{detail.history.map((entry) => <li key={entry.id}>
-            <strong>{date(entry.on_date)}</strong>
+            <strong><DateText value={entry.on_date} lang={lang} /></strong>
             <span>× {entry.quantity}</span>
             <span className="qo-muted">{lookups.branchName(entry.branch_id)}</span>
             <span>{entry.fulfillment_ref}</span>

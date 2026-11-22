@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Configured, PackageVersion, PolicyRef, QualificationEvidence, VehicleSelection } from "@garage/domain";
+import type { Configured, Money, PackageVersion, PolicyRef, QualificationEvidence, VehicleSelection } from "@garage/domain";
 import type { Bilingual } from "./quote-logic";
-import { policyLabel } from "./quote-logic";
+import { humaniseKey, knownPolicyName, policyKey } from "./policy-names";
 import { quoteApi } from "../../shared/store";
 
 /** GET returning null on 401/403/404 (feature unavailable for this role or not built yet); throws on other failures. */
@@ -73,6 +73,14 @@ export interface PromotionInfo {
   minVehicles: number;
   maxVehicles: number;
   verifierRoles: string[];
+  /** Fixed discount total (null when the policy has none or it is zero). */
+  discount: Money | null;
+  /** Fixed discount per vehicle, when the policy allocates one. */
+  perVehicle: Money | null;
+  validFrom: string | null;
+  validUntil: string | null;
+  recipient: "customer" | "referred-customer";
+  stackable: boolean;
 }
 
 const seedPromotionIds = ["seed-ultimate-club", "seed-plus-lifetime", "seed-recent-ultimate", "seed-nov-announcement", "seed-warranty-card-referral", "seed-four-cars"];
@@ -83,18 +91,35 @@ type PromotionValue = {
   grouping?: { minimumVehicles?: number; maximumVehicles?: number };
   evidenceVerification?: { authorizedRoles?: string[] };
   beneficiaryRule?: Bilingual;
+  discountAllocation?: { total?: Money; perVehicle?: Money | null };
+  recipient?: { kind?: "customer" | "referred-customer" };
+  stackability?: { allowed?: boolean };
 };
 
-export function toPromotion(ref: PolicyRef, value: PromotionValue, name?: Bilingual | null, lang: "ar" | "en" = "en"): PromotionInfo {
+/** Short title: our localised name when the promotion is known, else the policy id humanised. The rule sentence is a description, never the title. */
+export function promotionTitle(ref: PolicyRef, lang: "ar" | "en", fallback?: Bilingual | null): string {
+  const humanised = humaniseKey(policyKey(ref.id));
+  return knownPolicyName(ref.id, lang) ?? (humanised || (fallback ? fallback[lang] || fallback.en : "") || (lang === "ar" ? "غير محدد" : "Not set"));
+}
+
+const positive = (money: Money | null | undefined): Money | null => (money && money.minor > 0 ? money : null);
+
+export function toPromotion(ref: PolicyRef, value: PromotionValue, name?: Bilingual | null, lang: "ar" | "en" = "en", validity: { validFrom?: string | null; validUntil?: string | null } = {}): PromotionInfo {
   return {
     ref,
-    name: policyLabel(ref, name, lang),
-    rule: value.beneficiaryRule ?? null,
+    name: promotionTitle(ref, lang, name),
+    rule: value.beneficiaryRule ?? name ?? null,
     evidenceKinds: value.evidenceKinds ?? [],
     maximumUnits: value.maximumUnits ?? null,
     minVehicles: value.grouping?.minimumVehicles ?? 1,
     maxVehicles: value.grouping?.maximumVehicles ?? 1,
     verifierRoles: value.evidenceVerification?.authorizedRoles ?? [],
+    discount: positive(value.discountAllocation?.total),
+    perVehicle: positive(value.discountAllocation?.perVehicle),
+    validFrom: validity.validFrom ?? null,
+    validUntil: validity.validUntil ?? null,
+    recipient: value.recipient?.kind ?? "customer",
+    stackable: value.stackability?.allowed ?? false,
   };
 }
 
@@ -110,7 +135,7 @@ export async function loadPromotions(lang: "ar" | "en"): Promise<PromotionInfo[]
     for (const raw of rows as Array<Record<string, unknown>>) {
       const ref = (raw.ref ?? raw.policy) as PolicyRef | undefined;
       if (!ref || typeof ref.id !== "string" || typeof ref.version !== "number") continue;
-      out.push(toPromotion(ref, (raw.value ?? raw) as PromotionValue, (raw.name as Bilingual | undefined) ?? null, lang));
+      out.push(toPromotion(ref, (raw.value ?? raw) as PromotionValue, (raw.name as Bilingual | undefined) ?? null, lang, { validFrom: (raw.validFrom as string | null | undefined) ?? null, validUntil: (raw.validUntil as string | null | undefined) ?? null }));
     }
     return out;
   }

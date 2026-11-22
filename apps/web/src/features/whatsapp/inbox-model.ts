@@ -90,3 +90,31 @@ export function eventTitle(eventType: string, lang: "en" | "ar"): string {
   const spaced = eventType.replace(/[-_.]+/g, " ").trim();
   return spaced ? spaced.charAt(0).toUpperCase() + spaced.slice(1) : eventType;
 }
+
+/** ISO instant to a local "YYYY-MM-DDTHH:MM" string (Latin digits) that DateText can render; unparseable input is returned unchanged. */
+export function localStamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return value;
+  const two = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}T${two(date.getHours())}:${two(date.getMinutes())}`;
+}
+
+/** Group an ordered message list by calendar day (the first 10 characters of the stamp). */
+export function groupMessagesByDay<T>(items: T[], stampOf: (item: T) => string): Array<{ day: string; items: T[] }> {
+  const groups: Array<{ day: string; items: T[] }> = [];
+  for (const item of items) {
+    const day = stampOf(item).slice(0, 10);
+    const last = groups[groups.length - 1];
+    if (last && last.day === day) last.items.push(item);
+    else groups.push({ day, items: [item] });
+  }
+  return groups;
+}
+
+/** Canned replies the agent can insert into the composer (saved here only; delivery is off). */
+export const quickReplies: Array<{ id: string; short: { en: string; ar: string }; en: string; ar: string }> = [
+  { id: "thanks", short: { en: "Thanks", ar: "شكراً" }, en: "Thank you for contacting us.", ar: "شكراً لتواصلك معنا." },
+  { id: "confirm", short: { en: "Booking confirmed", ar: "تأكيد الحجز" }, en: "Your booking is confirmed. We look forward to seeing you.", ar: "تم تأكيد حجزك. في انتظارك." },
+  { id: "checking", short: { en: "Checking", ar: "جارٍ التحقق" }, en: "We are checking and will get back to you shortly.", ar: "نراجع طلبك وسنرد عليك قريباً." },
+  { id: "ready", short: { en: "Car ready", ar: "السيارة جاهزة" }, en: "Your car is ready for pickup.", ar: "سيارتك جاهزة للاستلام." },
+];

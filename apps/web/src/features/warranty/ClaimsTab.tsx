@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, Download, Paperclip, Upload } from "lucide-react";
 import type { WarrantyClaim, WarrantyClaimStatus } from "@garage/domain";
 import {
-  Collapsible, ConfirmDialog, DataTable, DetailDrawer, EmptyState, FilterBar, RecordRef, StatusBadge, useUrlState, type Column,
+  Collapsible, ConfirmDialog, DataTable, DateText, DetailDrawer, EmptyState, FilterBar, RecordRef, StatusBadge, useUrlState, type Column,
 } from "../../shared/components";
 import { useWarrantyDraftState, warrantyDraftKey } from "./warranty-form-state";
 import {
@@ -92,7 +92,7 @@ export function ClaimsTab({ scope, onNewClaim }: { scope: WarrantyScope; onNewCl
     { key: "customer", header: t("Customer", "العميل"), render: (c) => { const r = warrantyOf(c); return r ? <CustomerLink scope={scope} customerId={r.customerId} /> : "—"; } },
     { key: "vehicle", header: t("Vehicle", "المركبة"), render: (c) => { const r = warrantyOf(c); return r ? <VehicleLink scope={scope} customerId={r.customerId} vehicleId={r.vehicleId} /> : "—"; } },
     { key: "status", header: t("Status", "الحالة"), sortable: true, sortValue: (c) => c.status, render: (c) => <StatusBadge status={c.status} domain="claim" lang={lang} /> },
-    { key: "opened", header: t("Opened", "فُتحت"), sortable: true, sortValue: (c) => c.createdAt, render: (c) => formatDateTime(c.createdAt, lang) },
+    { key: "opened", header: t("Opened", "فُتحت"), sortable: true, sortValue: (c) => c.createdAt, render: (c) => <DateText value={c.createdAt} lang={lang} /> },
     { key: "files", header: t("Files", "الملفات"), numeric: true, hideOnCard: true, render: (c) => c.attachments?.length ?? 0 },
   ];
 
@@ -141,7 +141,7 @@ export function ClaimsTab({ scope, onNewClaim }: { scope: WarrantyScope; onNewCl
           {count ? <ul className="w-files">{open.attachments.map((file) => <li key={file.id}>
             <a href={`/api/warranties/claims/${encodeURIComponent(open.id)}/attachments/${encodeURIComponent(file.id)}/download`} download={file.fileName}>
               <Download size={14} /><span>{file.fileName}</span></a>
-            <small>{fileSizeLabel(file.byteSize)} · {file.uploadedBy} · {formatDateTime(file.uploadedAt, lang)}</small>
+            <small>{fileSizeLabel(file.byteSize)} · {file.uploadedBy} · <DateText value={file.uploadedAt} lang={lang} /></small>
           </li>)}</ul> : <p className="form-hint">{t("No files yet.", "لا توجد ملفات بعد.")}</p>}
           {active && storageReady === true && count < MAX_EVIDENCE_ATTACHMENTS && <>
             <label className={`btn w-upload${uploadingId ? " busy" : ""}`}>

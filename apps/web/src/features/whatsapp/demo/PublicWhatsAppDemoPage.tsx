@@ -47,7 +47,7 @@ function PublicWhatsAppDemoPage() {
     return {
       id,
       en: new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" }).format(date),
-      ar: new Intl.DateTimeFormat("ar-EG", { weekday: "long", month: "short", day: "numeric" }).format(date),
+      ar: new Intl.DateTimeFormat("ar-EG-u-nu-latn", { weekday: "long", month: "short", day: "numeric" }).format(date),
     };
   }), [isArabic]);
   const selectedBranch = branches.find((item) => item.id === branchId);

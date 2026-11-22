@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { Locale, PackageVersion, PolicyRef, QuoteDraftInput, QuoteVersionRef, VehicleSelection } from "@garage/domain";
 import { quoteApi, useGarageStore } from "../../shared/store";
-import { Collapsible, EmptyState, Field, FormSection, Money, Notice, RequiredNote, Skeleton } from "../../shared/components";
+import { Amount, Collapsible, EmptyState, Field, FormSection, Notice, RequiredNote, Skeleton } from "../../shared/components";
 import { commercialError } from "./commercial-errors";
 import { loadAcceptanceTerms, loadCategories, loadPublishedPackages, resolveVehicle, type AcceptanceTerms, type CategoryInfo, type ResolvedVehicle } from "./commercial-data";
 import { buildLookups, tr } from "./lookups";
@@ -198,7 +198,7 @@ export function QuoteForm({ lang, base, prefill, onSaved, formId = "quote-form",
                         {price && !tax && <span className="tag">{t("Draft only: no approved tax", "مسودة فقط: لا توجد ضريبة معتمدة")}</span>}
                       </span>
                     </span>
-                    <span className="qo-option-price">{price ? <Money minor={price.minor + (tax?.minor ?? 0)} currency={price.currency} lang={lang} /> : "—"}</span>
+                    <span className="qo-option-price">{price ? <Amount minor={price.minor + (tax?.minor ?? 0)} currency={price.currency} lang={lang} variant="detail" /> : "—"}</span>
                   </label>;
                 })}
               </div>}
@@ -259,9 +259,9 @@ export function QuoteForm({ lang, base, prefill, onSaved, formId = "quote-form",
         <input className="field-input" type="date" min={todayIso()} value={validThrough ?? ""} onChange={(event) => setValidThrough(event.target.value || null)} />
       </Field>
       {preview && <div className="qo-totals" aria-live="polite">
-        <div><span>{t("Subtotal", "المجموع")}</span><Money minor={preview.subtotal} currency={preview.currency} lang={lang} /></div>
-        {preview.tax > 0 && <div><span>{t("Tax", "الضريبة")}</span><Money minor={preview.tax} currency={preview.currency} lang={lang} /></div>}
-        <div className="grand"><span>{t("Total", "الإجمالي")}</span><Money minor={preview.total} currency={preview.currency} lang={lang} /></div>
+        <div><span>{t("Subtotal", "المجموع")}</span><Amount minor={preview.subtotal} currency={preview.currency} lang={lang} variant="detail" /></div>
+        {preview.tax > 0 && <div><span>{t("Tax", "الضريبة")}</span><Amount minor={preview.tax} currency={preview.currency} lang={lang} variant="detail" /></div>}
+        <div className="grand"><span>{t("Total", "الإجمالي")}</span><Amount minor={preview.total} currency={preview.currency} lang={lang} variant="detail" /></div>
       </div>}
     </FormSection>
 

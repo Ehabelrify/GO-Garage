@@ -2,10 +2,9 @@ import { useMemo, useState } from "react";
 import { calculateWarrantyInvoiceTotals } from "@garage/domain";
 import type { WarrantyInvoiceDraft, WarrantyRecord } from "@garage/domain";
 import {
-  DataTable, DetailDrawer, EmptyState, FilterBar, RecordRef, StatusBadge, useUrlState, type Column,
+  DataTable, DateText, DetailDrawer, EmptyState, FilterBar, RecordRef, StatusBadge, useUrlState, type Column,
 } from "../../shared/components";
 import { WarrantyInvoicePanel } from "./WarrantyInvoicePanel";
-import { formatDateTime } from "./warranty-logic";
 import { CustomerLink, VehicleLink, WarrantyLink, type WarrantyScope } from "./warranty-scope";
 
 /** Draft invoices linked to coverage. Creating one starts from the coverage drawer; editing happens here. */
@@ -30,7 +29,7 @@ export function InvoicesTab({ scope }: { scope: WarrantyScope }) {
     { key: "vehicle", header: t("Vehicle", "المركبة"), render: ({ record }) => <VehicleLink scope={scope} customerId={record.customerId} vehicleId={record.vehicleId} /> },
     { key: "warranty", header: t("Warranty", "الضمان"), render: ({ record }) => <WarrantyLink scope={scope} record={record as WarrantyRecord} /> },
     { key: "status", header: t("Payment", "الدفع"), render: ({ invoice }) => <StatusBadge status={status(invoice)} domain="invoice" lang={lang} /> },
-    { key: "updated", header: t("Updated", "حُدّثت"), sortable: true, sortValue: (row) => row.invoice.updatedAt, render: ({ invoice }) => formatDateTime(invoice.updatedAt, lang) },
+    { key: "updated", header: t("Updated", "حُدّثت"), sortable: true, sortValue: (row) => row.invoice.updatedAt, render: ({ invoice }) => <DateText value={invoice.updatedAt} lang={lang} /> },
   ];
 
   return <>

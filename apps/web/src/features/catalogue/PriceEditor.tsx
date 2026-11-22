@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { supportedCurrencies, isSupportedCurrency, type PackagePriceHistoryEntry, type PackageVersion } from "@garage/domain";
-import { Collapsible, DetailDrawer, Field, FormSection, Money, Notice, RequiredNote, StatusBadge, formatMoney, majorToMinor } from "../../shared/components";
+import { Collapsible, DateText, DetailDrawer, Field, FormSection, Money, Notice, RequiredNote, StatusBadge, formatMoney, majorToMinor } from "../../shared/components";
 import { aggregationOptions, taxRuleOptions, type PriceFormState } from "./price-logic";
 import "./catalogue.css";
 
@@ -98,7 +98,6 @@ export function PriceHistory({ lang, packageId, version }: { lang: Lang; package
       .catch(() => { if (live) setFailed(true); });
     return () => { live = false; };
   }, [packageId, version]);
-  const when = (iso: string | null) => iso ? new Date(iso).toLocaleDateString(lang === "ar" ? "ar-EG-u-nu-latn" : "en-GB") : "";
   return <Collapsible title={t("Price history", "سجل الأسعار")} count={rows?.length}>
     {failed ? <p className="cat-muted">{t("History unavailable. Try again later.", "السجل غير متاح. حاول لاحقاً.")}</p>
       : rows === null ? <p className="cat-muted">{t("Loading", "جارٍ التحميل")}</p>
@@ -112,7 +111,8 @@ export function PriceHistory({ lang, packageId, version }: { lang: Lang; package
             : row.price ? <Money minor={row.price.minor} currency={row.price.currency} lang={lang} /> : <span className="cat-muted">{t("No price", "بدون سعر")}</span>}
         </span>
         <span className="cat-muted">
-          {[row.createdByName, when(row.createdAt), row.effectiveFrom ? `${t("effective", "سارٍ")} ${row.effectiveFrom}` : "", row.approvedByName ? `${t("published by", "نشره")} ${row.approvedByName}` : "", row.reason].filter(Boolean).join(" · ")}
+          {[row.createdByName, row.createdAt && <DateText key="c" value={row.createdAt} lang={lang} />, row.effectiveFrom && <span key="e">{t("effective", "سارٍ")} <DateText value={row.effectiveFrom} lang={lang} /></span>, row.approvedByName && `${t("published by", "نشره")} ${row.approvedByName}`, row.reason]
+            .filter(Boolean).flatMap((part, index) => index === 0 ? [part] : [" · ", part])}
         </span>
       </li>)}</ul>}
   </Collapsible>;

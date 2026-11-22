@@ -144,3 +144,21 @@ export function validateDraft(draft: PackageVersion): Record<string, [string, st
 export function isPublishable(p: Pick<PackageVersion, "price" | "tax" | "workAggregation">): boolean {
   return p.price.state === "approved" && p.tax.state === "approved" && p.workAggregation.state === "approved";
 }
+
+export type PackageSegment = "package" | "offer" | "unconfirmed";
+
+/**
+ * Where a catalogue row belongs in the list. Marketing announcements and promotional bundles are "offer";
+ * drafts with no approved price (unconfirmed services such as wrapping) are "unconfirmed"; the rest are real packages.
+ */
+export function packageSegment(p: Pick<PackageVersion, "ref" | "kind" | "state" | "price" | "provenance">): PackageSegment {
+  if (/(^|[-_:])promo([-_:]|$)/i.test(p.ref.id) || /announcement/i.test(p.provenance)) return "offer";
+  if (p.kind === "standalone" && p.state === "draft" && p.price.state !== "approved") return "unconfirmed";
+  return "package";
+}
+
+export function segmentCounts(packages: Array<Parameters<typeof packageSegment>[0]>): Record<PackageSegment, number> {
+  const counts: Record<PackageSegment, number> = { package: 0, offer: 0, unconfirmed: 0 };
+  for (const item of packages) counts[packageSegment(item)] += 1;
+  return counts;
+}

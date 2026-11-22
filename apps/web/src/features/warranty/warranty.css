@@ -1,143 +1,97 @@
-/* Warranty module. Shared patterns carry the layout; only warranty-specific bits live here. */
-.w-lookup { display:flex; gap:8px; align-items:center; flex:1 1 260px; max-width:420px; }
-.w-lookup label { flex:1; min-width:0; }
-.w-lookup-result { display:flex; flex-wrap:wrap; gap:6px 14px; margin:0 0 12px; padding:8px 12px; border:1px solid var(--line); background:var(--teal-soft); }
-.w-drawer-status { display:flex; align-items:center; gap:10px; margin-block-end:12px; color:var(--muted); font-size:13px; }
-.w-note { margin:12px 0; padding:9px 11px; border-inline-start:3px solid var(--amber); background:var(--amber-soft); font-size:13px; }
-.kv-grid .full { grid-column:1/-1; }
-.w-timeline { display:grid; gap:8px; margin:0; padding:0; list-style:none; font-size:13px; }
-.w-timeline li { display:grid; gap:2px; }
-.w-timeline span { color:var(--muted); font-size:12px; }
-.w-files { display:grid; gap:8px; margin:0 0 10px; padding:0; list-style:none; }
-.w-files li { display:grid; gap:2px; }
-.w-files a { display:inline-flex; align-items:center; gap:7px; width:max-content; max-width:100%; color:var(--teal-dark); overflow-wrap:anywhere; }
-.w-files small { color:var(--muted); font-size:12px; }
-.w-upload { position:relative; cursor:pointer; }
-.w-upload.busy { opacity:.6; cursor:wait; }
-.w-upload input { position:absolute; inset:0; width:100%; opacity:0; cursor:inherit; }
-.w-upload:focus-within { outline:var(--focus-ring); outline-offset:2px; }
-.w-checklist { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px 12px; max-height:220px; overflow:auto; padding:8px; border:1px solid var(--line); background:#fff; }
-.w-checklist label, .w-check, .w-fields label { display:flex; align-items:center; gap:8px; min-height:36px; font-size:14px; }
-.w-check input, .w-checklist input, .w-fields input { accent-color:var(--teal); }
-.w-section-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-block-end:12px; }
-.w-section-head h2 { margin:0; font-size:18px; }
-.w-section-actions { display:flex; gap:8px; flex-wrap:wrap; }
-.w-settings { margin-block-start:24px; padding:16px; border:1px solid var(--line); background:var(--paper); }
-.w-settings-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-block-end:10px; }
-.w-settings h3 { margin:0 0 3px; font-size:16px; }
-.w-switch { display:flex; align-items:center; gap:8px; padding:8px 11px; border:1px solid var(--line); background:#fff; font-weight:600; }
-.w-fields { display:flex; flex-wrap:wrap; gap:4px 18px; margin:0 0 10px; padding:0; border:0; }
-.w-fields:disabled { opacity:.55; }
-.w-badge.draft { display:inline-flex; padding:4px 8px; color:var(--tone-warning-fg); background:var(--tone-warning-bg); font-size:12px; }
-.w-error { margin-block-start:10px; padding:9px 11px; color:var(--red); background:var(--red-soft); font-size:13px; }
-.w-inline-note { margin:8px 0 0; color:var(--muted); font-size:12px; }
-.w-verify-print-area { margin-block-start:12px; padding:12px; border:1px solid var(--line); background:#f5f8f4; }
-@media(max-width:760px) { .w-checklist { grid-template-columns:1fr; } .w-settings-head { flex-direction:column; } }
+/* Warranty module. Shared patterns carry the layout; only warranty-specific bits live here. Font sizes use tokens only. */
+.w-lookup { display: flex; gap: 8px; align-items: center; flex: 1 1 260px; max-width: 420px; min-width: 0; }
+.w-lookup label { flex: 1; min-width: 0; }
+.w-lookup .btn { white-space: nowrap; flex: none; }
+.w-lookup-result { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--line); background: var(--teal-soft); }
+.w-drawer-status { display: flex; align-items: center; gap: 10px; margin-block-end: 12px; color: var(--muted); font-size: var(--fs-body); }
+.w-note { margin: 12px 0; padding: 9px 11px; border-inline-start: 3px solid var(--amber); background: var(--amber-soft); font-size: var(--fs-body); }
+.kv-grid .full { grid-column: 1 / -1; }
+.w-timeline { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; font-size: var(--fs-body); }
+.w-timeline li { display: grid; gap: 2px; min-width: 0; }
+.w-timeline span { color: var(--muted); font-size: var(--fs-caption); }
+.w-files { display: grid; gap: 8px; margin: 0 0 10px; padding: 0; list-style: none; }
+.w-files li { display: grid; gap: 2px; min-width: 0; }
+.w-files a { display: inline-flex; align-items: center; gap: 7px; width: max-content; max-width: 100%; color: var(--teal-dark); overflow-wrap: anywhere; }
+.w-files small { color: var(--muted); font-size: var(--fs-caption); }
+.w-upload { position: relative; cursor: pointer; white-space: nowrap; }
+.w-upload.busy { opacity: .6; cursor: wait; }
+.w-upload input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: inherit; }
+.w-upload:focus-within { outline: var(--focus-ring); outline-offset: 2px; }
+.w-checklist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; max-height: 220px; overflow: auto; padding: 8px; border: 1px solid var(--line); background: #fff; }
+.w-checklist label, .w-check, .w-fields label { display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: var(--fs-body); min-width: 0; }
+.w-check input, .w-checklist input, .w-fields input { accent-color: var(--teal); }
+.w-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-block-end: 12px; }
+.w-section-head h2 { margin: 0; font-size: var(--fs-h2); line-height: var(--lh-heading); }
+.w-section-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.w-section-actions .btn { white-space: nowrap; }
+.w-settings { margin-block-start: 24px; padding: 16px; border: 1px solid var(--line); background: var(--paper); }
+.w-settings-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-block-end: 10px; }
+.w-settings h3 { margin: 0 0 3px; font-size: var(--fs-h3); }
+.w-switch { display: flex; align-items: center; gap: 8px; padding: 8px 11px; border: 1px solid var(--line); background: #fff; font-weight: 600; white-space: nowrap; }
+.w-fields { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0 0 10px; padding: 0; border: 0; min-width: 0; }
+.w-fields:disabled { opacity: .55; }
+.w-error { margin-block-start: 10px; padding: 9px 11px; color: var(--red); background: var(--red-soft); font-size: var(--fs-body); }
+.w-cov-name { display: grid; gap: 2px; min-width: 0; }
+.w-cov-name > span:first-child { overflow-wrap: break-word; word-break: normal; }
+.w-nowrap { white-space: nowrap; }
 
-/* Draft invoice and QR card (print-safe) */
-.w-invoice-panel { display:grid; gap:12px; padding:14px; border:1px solid #d7e4dc; background:#f7faf7; }
-.w-invoice-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
-.w-invoice-head strong { display:flex; align-items:center; gap:7px; color:#29483e; font-size:13px; }
-.w-invoice-head p { margin:4px 0 0; color:#697e73; font-size:11px; line-height:1.5; }
-.w-invoice-empty,
-.w-invoice-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.w-invoice-empty { justify-content:space-between; color:#6a7d73; font-size:11px; }
-.w-invoice-payment-meta { margin:-5px 0 0; color:#71827a; font-size:10px; line-height:1.5; }
-.w-invoice-editor { display:grid; gap:10px; padding:12px; border:1px solid #dbe6de; background:#fff; }
-.w-invoice-editor-head { display:flex; align-items:center; justify-content:space-between; gap:8px; color:#35584a; font-size:12px; }
-.w-invoice-line-edit { display:grid; grid-template-columns:minmax(140px,2fr) minmax(75px,.5fr) minmax(160px,1fr) auto; gap:8px; align-items:end; }
-.w-invoice-line-edit label,
-.w-invoice-edit-grid label,
-.w-invoice-notes { display:grid; gap:4px; color:#61766b; font-size:10px; line-height:1.4; }
-.w-invoice-edit-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; }
-.w-invoice-notes textarea { min-height:64px; }
-.w-invoice-print-area { padding:18px; border:1px solid #d8e3da; background:#fff; color:#263e34; }
-.w-invoice-print-title { display:flex; justify-content:space-between; gap:14px; padding-bottom:13px; border-bottom:2px solid #365f4d; }
-.w-invoice-print-title span { color:#6d8176; font-size:10px; font-weight:700; letter-spacing:.1em; }
-.w-invoice-print-title h3 { margin:4px 0 0; color:#9a5a3d; font-size:16px; }
-.w-invoice-print-title > bdi { color:#61766b; font-size:10px; overflow-wrap:anywhere; }
-.w-invoice-party-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:14px 0; }
-.w-invoice-party-grid div { display:grid; gap:3px; }
-.w-invoice-party-grid small { color:#72827a; font-size:10px; }
-.w-invoice-party-grid strong { color:#314a3e; font-size:11px; overflow-wrap:anywhere; }
-.w-invoice-table { width:100%; border-collapse:collapse; font-size:11px; }
-.w-invoice-table th,
-.w-invoice-table td { padding:8px 7px; border-bottom:1px solid #e4ebe5; text-align:start; }
-.w-invoice-table th { color:#5c7167; background:#f3f7f3; font-size:10px; }
-.w-invoice-totals { display:grid; gap:6px; width:min(100%,390px); margin:14px 0 0 auto; }
-.w-invoice-totals div { display:flex; justify-content:space-between; gap:12px; color:#61766b; font-size:10px; }
-.w-invoice-totals strong { color:#314a3e; text-align:end; }
-.w-invoice-totals .w-invoice-total { padding-top:7px; border-top:1px solid #cddbd1; color:#29483e; font-size:12px; font-weight:700; }
-.w-invoice-disclaimer { margin:14px 0 0; padding:9px 10px; border-inline-start:3px solid #b18345; color:#745c35; background:#faf5e9; font-size:10px; line-height:1.5; }
-.w-verify-print-area { margin-top:14px; padding:13px; border:1px solid #d8e4dc; background:#f5f8f4; }
-.w-verify-print-toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
-.w-verify-print-toolbar p { margin:0; color:#61766b; font-size:11px; line-height:1.5; }
-.w-verify-customer-preview { display:grid; gap:8px; }
-.w-verify-print-card { display:grid; grid-template-columns:180px minmax(0,1fr); align-items:stretch; gap:14px; padding:16px; border:1px solid #d8e2db; background:#fff; }
-.w-verify-qr { display:grid; align-content:center; justify-items:center; gap:8px; padding:10px; border-inline-end:1px solid #e4ebe5; }
-.w-verify-qr small { color:#677b70; font-size:10px; }
-.w-verify-print-card .public-warranty-card { width:100%; box-shadow:none; }
-.w-verify-print-area.preview-only .w-verify-print-card { grid-template-columns:minmax(0,1fr); }
-.w-verify-replace-warning { margin:11px 0 0; padding:8px 10px; border-inline-start:3px solid #b17d3f; color:#77572e; background:#f8f1e4; font-size:11px; line-height:1.5; }
- .w-verify-print-toolbar { align-items:flex-start; flex-direction:column; }
- .w-verify-print-card { grid-template-columns:1fr; }
- .w-verify-qr { border-inline-end:0; border-bottom:1px solid #e4ebe5; }
- .w-invoice-line-edit { grid-template-columns:1fr 1fr; }
- .w-invoice-line-edit label:first-child { grid-column:1/-1; }
- .w-invoice-edit-grid { grid-template-columns:1fr; }
- .w-invoice-party-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
- .w-invoice-table { font-size:10px; }
- .w-invoice-table th,
- .w-invoice-table td { padding:6px 4px; }
-  body.printing-warranty-qr .w-verify-print-area,
-  body.printing-warranty-qr .w-verify-print-area * { visibility:visible !important; }
-  body.printing-warranty-qr .w-verify-print-area { position:absolute; inset:0; width:100%; margin:0; padding:0; border:0; background:#fff; }
-  body.printing-warranty-invoice .w-invoice-print-area[data-warranty-print-target="true"],
-  body.printing-warranty-invoice .w-invoice-print-area[data-warranty-print-target="true"] * { visibility:visible !important; }
-  body.printing-warranty-invoice .w-invoice-print-area[data-warranty-print-target="true"] { position:absolute; top:0; left:0; width:100%; margin:0; padding:16mm; border:0; background:#fff; }
-  body.printing-warranty-invoice .w-invoice-table thead { display:table-header-group; }
-  body.printing-warranty-invoice .w-invoice-table tr,
-  body.printing-warranty-invoice .w-invoice-party-grid > div,
-  body.printing-warranty-invoice .w-invoice-totals > div,
-  body.printing-warranty-invoice .w-invoice-disclaimer { break-inside:avoid; }
-  body.printing-warranty-invoice .w-invoice-disclaimer { color:#5b4a2c !important; background:#f8f2e5 !important; }
- .w-verify-print-toolbar, .w-verify-preview-label, .w-verify-replace-warning { display:none !important; }
-  body.printing-warranty-qr .w-verify-print-card { grid-template-columns:180px minmax(0,1fr) !important; border:1px solid #82958a !important; }
- .w-verify-print-card .public-warranty-card { box-shadow:none !important; }
-@media(max-width:760px) {
- .w-verify-print-card { grid-template-columns:1fr; }
- .w-verify-qr { border-inline-end:0; border-bottom:1px solid #e4ebe5; }
- .w-invoice-line-edit { grid-template-columns:1fr 1fr; }
- .w-invoice-line-edit label:first-child { grid-column:1/-1; }
- .w-invoice-edit-grid { grid-template-columns:1fr; }
- .w-invoice-party-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
- .w-invoice-table { font-size:11px; }
- .w-invoice-table th, .w-invoice-table td { padding:6px 4px; }
- .w-lookup { flex:1 1 100%; }
-}
-@media print {
-  body.printing-warranty-qr * { visibility:hidden !important; }
-  body.printing-warranty-qr .w-verify-print-area,
-  body.printing-warranty-qr .w-verify-print-area * { visibility:visible !important; }
-  body.printing-warranty-qr .w-verify-print-area { position:absolute; inset:0; width:100%; margin:0; padding:0; border:0; background:#fff; }
-  body.printing-warranty-invoice * { visibility:hidden !important; }
-  body.printing-warranty-invoice .w-invoice-print-area[data-warranty-print-target="true"],
-  body.printing-warranty-invoice .w-invoice-print-area[data-warranty-print-target="true"] * { visibility:visible !important; }
-  body.printing-warranty-invoice .w-invoice-print-area[data-warranty-print-target="true"] { position:absolute; top:0; left:0; width:100%; margin:0; padding:16mm; border:0; background:#fff; }
-  body.printing-warranty-invoice .w-invoice-table thead { display:table-header-group; }
-  body.printing-warranty-invoice .w-invoice-table tr,
-  body.printing-warranty-invoice .w-invoice-party-grid > div,
-  body.printing-warranty-invoice .w-invoice-totals > div,
-  body.printing-warranty-invoice .w-invoice-disclaimer { break-inside:avoid; }
-  body.printing-warranty-invoice .w-invoice-disclaimer { color:#5b4a2c !important; background:#f8f2e5 !important; }
- .w-verify-print-toolbar, .w-verify-preview-label, .w-verify-replace-warning { display:none !important; }
-  body.printing-warranty-qr .w-verify-print-card { grid-template-columns:180px minmax(0,1fr) !important; border:1px solid #82958a !important; }
- .w-verify-print-card .public-warranty-card { box-shadow:none !important; }
-}
-
-
-/* Invoice panel on shared form patterns */
+/* Draft invoice (on screen the panel previews exactly what the shared print sheet renders). */
+.w-invoice-panel { display: grid; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--line); background: var(--paper); }
+.w-invoice-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.w-invoice-head strong { display: flex; align-items: center; gap: 7px; color: var(--ink); font-size: var(--fs-body); }
+.w-invoice-head p { margin: 4px 0 0; color: var(--muted); font-size: var(--fs-caption); line-height: 1.5; }
+.w-invoice-empty, .w-invoice-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.w-invoice-actions .btn { white-space: nowrap; }
+.w-invoice-empty { justify-content: space-between; color: var(--muted); font-size: var(--fs-caption); }
+.w-invoice-payment-meta { margin: -5px 0 0; color: var(--muted); font-size: var(--fs-caption); line-height: 1.5; }
+.w-invoice-editor { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); background: #fff; }
+.w-invoice-line-edit { display: grid; grid-template-columns: minmax(140px, 2fr) minmax(75px, .5fr) minmax(160px, 1fr) auto; gap: 8px; align-items: end; }
+.w-invoice-line-edit .form-field { min-width: 0; }
+.w-invoice-print-area { min-width: 0; padding: 18px; border: 1px solid var(--line); background: #fff; color: var(--ink); }
+.w-invoice-print-title { display: flex; justify-content: space-between; gap: 14px; padding-block-end: 13px; border-block-end: 2px solid var(--teal-dark); }
+.w-invoice-print-title span { color: var(--muted); font-size: var(--fs-label); font-weight: 700; letter-spacing: .06em; }
+.w-invoice-print-title h3 { margin: 4px 0 0; color: var(--tone-warning-fg); font-size: var(--fs-h3); }
+.w-invoice-print-title > bdi { color: var(--muted); font-size: var(--fs-label); overflow-wrap: anywhere; }
+.w-invoice-party-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
+.w-invoice-party-grid div { display: grid; gap: 3px; min-width: 0; }
+.w-invoice-party-grid small { color: var(--muted); font-size: var(--fs-caption); }
+.w-invoice-party-grid strong { font-size: var(--fs-body); overflow-wrap: anywhere; }
+.w-invoice-table { width: 100%; border-collapse: collapse; font-size: var(--fs-body); }
+.w-invoice-table th, .w-invoice-table td { padding: 8px 7px; border-block-end: 1px solid var(--line-soft); text-align: start; }
+.w-invoice-table th { color: var(--muted); background: var(--canvas); font-size: var(--fs-label); }
+.w-invoice-totals { display: grid; gap: 6px; width: min(100%, 390px); margin-block-start: 14px; margin-inline-start: auto; }
+.w-invoice-totals div { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: var(--fs-body); }
+.w-invoice-totals strong { color: var(--ink); text-align: end; }
+.w-invoice-totals .w-invoice-total { padding-block-start: 7px; border-block-start: 1px solid var(--line); color: var(--ink); font-weight: 700; }
+.w-invoice-disclaimer { margin: 14px 0 0; padding: 9px 10px; border-inline-start: 3px solid var(--amber); color: var(--tone-warning-fg); background: var(--amber-soft); font-size: var(--fs-caption); line-height: 1.5; }
 .w-invoice-badges { display: flex; align-items: center; gap: 8px; }
 .w-invoice-live-total { margin: 0; font-weight: 600; }
-.w-invoice-line-edit { align-items: end; }
-.w-invoice-line-edit .form-field { min-width: 0; }
+
+/* Customer QR card (printed through startWarrantyPrint("qr")). */
+.w-verify-print-area { margin-block-start: 14px; padding: 13px; border: 1px solid var(--line); background: var(--canvas); }
+.w-verify-print-card { display: grid; grid-template-columns: 180px minmax(0, 1fr); align-items: stretch; gap: 14px; padding: 16px; border: 1px solid var(--line); background: #fff; }
+.w-verify-qr { display: grid; align-content: center; justify-items: center; gap: 8px; padding: 10px; border-inline-end: 1px solid var(--line-soft); }
+.w-verify-qr small { color: var(--muted); font-size: var(--fs-caption); }
+.w-verify-print-card .public-warranty-card { width: 100%; box-shadow: none; }
+.w-verify-print-area.preview-only .w-verify-print-card { grid-template-columns: minmax(0, 1fr); }
+
+@media (max-width: 760px) {
+  .w-checklist { grid-template-columns: 1fr; }
+  .w-settings-head { flex-direction: column; }
+  .w-verify-print-card { grid-template-columns: 1fr; }
+  .w-verify-qr { border-inline-end: 0; border-block-end: 1px solid var(--line-soft); }
+  .w-invoice-line-edit { grid-template-columns: 1fr 1fr; }
+  .w-invoice-line-edit > :first-child { grid-column: 1 / -1; }
+  .w-invoice-party-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .w-invoice-table th, .w-invoice-table td { padding: 6px 4px; }
+  .w-lookup { flex: 1 1 100%; max-width: none; }
+}
+
+@media print {
+  body.printing-warranty-qr * { visibility: hidden !important; }
+  body.printing-warranty-qr .w-verify-print-area,
+  body.printing-warranty-qr .w-verify-print-area * { visibility: visible !important; }
+  body.printing-warranty-qr .w-verify-print-area { position: absolute; inset: 0; width: 100%; margin: 0; padding: 0; border: 0; background: #fff; }
+  body.printing-warranty-qr .w-verify-print-card { grid-template-columns: 180px minmax(0, 1fr) !important; border: 1px solid #82958a !important; }
+  .w-verify-print-card .public-warranty-card { box-shadow: none !important; }
+}

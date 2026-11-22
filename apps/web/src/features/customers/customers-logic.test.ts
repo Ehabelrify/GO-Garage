@@ -125,3 +125,27 @@ describe("Arabic plate matching", () => {
     expect(validateCustomerForm({ name: "A", phone: "0100 123 4567", plate: "12345", makeModel: "Kia" })).toEqual({ plate: "plate" });
   });
 });
+
+import { customerStats, scopeNote } from "./customers-logic";
+
+describe("customer list stats and scope", () => {
+  it("computes last visit and open jobs", () => {
+    const stats = customerStats(
+      [
+        { customerId: "c1", dropoffDate: "2026-11-01", status: "confirmed" },
+        { customerId: "c1", dropoffDate: "2026-11-10", status: "cancelled" },
+        { customerId: "c1", dropoffDate: "2026-12-30", status: "confirmed" },
+        { customerId: "c1", dropoffDate: "2026-11-15", status: "pending" },
+      ],
+      [{ customerId: "c1", stage: "in-service" }, { customerId: "c1", stage: "delivered" }, { customerId: "c2", stage: "ready" }],
+      "2026-11-22",
+    );
+    expect(stats.get("c1")).toEqual({ lastVisit: "2026-11-15", openJobs: 1 });
+    expect(stats.get("c2")).toEqual({ lastVisit: null, openJobs: 1 });
+  });
+  it("explains the scope", () => {
+    expect(scopeNote({ lang: "en", role: "owner", branchNames: [], currentBranch: "all" })).toBe("Customers of all branches");
+    expect(scopeNote({ lang: "en", role: "receptionist", branchNames: ["Nasr City", "Maadi"], currentBranch: "all" })).toBe("Customers of your branches: Nasr City, Maadi");
+    expect(scopeNote({ lang: "ar", role: "owner", branchNames: [], currentBranch: "b1", currentBranchName: "مدينة نصر" })).toBe("عملاء فرع مدينة نصر");
+  });
+});

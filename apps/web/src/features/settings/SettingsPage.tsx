@@ -4,7 +4,7 @@ import type { BranchId } from "@garage/domain";
 import { unknownWriteOutcomeCopy, useGarageStore } from "../../shared/store";
 import { decisionNames, valueLabel, type BranchPageProps } from "../../shared/ui";
 import {
-  Collapsible, DataTable, EmptyState, PageHeader, Skeleton, TabBar, TabPanel, useUrlState,
+  Collapsible, DataTable, EmptyState, PageHeader, Select, Skeleton, TabBar, TabPanel, useUrlState,
 } from "../../shared/components";
 import { AvailabilityEditor } from "./AvailabilityEditor";
 import { CommercialPolicyEditor } from "./CommercialPolicyEditor";
@@ -33,7 +33,6 @@ const roadmap = [
 ];
 
 type HistoryRow = { id: string; occurredAt: string; setting: string; scope: string; change: string };
-const HISTORY_PAGE = 10;
 
 export function SettingsPage({ lang, t, state, notify, branchName }: BranchPageProps) {
   const store = useGarageStore();
@@ -43,7 +42,6 @@ export function SettingsPage({ lang, t, state, notify, branchName }: BranchPageP
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [policyId, setPolicyId] = useState("quote-acceptance:default");
-  const [historyShown, setHistoryShown] = useState(HISTORY_PAGE);
 
   const rules = useMemo(() => state.decisions.filter((item) => isOperatingRule(item.id)), [state.decisions]);
   const dirtyEntries = Object.entries(drafts);
@@ -98,8 +96,8 @@ export function SettingsPage({ lang, t, state, notify, branchName }: BranchPageP
   const prefix = "settings";
 
   return <>
-    <PageHeader title={t("Settings", "الإعدادات")} subtitle={t("Owner-only rules. Changes apply immediately and are logged.", "قواعد للمالك فقط. التغييرات بتتطبق فوراً وبتتسجل.")} />
-    <TabBar tabs={tabs} value={activeTab} onChange={setTab} ariaLabel={t("Settings sections", "أقسام الإعدادات")} idPrefix={prefix} />
+    <PageHeader title={t("Settings", "الإعدادات")} subtitle={t("Owner-only rules. Changes apply immediately and are logged.", "قواعد للمالك فقط. التغييرات بتتطبق فوراً وبتتسجل.")}
+      tabs={<TabBar tabs={tabs} value={activeTab} onChange={setTab} ariaLabel={t("Settings sections", "أقسام الإعدادات")} idPrefix={prefix} />} />
 
     <TabPanel idPrefix={prefix} id="general" active={activeTab === "general"}>
       <section className="panel" aria-label={t("Operating rules", "قواعد التشغيل")}>
@@ -118,12 +116,12 @@ export function SettingsPage({ lang, t, state, notify, branchName }: BranchPageP
                   const current = setting.valueByScope[scope as BranchId | "business"] ?? "";
                   return <label key={scope}>
                     {setting.scope !== "business" && <span className="st-scope">{scopeName(scope)}</span>}
-                    <select
-                      className="field-select"
-                      aria-label={`${settingTitle(setting.id, setting.title)} — ${scopeName(scope)}`}
+                    <Select
+                      label={`${settingTitle(setting.id, setting.title)} — ${scopeName(scope)}`}
                       data-dirty={key in drafts ? "true" : "false"}
                       value={drafts[key] ?? current}
                       disabled={saving}
+                      options={setting.options.map((option) => ({ value: option.value, label: valueLabel(setting, option.value, lang) }))}
                       onChange={(event) => {
                         const value = event.target.value;
                         setSaveError("");
@@ -133,9 +131,7 @@ export function SettingsPage({ lang, t, state, notify, branchName }: BranchPageP
                           return next;
                         });
                       }}
-                    >
-                      {setting.options.map((option) => <option key={option.value} value={option.value}>{valueLabel(setting, option.value, lang)}</option>)}
-                    </select>
+                    />
                   </label>;
                 })}
               </div>
@@ -144,11 +140,12 @@ export function SettingsPage({ lang, t, state, notify, branchName }: BranchPageP
       </section>
 
       <div className="section-gap">
-        <Collapsible title={t("Change history", "سجل التغييرات")} count={history.length}>
+        {history.length > 0 && <Collapsible title={t("Change history", "سجل التغييرات")} count={history.length}>
           <DataTable<HistoryRow>
             lang={lang}
             caption={t("Change history", "سجل التغييرات")}
-            rows={history.slice(0, historyShown)}
+            rows={history}
+            pageSize={10}
             rowKey={(row) => row.id}
             columns={[
               { key: "setting", header: t("Setting", "الإعداد"), render: (row) => row.setting, primary: true },
@@ -158,9 +155,9 @@ export function SettingsPage({ lang, t, state, notify, branchName }: BranchPageP
             ]}
             empty={<EmptyState title={t("No changes yet", "لا توجد تغييرات")} text={t("Saved changes appear here.", "ستظهر التغييرات المحفوظة هنا.")} />}
           />
-          {history.length > historyShown && <div className="form-actions"><button type="button" className="btn btn-sm" onClick={() => setHistoryShown((n) => n + HISTORY_PAGE)}>{t("Show more", "اعرض أكتر")}</button></div>}
-        </Collapsible>
-        <Collapsible title={t("Not available yet", "غير متاح بعد")} count={roadmap.length}>
+        </Collapsible>}
+        <Collapsible title={t("Planned for later", "مخطط لاحقاً")}>
+          <p className="st-later">{t("Not active yet. Nothing here can be changed.", "غير مفعّلة بعد. لا يمكن تغيير أي منها.")}</p>
           <ul className="st-roadmap">{roadmap.map((item) => <li key={item.en}>{t(item.en, item.ar)}</li>)}</ul>
         </Collapsible>
       </div>
@@ -197,7 +194,7 @@ export function SettingsPage({ lang, t, state, notify, branchName }: BranchPageP
         <div className="st-policy-body">
           <label className="st-policy-select">
             <span className="sr-only">{t("Policy", "السياسة")}</span>
-            <select className="field-select" value={selectedPolicy.id} onChange={(event) => setPolicyId(event.target.value)}>
+            <select className="select field-select" value={selectedPolicy.id} onChange={(event) => setPolicyId(event.target.value)}>
               {(["quote", "pickup", "finance"] as PolicyGroup[]).map((group) => <optgroup key={group} label={policyGroupLabels[group][lang]}>
                 {catalog.filter((entry) => entry.group === group).map((entry) => <option key={entry.id} value={entry.id}>{policyName(entry)}</option>)}
               </optgroup>)}

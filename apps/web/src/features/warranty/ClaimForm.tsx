@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { DetailDrawer, Field, FormSection, RequiredNote } from "../../shared/components";
 import { useWarrantyDraftState } from "./warranty-form-state";
-import { branchAllowed, policyForWarranty } from "./warranty-logic";
+import { branchAllowed, policyDisplayName, policyForWarranty } from "./warranty-logic";
 import type { WarrantyScope } from "./warranty-scope";
 
 /** Drawer to open a claim. `warrantyId` preselects the coverage; otherwise staff pick one by customer and plate. */
@@ -56,7 +56,7 @@ export function ClaimForm({ scope, open, warrantyId, onClose, onDone }: {
           <select className="field-select" value={chosenId} onChange={(event) => { setSelection({ warrantyId: event.target.value }); setError(""); }}>
             <option value="">{t("Choose…", "اختر…")}</option>
             {choices.map((item) => <option key={item.id} value={item.id}>
-              {scope.customerName(item.customerId)} · {scope.vehicleOf(item.customerId, item.vehicleId)?.plate ?? "—"} · {item.policyName}
+              {scope.customerName(item.customerId)} · {scope.vehicleOf(item.customerId, item.vehicleId)?.plate ?? "—"} · {policyDisplayName(item.policyName)}
             </option>)}
           </select>
         </Field>

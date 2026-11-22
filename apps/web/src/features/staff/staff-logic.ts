@@ -39,6 +39,14 @@ export const capabilityLabels: Record<string, { en: string; ar: string }> = {
   "special-requests.review": { en: "Review special requests", ar: "مراجعة الطلبات الخاصة" },
   "settings.manage": { en: "Manage settings", ar: "إدارة الإعدادات" },
   "staff.manage": { en: "Manage staff", ar: "إدارة الفريق" },
+  "quotes.view": { en: "View quotes and offers (read only)", ar: "عرض العروض والتسعيرات (قراءة فقط)" },
+  "quotes.manage": { en: "Create and edit quotes and offers", ar: "إنشاء وتعديل العروض والتسعيرات" },
+};
+
+/** Short hint under a capability name where the label alone is not enough. */
+export const capabilityHints: Record<string, { en: string; ar: string }> = {
+  "quotes.view": { en: "Can open Quotes & offers but cannot change anything.", ar: "يفتح العروض والتسعيرات دون أي تعديل." },
+  "quotes.manage": { en: "Includes creating, offering, reserving and cancelling.", ar: "تشمل الإنشاء والعرض والحجز والإلغاء." },
 };
 
 export interface CapabilityGroup { id: string; en: string; ar: string; capabilities: string[] }
@@ -46,6 +54,7 @@ export interface CapabilityGroup { id: string; en: string; ar: string; capabilit
 const capabilityGroupDefs: CapabilityGroup[] = [
   { id: "front-desk", en: "Front desk", ar: "الاستقبال", capabilities: ["bookings.manage", "customers.read", "whatsapp.use", "transport.coordinate"] },
   { id: "warranty", en: "Warranty", ar: "الضمان", capabilities: ["warranty.view", "warranty.issue", "warranty.review", "warranty.void", "warranty.policies"] },
+  { id: "quotes", en: "Quotes & offers", ar: "العروض والتسعيرات", capabilities: ["quotes.view", "quotes.manage"] },
   { id: "business", en: "Business", ar: "الأعمال", capabilities: ["catalogue.manage", "finance.view", "special-requests.review"] },
   { id: "admin", en: "Administration", ar: "الإدارة", capabilities: ["settings.manage", "staff.manage"] },
 ];
@@ -93,4 +102,22 @@ export function overrideCount(member: Pick<StaffMember, "permissions">): number 
 
 export function isDemoMember(member: Pick<StaffMember, "userId">): boolean {
   return member.userId.startsWith("demo-");
+}
+
+const ARABIC_SCRIPT = new RegExp("[\u0600-\u06FF]");
+const LATIN_SCRIPT = /[A-Za-z]/;
+
+/**
+ * Names are sometimes stored as "Arabic name (Latin name)" or the reverse. Show the part in the viewer's script
+ * instead of a mixed-script string; anything else is returned untouched.
+ */
+export function localisedName(name: string, lang: "ar" | "en"): string {
+  const match = /^(.*?)\s*\(([^()]+)\)\s*$/.exec(name.trim());
+  if (!match) return name;
+  const [, outer, inner] = match;
+  const parts = [outer.trim(), inner.trim()];
+  const arabic = parts.find((part) => ARABIC_SCRIPT.test(part) && !LATIN_SCRIPT.test(part));
+  const latin = parts.find((part) => LATIN_SCRIPT.test(part) && !ARABIC_SCRIPT.test(part));
+  if (!arabic || !latin) return name;
+  return lang === "ar" ? arabic : latin;
 }

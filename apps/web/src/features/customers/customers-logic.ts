@@ -269,3 +269,43 @@ export function recordFromParams(params: URLSearchParams): { kind: "customer" | 
 export function vehicleLabel(vehicle: { make: string; model: string; year: number | null }): string {
   return [vehicle.make, vehicle.model, vehicle.year ?? ""].filter(Boolean).join(" ");
 }
+
+// ---------- list columns and scope (data already in the store; nothing invented) ----------
+
+export interface CustomerStats { lastVisit: string | null; openJobs: number }
+const closedStages = new Set(["delivered", "cancelled", "no-show"]);
+
+/** Last visit = latest non-cancelled booking drop-off date on or before `today`; open jobs = jobs not delivered/cancelled/no-show. */
+export function customerStats(
+  bookings: Array<{ customerId: string; dropoffDate: string; status: string }>,
+  jobs: Array<{ customerId: string; stage: string }>,
+  today: string,
+): Map<string, CustomerStats> {
+  const stats = new Map<string, CustomerStats>();
+  const entry = (id: string) => {
+    let value = stats.get(id);
+    if (!value) { value = { lastVisit: null, openJobs: 0 }; stats.set(id, value); }
+    return value;
+  };
+  for (const booking of bookings) {
+    if (booking.status === "cancelled" || booking.status === "no-show") continue;
+    const date = booking.dropoffDate.slice(0, 10);
+    if (!date || date > today) continue;
+    const value = entry(booking.customerId);
+    if (!value.lastVisit || date > value.lastVisit) value.lastVisit = date;
+  }
+  for (const job of jobs) if (!closedStages.has(job.stage)) entry(job.customerId).openJobs += 1;
+  return stats;
+}
+
+/** One sentence that explains why this user sees this many customers. */
+export function scopeNote(input: { lang: Locale; role: string | undefined; branchNames: string[]; currentBranch: string; currentBranchName?: string }): string {
+  const ar = input.lang === "ar";
+  if (input.currentBranch !== "all" && input.currentBranchName) {
+    return ar ? `عملاء فرع ${input.currentBranchName}` : `Customers of ${input.currentBranchName}`;
+  }
+  if (input.role === "owner") return ar ? "عملاء كل الفروع" : "Customers of all branches";
+  const names = input.branchNames.join(ar ? "، " : ", ");
+  return names ? (ar ? `عملاء فروعك: ${names}` : `Customers of your branches: ${names}`) : (ar ? "عملاء فروعك" : "Customers of your branches");
+}
+

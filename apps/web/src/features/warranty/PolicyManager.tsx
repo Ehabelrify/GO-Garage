@@ -7,7 +7,7 @@ import {
 import type { PageProps } from "../../shared/ui";
 import { PolicyForm } from "./PolicyForm";
 import { VerificationSettings } from "./VerificationSettings";
-import { policyTermsComplete } from "./warranty-logic";
+import { policyDisplayName, policyTermsComplete } from "./warranty-logic";
 import { useWarrantyScope, type WarrantyScope } from "./warranty-scope";
 import "./warranty.css";
 
@@ -69,7 +69,7 @@ export function PolicyManagerView({ scope }: { scope: WarrantyScope }) {
   };
 
   const columns: Column<WarrantyPolicy>[] = [
-    { key: "name", header: t("Policy", "السياسة"), primary: true, sortable: true, sortValue: (p) => p.name, render: (p) => <>{p.name} <span className="secondary-cell">v{p.version}</span></> },
+    { key: "name", header: t("Policy", "السياسة"), primary: true, sortable: true, sortValue: (p) => p.name, render: (p) => <span className="w-cov-name"><span>{policyDisplayName(p.name)}</span><span className="secondary-cell">v{p.version}</span></span> },
     { key: "kind", header: t("Term", "المدة"), render: (p) => p.coverageKind === "lifetime" ? t("Lifetime", "مدى الحياة") : `${p.durationMonths ?? "—"} ${t("months", "شهر")}` },
     { key: "services", header: t("Services", "الخدمات"), numeric: true, hideOnCard: true, render: (p) => p.eligibleServiceIds.length },
     { key: "issue", header: t("Issued", "الإصدار"), render: (p) => p.autoIssue ? t("Automatic", "تلقائي") : t("Manual", "يدوي") },
@@ -94,7 +94,7 @@ export function PolicyManagerView({ scope }: { scope: WarrantyScope }) {
 
     <PolicyForm scope={scope} open={formOpen} editing={editing} template={template} onClose={() => setFormOpen(false)} />
 
-    {detail && <DetailDrawer open onClose={() => setDetailKey(null)} lang={lang} wide title={detail.name} subtitle={`v${detail.version}`}
+    {detail && <DetailDrawer open onClose={() => setDetailKey(null)} lang={lang} wide title={policyDisplayName(detail.name)} subtitle={`v${detail.version}`}
       footer={<>
         {detail.status !== "draft" && <button className="btn" type="button" onClick={() => void duplicate(detail, "new-policy")}><Copy size={15} />{t("Copy as new policy", "نسخ كسياسة جديدة")}</button>}
         {detail.status === "published" && <button className="btn" type="button" onClick={() => void duplicate(detail, "next-version")}>{t("New version", "إصدار جديد")}</button>}

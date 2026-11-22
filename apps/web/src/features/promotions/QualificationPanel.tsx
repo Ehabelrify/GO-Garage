@@ -1,20 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import type { EligibilityResult, Locale, PromotionAllocation, QuoteVersionRef } from "@garage/domain";
 import { promotionApi, useGarageStore } from "../../shared/store";
-import { EmptyState, Field, FormSection, Notice, Skeleton, StatusBadge } from "../../shared/components";
+import { EmptyState, Field, FormSection, Notice, Select, Skeleton, StatusBadge } from "../../shared/components";
 import { commercialError } from "../quotes/commercial-errors";
 import { loadPromotions, useLoader, type PromotionInfo } from "../quotes/commercial-data";
 import { buildLookups, tr } from "../quotes/lookups";
 import { QuotePicker, type AcceptedChoice } from "../quotes/pickers";
 import { isProtectedRef } from "../quotes/quote-logic";
 import { PromotionAllocationDetail } from "./PromotionAllocationDetail";
+import { evidenceLabels } from "./promotion-logic";
 
 type EvidenceKind = "warranty-reference" | "membership-verification" | "grouped-vehicles";
-const evidenceLabels: Record<EvidenceKind, { en: string; ar: string }> = {
-  "warranty-reference": { en: "Warranty on file", ar: "ضمان مسجل" },
-  "membership-verification": { en: "Club membership", ar: "عضوية النادي" },
-  "grouped-vehicles": { en: "Several vehicles together", ar: "عدة مركبات معاً" },
-};
 const sameRef = (a: QuoteVersionRef, b: QuoteVersionRef) => a.quoteId === b.quoteId && a.revision === b.revision;
 
 export interface QualificationPanelProps {
@@ -110,27 +106,21 @@ export function QualificationPanel({ lang, quote, acceptedQuotes, mode = "alloca
   return <div className="qo-stack">
     {!fixedPromotion && <FormSection title={t("Promotion", "العرض الترويجي")} columns={1}>
       <Field label={t("Promotion", "العرض الترويجي")} required hint={promo?.rule ? promo.rule[lang] : undefined}>
-        <select className="field-select" value={promoKey} onChange={(event) => setPromoKey(event.target.value)}>
-          <option value="">{t("Choose a promotion", "اختر عرضاً ترويجياً")}</option>
-          {promos.data.map((item) => <option key={`${item.ref.id}:${item.ref.version}`} value={`${item.ref.id}:${item.ref.version}`}>{item.name}</option>)}
-        </select>
+        <Select className="field-select" label={t("Promotion", "العرض الترويجي")} value={promoKey} onChange={(event) => setPromoKey(event.target.value)}
+          options={[{ value: "", label: t("Choose a promotion", "اختر عرضاً ترويجياً") }, ...promos.data.map((item) => ({ value: `${item.ref.id}:${item.ref.version}`, label: item.name }))]} />
       </Field>
     </FormSection>}
 
     {promo && <FormSection title={t("Proof", "الإثبات")} columns={1}>
       {promo.evidenceKinds.length > 1 && !multi && <Field label={t("Proof type", "نوع الإثبات")} required>
-        <select className="field-select" value={kind} onChange={(event) => setKind(event.target.value as EvidenceKind)}>
-          <option value="">{t("Choose", "اختر")}</option>
-          {promo.evidenceKinds.map((item) => <option key={item} value={item}>{evidenceLabels[item][lang]}</option>)}
-        </select>
+        <Select className="field-select" label={t("Proof type", "نوع الإثبات")} value={kind} onChange={(event) => setKind(event.target.value as EvidenceKind)}
+          options={[{ value: "", label: t("Choose", "اختر") }, ...promo.evidenceKinds.map((item) => ({ value: item, label: evidenceLabels[item][lang] }))]} />
       </Field>}
       {effectiveKind === "warranty-reference" && <Field label={t("Customer warranty", "ضمان العميل")} required>
         {customerWarranties.length === 0
           ? <p className="qo-muted">{t("This customer has no active warranty.", "لا يوجد ضمان ساري لهذا العميل.")}</p>
-          : <select className="field-select" value={warrantyId} onChange={(event) => setWarrantyId(event.target.value)}>
-              <option value="">{t("Choose a warranty", "اختر ضماناً")}</option>
-              {customerWarranties.map((warranty) => <option key={warranty.id} value={warranty.id}>{warranty.policyName} · {lookups.plate(warranty.vehicleId)}</option>)}
-            </select>}
+          : <Select className="field-select" label={t("Customer warranty", "ضمان العميل")} value={warrantyId} onChange={(event) => setWarrantyId(event.target.value)}
+              options={[{ value: "", label: t("Choose a warranty", "اختر ضماناً") }, ...customerWarranties.map((warranty) => ({ value: warranty.id, label: `${warranty.policyName} · ${lookups.plate(warranty.vehicleId)}` }))]} />}
       </Field>}
       {effectiveKind === "membership-verification" && (verificationId
         ? <p><StatusBadge status="eligible" lang={lang} domain="benefit" label={t("Membership verified", "تم التحقق من العضوية")} /></p>

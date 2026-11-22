@@ -5,10 +5,10 @@ import type { BranchId, GarageRole, GarageState } from "@garage/domain";
 import type { BranchName, Lang, Translator } from "../../shared/ui";
 import { useGarageStore } from "../../shared/store";
 import {
-  Collapsible, ConfirmDialog, EmptyState, FilterBar, Notice, PageHeader, RecordRef, Skeleton, StatusBadge,
+  Collapsible, ConfirmDialog, DateText, EmptyState, FilterBar, Notice, PageHeader, RecordRef, Select, Skeleton, StatusBadge,
 } from "../../shared/components";
 import {
-  consentView, eventTitle, filterConversations, inboxFiltersActive, resolveRelatedRecords,
+  consentView, eventTitle, filterConversations, groupMessagesByDay, inboxFiltersActive, localStamp, quickReplies, resolveRelatedRecords,
   type ConversationStatus, type InboxFilters, type InboxScope,
 } from "./inbox-model";
 import "./WhatsAppSimulationPage.css";
@@ -67,7 +67,7 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
     headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
   });
   const body = await response.json().catch(() => ({})) as T & ApiErrorBody;
-  if (!response.ok) throw new Error(body.message || `Request failed (${response.status})`);
+  if (!response.ok) throw Object.assign(new Error(body.message || `Request failed (${response.status})`), { status: response.status });
   return body;
 }
 
@@ -243,7 +243,7 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
     let alive = true;
     request<{ consent: { status?: string; expiresAt?: string | null } }>(
       `/api/whatsapp/consents?channelId=whatsapp-simulation&customerId=${encodeURIComponent(consentCustomerId)}&purpose=service`,
-    ).then((result) => { if (alive) setConsent(result.consent); }).catch(() => { if (alive) setConsent(null); });
+    ).then((result) => { if (alive) setConsent(result.consent); }).catch((error: unknown) => { if (alive) setConsent((error as { status?: number })?.status === 404 ? { status: "missing" } : null); });
     return () => { alive = false; };
   }, [consentCustomerId, consentSimulation, selectedId]);
 
@@ -255,11 +255,7 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
   const filteredConversations = filterConversations(branchConversations, filters, currentUserId);
   const selectedDetail = detail?.conversation.id === selectedId && (branchId==="all"||detail.conversation.branchId === branchId) ? detail : null;
   const selectedConversation = selectedDetail?.conversation ?? branchConversations.find((item) => item.id === selectedId);
-  const formatTime = (value: string) => {
-    const date = new Date(value);
-    if (Number.isNaN(date.valueOf())) return value;
-    return new Intl.DateTimeFormat(rtl ? "ar-EG" : "en-GB", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" }).format(date);
-  };
+  const stamp = (value: string) => <DateText value={localStamp(value)} lang={lang} />;
   const statusLabel = (status: ConversationStatus) => status === "open"
     ? msg("Open", "مفتوحة") : status === "pending" ? msg("Pending", "معلّقة") : msg("Resolved", "تم الحل");
   const isMine = !!selectedConversation && selectedConversation.assignedUserId === currentUserId;
@@ -334,7 +330,7 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
   const isSimulated = selectedConversation ? selectedConversation.simulation : true;
 
   const actionButtons = selectedConversation && staffAllowed ? <div className="wa-actions">
-    {!isMine && <button className="btn btn-primary btn-sm" type="button" disabled={blocked} onClick={() => void performAction("claim")}><UserRound size={14} aria-hidden="true" />{msg("Claim", "استلام")}</button>}
+    {!isMine && <button className="btn btn-primary" type="button" disabled={blocked} onClick={() => void performAction("claim")}><UserRound size={14} aria-hidden="true" />{msg("Claim", "استلام")}</button>}
     <button className="btn btn-sm" type="button" disabled={blocked} onClick={() => setConfirm("handoff")}><ArrowRightLeft size={14} aria-hidden="true" />{msg("Hand off", "تحويل")}</button>
     {selectedConversation.unreadCount > 0 && <button className="btn btn-sm" type="button" disabled={blocked} onClick={() => void performAction("mark-read")}><Check size={14} aria-hidden="true" />{msg("Mark read", "مقروءة")}</button>}
     {selectedConversation.status !== "open" && <button className="btn btn-sm" type="button" disabled={blocked} onClick={() => void performAction("reopen")}>{msg("Reopen", "إعادة فتح")}</button>}
@@ -345,13 +341,10 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
   return <div className="wa-page" dir={rtl ? "rtl" : "ltr"}>
     <PageHeader
       title={msg("Inbox", "صندوق الوارد")}
-      meta={<><StatusBadge status="simulated" domain="message" lang={lang} label={msg("Delivery off", "الإرسال متوقف")} /><span className="wa-meta">{inboxBranchName(branchId)}</span></>}
+      meta={<span className="wa-meta">{inboxBranchName(branchId)}</span>}
       actions={<>
-        <label className="sr-only" htmlFor="wa-branch">{msg("Branch", "الفرع")}</label>
-        <select id="wa-branch" className="wa-branch-select" value={branchId} onChange={(event) => chooseBranch(event.target.value as InboxBranchId)}>
-          {branchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branch.label[lang]}</option>)}
-        </select>
-        <button className="btn" type="button" onClick={() => void refresh()} aria-label={msg("Refresh", "تحديث")}><RefreshCw size={15} aria-hidden="true" /></button>
+        <Select label={msg("Branch", "الفرع")} value={branchId} onChange={(event) => chooseBranch(event.target.value as InboxBranchId)} options={branchOptions.map((branch) => ({ value: branch.id, label: branch.label[lang] }))} />
+        <button className="btn" type="button" onClick={() => void refresh()}><RefreshCw size={15} aria-hidden="true" />{msg("Refresh", "تحديث")}</button>
       </>}
     />
     <Notice tone="info">{msg("Provider delivery is off. Replies and notes are saved here only and are not sent to customers.", "الإرسال عبر واتساب متوقف. تُحفظ الردود والملاحظات هنا فقط ولا تصل للعملاء.")}</Notice>
@@ -381,8 +374,8 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
             <button type="button" className={`wa-conversation-item ${selectedId === conversation.id ? "selected" : ""}`} onClick={() => chooseConversation(conversation.id)} aria-current={selectedId === conversation.id ? "true" : undefined}>
               <span className="wa-avatar" aria-hidden="true">{conversation.customerLabel.trim().slice(0, 1) || "?"}</span>
               <span className="wa-list-main">
-                <span className="wa-list-top"><strong><bdi>{conversation.customerLabel}</bdi></strong><time>{formatTime(conversation.updatedAt)}</time></span>
-                <span className="wa-preview">{conversation.preview}</span>
+                <span className="wa-list-top"><strong><bdi>{conversation.customerLabel}</bdi></strong><span className="wa-time">{stamp(conversation.updatedAt)}</span></span>
+                <span className="wa-preview" dir="auto">{conversation.preview}</span>
                 <span className="wa-list-foot">
                   <StatusBadge status={conversation.status} lang={lang} label={statusLabel(conversation.status)} />
                   <span>{conversation.assignedTo || msg("Unassigned", "غير معيّنة")}</span>
@@ -408,26 +401,32 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
           {detailError && <div className="wa-error-inline" role="alert">{detailError} <button type="button" className="btn btn-sm" onClick={() => selectedId && void loadDetail(selectedId)}>{msg("Retry", "إعادة المحاولة")}</button></div>}
           <div className="wa-thread" ref={threadRef} role="log" aria-live="polite" aria-relevant="additions text">
             {detailLoading ? <Skeleton rows={4} label={msg("Loading conversation", "تحميل المحادثة")} />
-              : selectedDetail?.messages.length ? selectedDetail.messages.map((message) => <article className={`wa-message ${message.kind}`} key={message.id}>
-                {message.kind === "internal-note" && <span className="wa-kind-tag">{msg("Internal note · staff only", "ملاحظة داخلية · للفريق فقط")}</span>}
-                {message.kind === "bot" && <span className="wa-kind-tag">{msg("Automated reply", "رد آلي")}</span>}
-                <p>{message.text}</p>
-                <div className="wa-message-meta"><strong>{message.authorLabel}</strong><time>{formatTime(message.createdAt)}</time></div>
-              </article>) : <EmptyState title={msg("No messages yet", "لا توجد رسائل بعد")} />}
+              : selectedDetail?.messages.length ? groupMessagesByDay(selectedDetail.messages, (m) => localStamp(m.createdAt)).map((group) => <div className="wa-day" key={group.day}>
+                <div className="wa-day-sep"><DateText value={group.day} lang={lang} /></div>
+                {group.items.map((message) => <article className={`wa-message ${message.kind}`} key={message.id}>
+                  {message.kind === "internal-note" && <span className="wa-kind-tag">{msg("Internal note · staff only", "ملاحظة داخلية · للفريق فقط")}</span>}
+                  {message.kind === "bot" && <span className="wa-kind-tag">{msg("Automated reply", "رد آلي")}</span>}
+                  <p dir="auto">{message.text}</p>
+                  <div className="wa-message-meta"><strong><bdi>{message.authorLabel}</bdi></strong><span className="wa-time">{stamp(message.createdAt)}</span></div>
+                </article>)}
+              </div>) : <EmptyState title={msg("No messages yet", "لا توجد رسائل بعد")} />}
           </div>
-          {staffAllowed ? <form className="wa-composer" onSubmit={submitMessage}>
-            {!isMine && <p className="wa-composer-note">{msg("Claim this conversation to reply.", "استلم المحادثة للرد عليها.")}</p>}
-            <div className="wa-composer-row">
-              <label className="sr-only" htmlFor="wa-kind">{msg("Entry type", "نوع الإدخال")}</label>
-              <select id="wa-kind" value={composerKind} onChange={(event) => setComposerKind(event.target.value as MessageKind)} disabled={!isMine}>
-                <option value="reply">{msg("Reply", "رد")}</option>
-                <option value="internal-note">{msg("Internal note", "ملاحظة داخلية")}</option>
-              </select>
-              <label className="sr-only" htmlFor="wa-text">{msg("Message text", "نص الرسالة")}</label>
-              <textarea id="wa-text" rows={2} value={text} disabled={!isMine} onChange={(event) => setText(event.target.value)} placeholder={composerKind === "internal-note" ? msg("Note for staff only", "ملاحظة للفريق فقط") : isSimulated ? msg("Write a reply (saved here, not sent)", "اكتب رداً (يُحفظ هنا ولا يُرسل)") : msg("Write a reply", "اكتب رداً")} />
-              <button className="btn btn-primary" type="submit" disabled={!text.trim() || busy === "message" || !isMine}><Send size={14} aria-hidden="true" />{busy === "message" ? msg("Saving…", "جارٍ الحفظ…") : composerKind === "internal-note" ? msg("Add note", "إضافة ملاحظة") : msg("Send", "إرسال")}</button>
+          {staffAllowed ? (isMine ? <form className="wa-composer" onSubmit={submitMessage}>
+            <div className="wa-composer-top">
+              <Select label={msg("Entry type", "نوع الإدخال")} value={composerKind} onChange={(event) => setComposerKind(event.target.value as MessageKind)} options={[
+                { value: "reply", label: msg("Reply", "رد") }, { value: "internal-note", label: msg("Internal note", "ملاحظة داخلية") },
+              ]} />
+              {composerKind === "reply" && <div className="wa-quick" role="group" aria-label={msg("Quick replies", "ردود سريعة")}>
+                {quickReplies.map((reply) => <button key={reply.id} type="button" className="btn btn-sm wa-quick-btn" onClick={() => setText((current) => current ? `${current} ${reply[lang]}` : reply[lang])}>{reply.short[lang]}</button>)}
+              </div>}
             </div>
-          </form> : null}
+            <label className="sr-only" htmlFor="wa-text">{msg("Message text", "نص الرسالة")}</label>
+            <textarea id="wa-text" className="wa-textarea" rows={3} value={text} onChange={(event) => setText(event.target.value)} placeholder={composerKind === "internal-note" ? msg("Note for staff only", "ملاحظة للفريق فقط") : isSimulated ? msg("Write a reply (saved here, not sent)", "اكتب رداً (يُحفظ هنا ولا يُرسل)") : msg("Write a reply", "اكتب رداً")} />
+            <div className="wa-composer-foot"><button className="btn btn-primary" type="submit" disabled={!text.trim() || busy === "message"}><Send size={14} aria-hidden="true" />{busy === "message" ? msg("Saving…", "جارٍ الحفظ…") : composerKind === "internal-note" ? msg("Add note", "إضافة ملاحظة") : msg("Send", "إرسال")}</button></div>
+          </form> : <div className="wa-claim-banner">
+            <p>{msg("Claim this conversation to reply.", "استلم المحادثة للرد عليها.")}</p>
+            <button className="btn btn-primary" type="button" disabled={blocked} onClick={() => void performAction("claim")}><UserRound size={14} aria-hidden="true" />{msg("Claim this conversation", "استلام المحادثة")}</button>
+          </div>) : null}
         </> : <EmptyState icon={MessageSquareText} title={msg("Select a conversation", "اختر محادثة")} />}
       </section>
 
@@ -440,7 +439,7 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
               {related && <RecordRef type="booking" id={related.bookingId} label={`${msg("Booking", "حجز")} ${related.bookingLabel}`} />}
               {related?.quote && <RecordRef type="quote" id={related.quote.id} label={`${msg("Quote", "عرض سعر")} v${related.quote.revision}`} />}
               {!related && <p className="wa-muted">{msg("No linked booking yet.", "لا يوجد حجز مرتبط بعد.")}</p>}
-              <div className="wa-consent"><StatusBadge status={consentState} domain="consent" lang={lang} /></div>
+              <div className="wa-consent"><StatusBadge status={consentState} domain="consent" lang={lang} label={consentState === "missing" ? msg("No consent on file", "لا توجد موافقة مسجلة") : undefined} /></div>
             </div>
           </Collapsible>
           {staffAllowed && <Collapsible title={msg("Ownership", "المسؤولية")} defaultOpen>
@@ -448,17 +447,14 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
               <span>{msg("Assigned to", "مسندة إلى")}: <strong>{selectedConversation.assignedTo || msg("Nobody", "لا أحد")}</strong></span>
               {role !== "receptionist" && <label className="wa-assign">
                 <span>{msg("Assign to", "إسناد إلى")}</span>
-                <select value={selectedConversation.assignedUserId ?? ""} disabled={blocked} onChange={(event) => void assignConversation(event.target.value)}>
-                  <option value="">{msg("Unassigned", "غير معيّنة")}</option>
-                  {staff.map((member) => <option key={member.userId} value={member.userId}>{personName(member)}</option>)}
-                </select>
+                <Select label={msg("Assign to", "إسناد إلى")} value={selectedConversation.assignedUserId ?? ""} disabled={blocked} onChange={(event) => void assignConversation(event.target.value)} options={[{ value: "", label: msg("Unassigned", "غير معيّنة") }, ...staff.map((member) => ({ value: member.userId, label: personName(member) }))]} />
                 {staffError && <small className="wa-error-inline" role="alert">{staffError}</small>}
               </label>}
             </div>
           </Collapsible>}
           <Collapsible title={msg("Activity", "النشاط")} count={selectedDetail?.events.length}>
             {detailLoading ? <Skeleton rows={3} /> : selectedDetail?.events.length
-              ? <ol className="wa-events">{selectedDetail.events.map((event) => <li className="wa-event" key={event.id}><strong>{eventTitle(event.eventType, lang)}</strong><p>{event.details}</p><time>{formatTime(event.createdAt)} · {event.actorLabel}</time></li>)}</ol>
+              ? <ol className="wa-events">{selectedDetail.events.map((event) => <li className="wa-event" key={event.id}><strong>{eventTitle(event.eventType, lang)}</strong><p>{event.details}</p><span className="wa-time">{stamp(event.createdAt)} · <bdi>{event.actorLabel}</bdi></span></li>)}</ol>
               : <p className="wa-muted">{msg("No activity yet.", "لا يوجد نشاط بعد.")}</p>}
           </Collapsible>
         </> : <p className="wa-muted">{msg("Select a conversation to see context.", "اختر محادثة لعرض البيانات.")}</p>}

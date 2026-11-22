@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { ClipboardCheck, Plus, ScanLine } from "lucide-react";
+import { ClipboardCheck, Plus, Printer, ScanLine } from "lucide-react";
 import type { WarrantyRecord, WarrantyStatus } from "@garage/domain";
 import { filterWarrantyRecords } from "@garage/domain";
 import {
-  Collapsible, ConfirmDialog, DataTable, DetailDrawer, EmptyState, FilterBar, RecordRef, StatusBadge,
+  Collapsible, ConfirmDialog, DataTable, DateText, DetailDrawer, EmptyState, FilterBar, PrintHost, RecordRef, StatusBadge,
   resolveWarrantyCode, useUrlState, type Column, type ResolvedWarranty,
 } from "../../shared/components";
 import { stageNames } from "../../shared/labels";
 import { WarrantyInvoicePanel } from "./WarrantyInvoicePanel";
-import { claimIsActive, extractWarrantyCode, formatDate, formatDateTime, policyForWarranty } from "./warranty-logic";
+import { claimIsActive, extractWarrantyCode, policyDisplayName, policyForWarranty } from "./warranty-logic";
+import { buildCoverageDocument } from "./warranty-document";
+import { usePrintRequest } from "./warranty-print-request";
+import { resolveStatus } from "../../shared/components";
 import { qrActionLabel } from "./warranty-copy";
 import { CustomerLink, JobLink, VehicleLink, type WarrantyScope } from "./warranty-scope";
 
@@ -67,11 +70,11 @@ export function CoverageTab({ scope, onOpenClaim, onIssue, onNewClaim }: {
     { key: "customer", header: t("Customer", "العميل"), primary: true, sortable: true,
       sortValue: (r) => scope.customerName(r.customerId), render: (r) => <CustomerLink scope={scope} customerId={r.customerId} /> },
     { key: "vehicle", header: t("Vehicle", "المركبة"), render: (r) => <VehicleLink scope={scope} customerId={r.customerId} vehicleId={r.vehicleId} /> },
-    { key: "policy", header: t("Coverage", "التغطية"), sortable: true, sortValue: (r) => r.policyName,
-      render: (r) => <><div>{r.policyName}</div><div className="secondary-cell">{scope.serviceName(r.serviceId)}</div></> },
+    { key: "policy", header: t("Coverage", "التغطية"), sortable: true, sortValue: (r) => policyDisplayName(r.policyName),
+      render: (r) => <div className="w-cov-name"><span>{policyDisplayName(r.policyName)}</span><span className="secondary-cell">{scope.serviceName(r.serviceId)}</span></div> },
     { key: "status", header: t("Status", "الحالة"), sortable: true, sortValue: (r) => r.status, render: (r) => <StatusBadge status={r.status} domain="warranty" lang={lang} /> },
     { key: "ends", header: t("Ends", "تنتهي"), sortable: true, sortValue: (r) => r.expiresOn ?? "9999",
-      render: (r) => r.coverageKind === "lifetime" ? t("Lifetime", "مدى الحياة") : formatDate(r.expiresOn, lang) },
+      render: (r) => r.coverageKind === "lifetime" ? <span className="status w-nowrap" data-tone="info">{t("Lifetime", "مدى الحياة")}</span> : <DateText value={r.expiresOn} lang={lang} /> },
   ];
 
   return <>
@@ -131,10 +134,16 @@ function CoverageDrawer({ scope, record, onClose, onOpenClaim, onNewClaim, onVoi
   const claims = scope.claims.filter((claim) => claim.warrantyId === record.id);
   const stage = (value: string) => { const names = stageNames[value as keyof typeof stageNames]; return names ? names[lang] : value; };
   const customer = state.customers.find((item) => item.id === record.customerId);
+  const [printing, requestPrint] = usePrintRequest();
+  const sheet = printing ? buildCoverageDocument({
+    record, lang, customerName: scope.customerName(record.customerId), plate: vehicle?.plate ?? "—", vehicleDescription: vehicle?.makeModel,
+    serviceLabel: scope.serviceName(record.serviceId), branchLabel: scope.branchName(record.branchId), statusLabel: resolveStatus(record.status, lang, "warranty").label,
+  }) : null;
 
   return <DetailDrawer open onClose={onClose} lang={lang} wide
-    title={record.policyName} subtitle={customer ? scope.customerName(customer.id) : undefined}
+    title={policyDisplayName(record.policyName)} subtitle={customer ? scope.customerName(customer.id) : undefined}
     footer={<>
+      <button className="btn w-nowrap" type="button" onClick={requestPrint}><Printer size={15} aria-hidden="true" />{t("Print", "طباعة")}</button>
       {scope.canVoid && record.status !== "void" && <button className="btn btn-danger" type="button" onClick={onVoid}>{t("Void", "إلغاء الضمان")}</button>}
       {record.status !== "void" && <button className="btn btn-primary" type="button" onClick={onNewClaim}><ClipboardCheck size={15} />{t("Open claim", "فتح مطالبة")}</button>}
     </>}>
@@ -144,9 +153,9 @@ function CoverageDrawer({ scope, record, onClose, onOpenClaim, onNewClaim, onVoi
       <div><dt>{t("Vehicle", "المركبة")}</dt><dd><VehicleLink scope={scope} customerId={record.customerId} vehicleId={record.vehicleId} />{vehicle && <div className="secondary-cell">{vehicle.makeModel}</div>}</dd></div>
       <div><dt>{t("Job", "أمر الشغل")}</dt><dd><JobLink scope={scope} jobId={record.jobId} /></dd></div>
       <div><dt>{t("Branch", "الفرع")}</dt><dd>{scope.branchName(record.branchId)}</dd></div>
-      <div><dt>{t("Starts", "البداية")}</dt><dd>{formatDate(record.startDate, lang)}</dd></div>
+      <div><dt>{t("Starts", "البداية")}</dt><dd><DateText value={record.startDate} lang={lang} /></dd></div>
       <div><dt>{t("Ends", "النهاية")}</dt><dd>{record.coverageKind === "lifetime"
-        ? (record.terminatedOn ? `${t("Ended", "انتهت")} ${formatDate(record.terminatedOn, lang)}` : t("Lifetime", "مدى الحياة")) : formatDate(record.expiresOn, lang)}</dd></div>
+        ? (record.terminatedOn ? <>{t("Ended", "انتهت")} <DateText value={record.terminatedOn} lang={lang} /></> : t("Lifetime", "مدى الحياة")) : <DateText value={record.expiresOn} lang={lang} />}</dd></div>
     </dl>
     {record.status === "void" && record.voidReason && <p className="w-note"><strong>{t("Void reason", "سبب الإلغاء")}:</strong> {record.voidReason}</p>}
 
@@ -157,13 +166,13 @@ function CoverageDrawer({ scope, record, onClose, onOpenClaim, onNewClaim, onVoi
       </li>)}</ul> : <p className="form-hint">{t("No claims.", "لا توجد مطالبات.")}</p>}
     </Collapsible>
     <Collapsible title={t("Work history", "سجل الشغل")} count={jobEvents.length}>
-      {job && <p className="form-hint">{stage(job.stage)} · {formatDateTime(job.updatedAt, lang)}</p>}
-      <ul className="w-timeline">{jobEvents.slice(0, 8).map((event) => <li key={event.id}><strong>{stage(event.nextStage)}</strong><span>{event.actorLabel} · {formatDateTime(event.occurredAt, lang)}</span></li>)}</ul>
+      {job && <p className="form-hint">{stage(job.stage)} · <DateText value={job.updatedAt} lang={lang} /></p>}
+      <ul className="w-timeline">{jobEvents.slice(0, 8).map((event) => <li key={event.id}><strong>{stage(event.nextStage)}</strong><span>{event.actorLabel} · <DateText value={event.occurredAt} lang={lang} /></span></li>)}</ul>
       {!job && !jobEvents.length && <p className="form-hint">{t("No job record.", "لا يوجد سجل للشغل.")}</p>}
     </Collapsible>
     <Collapsible title={t("Customer QR", "رمز QR للعميل")} count={qrEvents.length}>
       <p className="form-hint">{record.verificationTokenActive ? t("A code is active.", "الرمز فعال.") : t("No active code.", "لا يوجد رمز فعال.")}</p>
-      <ul className="w-timeline">{qrEvents.slice(0, 6).map((event) => <li key={event.id}><strong>{qrActionLabel(event.action, lang)}</strong><span>{event.actorLabel} · {formatDateTime(event.createdAt, lang)}</span></li>)}</ul>
+      <ul className="w-timeline">{qrEvents.slice(0, 6).map((event) => <li key={event.id}><strong>{qrActionLabel(event.action, lang)}</strong><span>{event.actorLabel} · <DateText value={event.createdAt} lang={lang} /></span></li>)}</ul>
     </Collapsible>
     <Collapsible title={t("Draft invoice", "مسودة الفاتورة")}>
       <WarrantyInvoicePanel warranty={record} locale={lang} customerName={scope.customerName(record.customerId)}
@@ -175,5 +184,6 @@ function CoverageDrawer({ scope, record, onClose, onOpenClaim, onNewClaim, onVoi
         <div><dt>{t("Evidence for claims", "أدلة المطالبة")}</dt><dd>{policy.evidenceRequirements || "—"}</dd></div>
       </dl>
     </Collapsible>}
+    {sheet && <PrintHost model={sheet} />}
   </DetailDrawer>;
 }

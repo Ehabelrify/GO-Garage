@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { FileText, Pencil, Plus, Printer, Save, Trash2, X } from "lucide-react";
 import {
-  calculateWarrantyInvoiceTotals, currencyDefinition, formatCurrencyAmount, isSupportedCurrency, resolveCurrency, supportedCurrencies,
+  calculateWarrantyInvoiceTotals, currencyDefinition, isSupportedCurrency, resolveCurrency, supportedCurrencies,
 } from "@garage/domain";
 import type {
   Locale,
@@ -10,8 +10,10 @@ import type {
   WarrantyInvoicePaymentMethod,
   WarrantyRecord,
 } from "@garage/domain";
-import { Collapsible, ConfirmDialog, Field, FormSection, Notice, PrintHost, RequiredNote, StatusBadge, printDocument, type DocumentModel } from "../../shared/components";
+import { Amount as MoneyAmount, Collapsible, ConfirmDialog, DateText, Field, FormSection, Notice, PrintHost, RequiredNote, StatusBadge, type DocumentModel } from "../../shared/components";
+import { usePrintRequest } from "./warranty-print-request";
 import { unknownWriteOutcomeCopy, useGarageStore } from "../../shared/store";
+import { dateLabel } from "../../shared/ui";
 import { useWarrantyDraftState } from "./warranty-form-state";
 
 interface WarrantyInvoicePanelProps {
@@ -51,9 +53,10 @@ function text(locale: Locale, en: string, ar: string) {
   return locale === "ar" ? ar : en;
 }
 
-/** Amount in the invoice currency with its symbol; quantities and percentages use plain numbers. */
+/** Amount in the invoice currency through the shared Amount (LTR isolate, tabular, real minus). Stored values are major units. */
 function Amount({ value, currency, locale }: { value: number | null; currency: string; locale: Locale }) {
-  return <bdi className="money mono">{formatCurrencyAmount(value, currency, locale)}</bdi>;
+  const exponent = currencyDefinition(currency)?.minorUnitExponent ?? 2;
+  return <MoneyAmount minor={value === null ? null : Math.round(value * 10 ** exponent)} currency={currency} lang={locale} variant="detail" />;
 }
 const plain = (value: number, locale: Locale) => new Intl.NumberFormat(locale === "ar" ? "ar-EG-u-nu-latn" : "en-GB", { maximumFractionDigits: 2 }).format(value);
 
@@ -107,7 +110,8 @@ export function WarrantyInvoicePanel({
   );
   const currencyLocked = Boolean(invoice && invoice.paidAmount > 0);
   const hasAmounts = draft.items.some((item) => item.unitAmount !== null);
-  const dateText = (value: string) => new Date(value).toLocaleDateString(locale === "ar" ? "ar-EG-u-nu-latn" : "en-GB");
+  const dateText = (value: string) => dateLabel(value, locale);
+  const [printing, requestPrint] = usePrintRequest();
 
   useEffect(() => {
     setEditing(false); setExpanded(false); setError(""); setNotice("");
@@ -176,7 +180,7 @@ export function WarrantyInvoicePanel({
       signatures: [{ label: text(locale, "Prepared by", "أعدها") }, { label: text(locale, "Customer signature", "توقيع العميل") }],
     };
   }, [invoice, storedCurrency, savedTotals, locale, branchLabel, customerName, vehicleLabel, serviceLabel]);
-  const printDraft = () => { setNotice(""); printDocument(); };
+  const printDraft = () => { setNotice(""); requestPrint(); };
 
   const updateItem = (index: number, updates: Partial<WarrantyInvoiceDraftInput["items"][number]>) => {
     setDraft((current) => ({
@@ -226,7 +230,7 @@ export function WarrantyInvoicePanel({
           <Pencil size={13} />{t("Edit draft", "عدّل المسودة")}
         </button>}
         {!editing && <button className="btn btn-sm btn-primary" type="button" onClick={printDraft}>
-          <Printer size={13} />{t("Print draft", "اطبع المسودة")}
+          <Printer size={13} aria-hidden="true" />{t("Print", "طباعة")}
         </button>}
         {owner && <a className="btn btn-sm" href="/workspace/finance">{t("Open audited money ledger", "فتح سجل الأموال الخاضع للمراجعة")}</a>}
       </div>
@@ -234,7 +238,7 @@ export function WarrantyInvoicePanel({
       {expanded && <>
       {invoice.paymentRecordedAt && <p className="w-invoice-payment-meta">
         {t("Payment entry recorded", "اتسجلت بيانات الدفع")}
-        {` · ${new Date(invoice.paymentRecordedAt).toLocaleString(locale === "ar" ? "ar-EG-u-nu-latn" : "en-GB")}`}
+        {" · "}<DateText value={invoice.paymentRecordedAt} lang={locale} />
         {invoice.paymentRecordedBy ? ` · ${invoice.paymentRecordedBy}` : ""}
       </p>}
 
@@ -311,7 +315,7 @@ export function WarrantyInvoicePanel({
           <div><small>{t("Vehicle", "العربية")}</small><strong>{vehicleLabel}</strong></div>
           <div><small>{t("Service", "الخدمة")}</small><strong>{serviceLabel}</strong></div>
           <div><small>{t("Branch", "الفرع")}</small><strong>{branchLabel}</strong></div>
-          <div><small>{t("Prepared", "تاريخ التجهيز")}</small><strong>{dateText(invoice.updatedAt)}</strong></div>
+          <div><small>{t("Prepared", "تاريخ التجهيز")}</small><strong><DateText value={invoice.updatedAt} lang={locale} /></strong></div>
         </div>
         <table className="w-invoice-table">
           <thead><tr><th>{t("Item", "البند")}</th><th>{t("Qty", "الكمية")}</th><th>{t("Unit amount", "سعر الوحدة")}</th><th>{t("Line amount", "إجمالي البند")}</th></tr></thead>
@@ -327,7 +331,7 @@ export function WarrantyInvoicePanel({
           <div className="w-invoice-total"><span>{t("Draft total", "إجمالي المسودة")}</span><strong><Amount value={savedTotals.total} currency={storedCurrency} locale={locale} /></strong></div>
           <div><span>{t("Payment status", "حالة الدفع")}</span><strong>{savedTotals.paymentStatus === "unpriced" ? <span title={t("Amounts or Owner tax settings pending", "المبالغ أو إعداد الضريبة بانتظار الاعتماد")}><StatusBadge status="unpriced" domain="invoice" lang={locale} /></span> : <StatusBadge status={savedTotals.paymentStatus} domain="invoice" lang={locale} />}</strong></div>
           <div><span>{t("Amount paid", "المبلغ المدفوع")}</span><strong><Amount value={invoice.paidAmount} currency={storedCurrency} locale={locale} /></strong></div>
-          {invoice.paymentRecordedAt && <div><span>{t("Payment entry date", "تاريخ تسجيل الدفع")}</span><strong>{dateText(invoice.paymentRecordedAt)}</strong></div>}
+          {invoice.paymentRecordedAt && <div><span>{t("Payment entry date", "تاريخ تسجيل الدفع")}</span><strong><DateText value={invoice.paymentRecordedAt} lang={locale} /></strong></div>}
           <div className="w-invoice-total"><span>{t("Draft balance · negative means overpayment", "المتبقي في المسودة · السالب معناه دفعة زيادة")}</span><strong><Amount value={savedTotals.balance} currency={storedCurrency} locale={locale} /></strong></div>
         </div>
         <p className="w-invoice-disclaimer">{t("Draft for review only. Tax treatment, official template, and final issuance are pending Owner approval. Do not use as a tax invoice or proof of payment.", "مسودة للمراجعة فقط. المعاملة الضريبية والقالب الرسمي والإصدار النهائي بانتظار موافقة المالك. لا تستخدمها كفاتورة ضريبية أو إثبات دفع.")}</p>
@@ -337,7 +341,7 @@ export function WarrantyInvoicePanel({
       {error && <div className="w-error" role="alert">{error}</div>}
     </>}
 
-    {printModel && <PrintHost model={printModel} />}
+    {printing && printModel && <PrintHost model={printModel} />}
     <ConfirmDialog
       open={pendingCurrency !== null} lang={locale}
       title={t("Change the invoice currency?", "تغيير عملة الفاتورة؟")}

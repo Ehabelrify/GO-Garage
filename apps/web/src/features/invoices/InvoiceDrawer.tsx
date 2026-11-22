@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Save, Trash2 } from "lucide-react";
-import { currencyDefinition, currencyExponent, supportedCurrencies, type Locale } from "@garage/domain";
+import { currencyDefinition, currencyExponent, formatPlateDisplay, supportedCurrencies, type Locale } from "@garage/domain";
 import {
-  ConfirmDialog, DetailDrawer, Field, FormSection, Money, Notice, PrintButton, PrintHost, RecordRef, Skeleton, type DocumentModel,
+  Amount, ConfirmDialog, DateText, DetailDrawer, Field, FormSection, Notice, PrintButton, PrintHost, RecordRef, Skeleton, type DocumentModel,
 } from "../../shared/components";
 import { useGarageStore } from "../../shared/store";
-import { branchDisplay, customerDisplay, dateLabel } from "../../shared/ui";
+import { branchDisplay, customerDisplay } from "../../shared/ui";
 import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
 import { buildInvoiceDocument, errorCopy, lineDescription, parseMajor, toMajorText } from "./invoice-model";
 import { InvoiceApiError, invoicesApi, type DraftLineInput, type InvoiceDetail } from "./invoices-api";
@@ -84,7 +84,7 @@ export function InvoiceDrawer({ lang, invoiceId, onClose, onChanged }: Props) {
   const payValid = payMinor !== null && !Number.isNaN(payMinor) && payMinor > 0 && pay.reference.trim().length > 0;
 
   const footer = invoice && doc ? <>
-    <PrintButton lang={lang} label={t("Print / save as PDF", "طباعة / حفظ PDF")} />
+    <span data-testid="print-invoice" className="invoice-print"><PrintButton lang={lang} label={t("Print", "طباعة")} /></span>
     {detail?.canWrite && invoice.status === "draft" && !editing && <button type="button" className="btn" onClick={startEdit}>{t("Edit lines", "تعديل البنود")}</button>}
     {editing && <button type="button" className="btn btn-primary" disabled={busy || !parsed.valid} onClick={() => void save()}><Save size={14} aria-hidden="true" />{busy ? t("Saving…", "جارٍ الحفظ…") : t("Save draft", "حفظ المسودة")}</button>}
     {editing && <button type="button" className="btn" disabled={busy} onClick={() => setEditing(false)}>{t("Cancel", "إلغاء")}</button>}
@@ -96,18 +96,18 @@ export function InvoiceDrawer({ lang, invoiceId, onClose, onChanged }: Props) {
   return <>
     <DetailDrawer open={Boolean(invoiceId)} onClose={onClose} lang={lang} wide footer={footer}
       title={invoice ? (invoice.number ?? t("Draft invoice", "مسودة فاتورة")) : t("Invoice", "فاتورة")}
-      subtitle={invoice ? `${customerName}${invoice.plate ? ` · ${invoice.plate}` : ""}` : undefined}>
+      subtitle={invoice ? `${customerName}${invoice.plate ? ` · ${formatPlateDisplay(invoice.plate)}` : ""}` : undefined}>
       {loading && <Skeleton rows={4} label={t("Loading invoice", "جارٍ تحميل الفاتورة")} />}
       {error && <div className="w-error" role="alert">{error}</div>}
       {invoice && detail && <div className="invoice-detail">
         <div className="invoice-summary">
           <InvoiceStatusBadge status={invoice.status} lang={lang} />
           <span className="tag">{invoice.currency}</span>
-          {invoice.issueDate && <span className="form-hint">{t("Issued", "صدرت")} {dateLabel(invoice.issueDate, lang)}</span>}
+          {invoice.issueDate && <span className="form-hint">{t("Issued", "صدرت")} <DateText value={invoice.issueDate} lang={lang} /></span>}
           <span className="invoice-links">
             <RecordRef type="customer" id={invoice.customerId} label={customerName || undefined} />
-            <RecordRef type="vehicle" id={invoice.vehicleId} label={invoice.plate ?? undefined} />
-            {invoice.jobId && <RecordRef type="job" id={invoice.jobId} label={invoice.plate ? `${invoice.plate}` : undefined} />}
+            <RecordRef type="vehicle" id={invoice.vehicleId} label={invoice.plate ? formatPlateDisplay(invoice.plate) : undefined} />
+            {invoice.jobId && <RecordRef type="job" id={invoice.jobId} label={invoice.plate ? formatPlateDisplay(invoice.plate) : undefined} />}
             {invoice.quoteId && <RecordRef type="quote" id={invoice.quoteId} label={t("Accepted quote", "عرض السعر المقبول")} />}
             {invoice.warrantyId && <RecordRef type="warranty" id={invoice.warrantyId} />}
           </span>
@@ -154,25 +154,25 @@ export function InvoiceDrawer({ lang, invoiceId, onClose, onChanged }: Props) {
             <tbody>{detail.lines.map((line) => <tr key={line.id}>
               <td>{lineDescription(line, lang)}<small>{kindLabel[line.kind][lang === "ar" ? 1 : 0]}</small></td>
               <td>{line.quantity}</td>
-              <td><Money minor={line.unitMinor} currency={invoice.currency} lang={lang} /></td>
-              <td><Money minor={line.amountMinor} currency={invoice.currency} lang={lang} /></td>
+              <td><Amount variant="detail"minor={line.unitMinor} currency={invoice.currency} lang={lang} /></td>
+              <td><Amount variant="detail"minor={line.amountMinor} currency={invoice.currency} lang={lang} /></td>
             </tr>)}</tbody>
           </table>
           <dl className="invoice-totals">
-            <div><dt>{t("Subtotal", "الإجمالي قبل الضريبة")}</dt><dd><Money minor={invoice.subtotalMinor} currency={invoice.currency} lang={lang} /></dd></div>
-            {invoice.discountMinor > 0 && <div><dt>{t("Discount", "الخصم")}</dt><dd><Money minor={-invoice.discountMinor} currency={invoice.currency} lang={lang} /></dd></div>}
-            <div><dt>{t("Tax", "الضريبة")}</dt><dd><Money minor={invoice.taxMinor} currency={invoice.currency} lang={lang} /></dd></div>
-            <div className="invoice-grand"><dt>{t("Total", "الإجمالي")}</dt><dd><Money minor={invoice.totalMinor} currency={invoice.currency} lang={lang} /></dd></div>
-            {invoice.status !== "draft" && <div><dt>{t("Paid", "المدفوع")}</dt><dd><Money minor={invoice.paidMinor} currency={invoice.currency} lang={lang} /></dd></div>}
-            {invoice.status !== "draft" && invoice.status !== "void" && <div><dt>{t("Balance", "المتبقي")}</dt><dd><Money minor={invoice.balanceMinor} currency={invoice.currency} lang={lang} /></dd></div>}
+            <div><dt>{t("Subtotal", "الإجمالي قبل الضريبة")}</dt><dd><Amount variant="detail"minor={invoice.subtotalMinor} currency={invoice.currency} lang={lang} /></dd></div>
+            {invoice.discountMinor > 0 && <div><dt>{t("Discount", "الخصم")}</dt><dd><Amount variant="detail"minor={-invoice.discountMinor} currency={invoice.currency} lang={lang} /></dd></div>}
+            <div><dt>{t("Tax", "الضريبة")}</dt><dd><Amount variant="detail"minor={invoice.taxMinor} currency={invoice.currency} lang={lang} /></dd></div>
+            <div className="invoice-grand"><dt>{t("Total", "الإجمالي")}</dt><dd><Amount variant="detail"minor={invoice.totalMinor} currency={invoice.currency} lang={lang} /></dd></div>
+            {invoice.status !== "draft" && <div><dt>{t("Paid", "المدفوع")}</dt><dd><Amount variant="detail"minor={invoice.paidMinor} currency={invoice.currency} lang={lang} /></dd></div>}
+            {invoice.status !== "draft" && invoice.status !== "void" && <div><dt>{t("Balance", "المتبقي")}</dt><dd><Amount variant="detail"minor={invoice.balanceMinor} currency={invoice.currency} lang={lang} /></dd></div>}
           </dl>
           {detail.payments.length > 0 && <section><h3>{t("Payment references", "مراجع الدفع")}</h3>
             <ul className="invoice-payments">{detail.payments.map((payment) => <li key={payment.id}>
-              <Money minor={payment.amountMinor} currency={payment.currency} lang={lang} /> · {methodLabel[payment.method as (typeof methods)[number]]?.[lang === "ar" ? 1 : 0] ?? payment.method} · <bdi className="mono">{payment.reference}</bdi> · {dateLabel(payment.receivedOn, lang)}
+              <Amount variant="detail"minor={payment.amountMinor} currency={payment.currency} lang={lang} /> · {methodLabel[payment.method as (typeof methods)[number]]?.[lang === "ar" ? 1 : 0] ?? payment.method} · <bdi className="mono">{payment.reference}</bdi> · <DateText value={payment.receivedOn} lang={lang} />
             </li>)}</ul>
             <p className="form-hint">{t("References only. No payment is processed here.", "مراجع فقط. لا تتم معالجة أي دفعة هنا.")}</p></section>}
           {detail.history.length > 0 && <section><h3>{t("History", "السجل")}</h3>
-            <ol className="invoice-history">{detail.history.map((event) => <li key={event.seq}>{historyLabel(event.action, lang)} · {dateLabel(event.occurredAt, lang)}{event.actorName ? ` · ${event.actorName}` : ""}{event.reason ? ` · ${event.reason}` : ""}</li>)}</ol></section>}
+            <ol className="invoice-history">{detail.history.map((event) => <li key={event.seq}>{historyLabel(event.action, lang)} · <DateText value={event.occurredAt} lang={lang} />{event.actorName ? ` · ${event.actorName}` : ""}{event.reason ? ` · ${event.reason}` : ""}</li>)}</ol></section>}
         </>}
       </div>}
     </DetailDrawer>

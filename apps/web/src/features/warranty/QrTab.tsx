@@ -5,7 +5,7 @@ import type { WarrantyRecord } from "@garage/domain";
 import { ConfirmDialog, DataTable, DetailDrawer, EmptyState, FilterBar, Notice, type Column } from "../../shared/components";
 import { WarrantyVerificationCard } from "./PublicWarrantyVerificationPage";
 import { startWarrantyPrint } from "./warranty-print";
-import { verificationReady } from "./warranty-logic";
+import { policyDisplayName, verificationReady } from "./warranty-logic";
 import { CustomerLink, VehicleLink, type WarrantyScope } from "./warranty-scope";
 import { VerificationSettings } from "./VerificationSettings";
 
@@ -83,7 +83,7 @@ export function QrTab({ scope }: { scope: WarrantyScope }) {
   const columns: Column<WarrantyRecord>[] = [
     { key: "customer", header: t("Customer", "العميل"), primary: true, render: (r) => <CustomerLink scope={scope} customerId={r.customerId} /> },
     { key: "vehicle", header: t("Vehicle", "المركبة"), render: (r) => <VehicleLink scope={scope} customerId={r.customerId} vehicleId={r.vehicleId} /> },
-    { key: "policy", header: t("Coverage", "التغطية"), render: (r) => r.policyName },
+    { key: "policy", header: t("Coverage", "التغطية"), render: (r) => policyDisplayName(r.policyName) },
     { key: "code", header: t("QR code", "رمز QR"), render: (r) => r.verificationTokenActive ? t("Active", "فعال") : t("None", "لا يوجد") },
     { key: "actions", header: "", hideOnCard: true, render: (r) => ready && scope.canIssue ? <button className="btn btn-sm" type="button" onClick={(e) => { e.stopPropagation(); setOpenId(r.id); }}><QrCode size={14} />{t("Open", "فتح")}</button> : null },
   ];
@@ -104,13 +104,13 @@ export function QrTab({ scope }: { scope: WarrantyScope }) {
     </>}
 
     {record && <DetailDrawer open onClose={() => { setOpenId(null); setError(""); }} lang={lang} wide
-      title={t("Customer QR card", "كارت QR للعميل")} subtitle={`${scope.customerName(record.customerId)} · ${record.policyName}`}
+      title={t("Customer QR card", "كارت QR للعميل")} subtitle={`${scope.customerName(record.customerId)} · ${policyDisplayName(record.policyName)}`}
       footer={<>
         {scope.isOwner && record.verificationTokenActive && <button className="btn btn-danger" type="button" disabled={busyId === record.id} onClick={() => setAction({ kind: "revoke", record })}>{t("Revoke", "إلغاء الرمز")}</button>}
         {scope.canIssue && <button className="btn btn-primary" type="button" disabled={busyId === record.id || !ready}
           onClick={() => record.verificationTokenActive ? setAction({ kind: "replace", record }) : void create(record)}>
           <QrCode size={15} />{busyId === record.id ? t("Preparing…", "جارٍ التجهيز…") : record.verificationTokenActive ? t("Replace code", "استبدال الرمز") : t("Prepare QR card", "تجهيز كارت QR")}</button>}
-        {liveCode && <button className="btn" type="button" disabled={printing} onClick={() => void print(record)}><Printer size={15} />{printing ? t("Logging…", "جارٍ التسجيل…") : t("Print", "طباعة")}</button>}
+        {liveCode && <button className="btn" type="button" disabled={printing} onClick={() => void print(record)}><Printer size={15} aria-hidden="true" />{printing ? t("Logging…", "جارٍ التسجيل…") : t("Print", "طباعة")}</button>}
       </>}>
       <p className="form-hint">{liveCode
         ? t("Shown once. Print the card now.", "تظهر مرة واحدة. اطبع الكارت الآن.")

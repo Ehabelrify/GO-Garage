@@ -1,23 +1,49 @@
-/* Bookings + Transport local styles. Logical properties only; tokens from shared/styles/tokens.css. */
-.bk-pick { display: grid; gap: 8px; }
+/* Bookings + Transport local styles. Logical properties only; tokens from shared/styles/tokens.css (no raw font sizes). */
+.bk-pick { display: grid; gap: 8px; min-width: 0; }
 .bk-pick-list { display: grid; gap: 6px; max-block-size: 232px; overflow-y: auto; overscroll-behavior: contain; }
-.bk-pick-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-block-size: 44px; padding: 8px 11px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; color: var(--ink); font: inherit; text-align: start; cursor: pointer; }
+.bk-pick-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; min-block-size: 44px; padding: 8px 11px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; color: var(--ink); font: inherit; text-align: start; cursor: pointer; }
 .bk-pick-item:hover { border-color: var(--teal); }
 .bk-pick-item[aria-checked="true"] { border-color: var(--teal); background: var(--teal-soft); }
-.bk-pick-item small { color: var(--muted); font-size: 12px; }
+.bk-pick-item small { color: var(--muted); font-size: var(--fs-caption); }
 .bk-pick-selected { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 11px; border: 1px solid var(--teal); border-radius: var(--radius); background: var(--teal-soft); }
 .bk-pick-selected > div { min-inline-size: 0; display: grid; }
-.bk-pick-selected small { color: var(--muted); font-size: 12px; }
+.bk-pick-selected small { color: var(--muted); font-size: var(--fs-caption); }
 .bk-inline-form { display: grid; gap: 10px; padding: 12px; border: 1px dashed var(--line); background: var(--paper); }
 .bk-slots { display: flex; flex-wrap: wrap; gap: 6px; }
-.bk-slot { min-block-size: 40px; min-inline-size: 64px; padding: 6px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; color: var(--ink); font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
+.bk-slot { min-block-size: var(--control-h); min-inline-size: 64px; padding: 6px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; color: var(--ink); font: inherit; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; }
 .bk-slot:hover { border-color: var(--teal); }
 .bk-slot[aria-checked="true"] { border-color: var(--teal); background: var(--teal); color: #fff; }
-.bk-muted { color: var(--muted); font-size: 13px; margin: 0; }
+.bk-muted { color: var(--muted); font-size: var(--fs-label); font-weight: 400; margin: 0; }
 .bk-stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; }
+.bk-stack > * { min-width: 0; }
+.bk-stack .select-wrap { display: flex; max-width: none; inline-size: 100%; }
 .bk-history { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.bk-history li { display: grid; gap: 3px; padding-block-end: 8px; border-block-end: 1px solid var(--line-soft); font-size: 13px; }
+.bk-history li { display: grid; gap: 3px; padding-block-end: 8px; border-block-end: 1px solid var(--line-soft); font-size: var(--fs-body); }
 .bk-history .bk-arrow { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .bk-related { display: grid; gap: 4px; }
-.bk-row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 [dir="rtl"] .bk-arrow-icon { transform: scaleX(-1); }
+
+/* Toolbar used when the transport list is embedded (no page header): filters grow, the button keeps normal height. */
+.bk-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
+.bk-toolbar > .filter-bar { flex: 1 1 360px; min-width: 0; margin-block-end: 0; }
+.bk-toolbar > .btn { flex: none; align-self: center; }
+
+/* Table cells: stack a value with a quiet second line; nothing wraps letter by letter. */
+.bk-cell { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; max-width: 100%; }
+.bk-sub { color: var(--muted); font-size: var(--fs-caption); overflow-wrap: anywhere; }
+.bk-contact { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.bk-wa { display: inline-flex; align-items: center; justify-content: center; inline-size: 24px; block-size: 24px; border-radius: var(--radius); color: var(--teal-dark); }
+.bk-wa:hover { background: var(--teal-soft); }
+.bk-when { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; white-space: nowrap; }
+.bk-type { display: inline-flex; flex-direction: column; gap: 2px; white-space: nowrap; }
+
+/* Actions column: fixed width, Confirm never wraps, kebab on every row. */
+.bk-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; white-space: nowrap; }
+.bk-actions .btn { white-space: nowrap; flex: none; }
+.data-table th.bk-actions-head, .data-table td.bk-actions-cell { inline-size: 1%; white-space: nowrap; text-align: end; }
+.bk-menu-host { display: inline-flex; }
+.bk-kebab { inline-size: var(--control-h-sm); padding-inline: 0; }
+.bk-menu { position: fixed; z-index: var(--z-menu); display: grid; padding: 4px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); box-shadow: var(--shadow-pop); }
+.bk-menu-item { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 10px; border: 0; border-radius: var(--radius); background: transparent; color: var(--ink); font: inherit; font-size: var(--fs-body); text-align: start; text-decoration: none; white-space: nowrap; cursor: pointer; }
+.bk-menu-item:hover, .bk-menu-item:focus-visible { background: var(--teal-soft); outline: none; }
+.bk-menu-item svg { flex: none; color: var(--muted); }

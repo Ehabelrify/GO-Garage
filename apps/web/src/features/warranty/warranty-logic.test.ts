@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { WarrantyPolicy } from "@garage/domain";
 import {
-  branchAllowed, buildPolicyInput, evidenceFileProblem, expiryPreview, extractWarrantyCode, freshPolicyForm,
-  policyFormFrom, policyTermsComplete, reviewerAssigned, verificationReady,
+  branchAllowed, buildPolicyInput, evidenceFileProblem, expiryPreview, extractWarrantyCode, formatDate, freshPolicyForm,
+  policyDisplayName, policyFormFrom, policyTermsComplete, reviewerAssigned, verificationReady, visibleAuditEvents, warrantyTabCounts,
 } from "./warranty-logic";
 
 const policy = (over: Partial<WarrantyPolicy> = {}): WarrantyPolicy => ({
@@ -57,5 +57,23 @@ describe("warranty-logic", () => {
   it("keeps a lifetime draft unapproved until the owner confirms", () => {
     const form = { ...freshPolicyForm(), name: "L", coverageKind: "lifetime" as const, lifetimeSubjectDefinition: "a" };
     expect(buildPolicyInput(form).lifetimeDefinition?.state).toBe("unconfigured");
+  });
+  it("hides the (example) marker from coverage names", () => {
+    expect(policyDisplayName("Ceramic coating - 24 months (example)")).toBe("Ceramic coating - 24 months");
+    expect(policyDisplayName("Heat film - lifetime wording (Example) ")).toBe("Heat film - lifetime wording");
+    expect(policyDisplayName("GO garage Pro PPF - 7 years")).toBe("GO garage Pro PPF - 7 years");
+    expect(policyDisplayName("Tint (example) v2")).toBe("Tint v2");
+  });
+  it("scopes audit events and counts every tab the same way", () => {
+    const event = (id: string, entityType: "policy" | "warranty" | "claim", entityId: string, occurredAt: string) =>
+      ({ id, entityType, entityId, occurredAt, action: "x", details: "", actorLabel: "a" }) as never;
+    const list = [event("1", "policy", "p", "2026-01-01"), event("2", "warranty", "w1", "2026-01-03"), event("3", "warranty", "w9", "2026-01-04"), event("4", "claim", "c1", "2026-01-02")];
+    expect(visibleAuditEvents(list, new Set(["w1"]), new Set(["c1"]), true).map((e) => e.id)).toEqual(["2", "4", "1"]);
+    expect(visibleAuditEvents(list, new Set(["w1"]), new Set(["c1"]), false).map((e) => e.id)).toEqual(["2", "4"]);
+    expect(warrantyTabCounts({ coverage: 415, claims: 12, invoices: 4, history: 30 })).toEqual({ coverage: 415, claims: 12, invoices: 4, qr: 415, history: 30 });
+  });
+  it("formats dates with Latin digits in Arabic", () => {
+    expect(formatDate("2026-11-22", "ar")).toMatch(/2026/);
+    expect(formatDate(null, "en")).toBe("—");
   });
 });

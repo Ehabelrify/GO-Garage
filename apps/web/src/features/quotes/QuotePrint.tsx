@@ -43,7 +43,7 @@ export function quoteToDocumentModel(doc: QuoteDocument, lang: Locale): Document
 /** Print button for one quote: mounts the shared print host and uses the browser's print dialog (Save as PDF works too). */
 export function QuotePrintControls({ lang, quote, lookups }: { lang: Locale; quote: QuoteRow; lookups: Lookups }) {
   const model = useMemo(() => quoteToDocumentModel(buildQuoteDocument(quote, lookups, lang, todayIso()), lang), [quote, lookups, lang]);
-  return <><PrintHost model={model} /><PrintButton lang={lang} /></>;
+  return <><PrintHost model={model} /><PrintButton lang={lang} label={tr(lang)("Print", "طباعة")} /></>;
 }
 
 /** Kept for existing call sites: a small toolbar with print and close. */

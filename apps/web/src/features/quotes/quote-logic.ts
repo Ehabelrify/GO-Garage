@@ -1,5 +1,7 @@
 import type { Locale, Money, PackageVersion, PolicyRef, QuoteFollowup, QuoteLine, QuoteRevision, ScopeItem } from "@garage/domain";
 
+import { policyDisplayName } from "./policy-names";
+
 export type QuoteRow = QuoteRevision & { followup: QuoteFollowup };
 export type Bilingual = { ar: string; en: string };
 
@@ -89,14 +91,11 @@ export function validThroughProblem(value: string | null, today: string, validit
   return null;
 }
 
-/** Readable name for a policy reference: "promotion-qualification:seed-ultimate-club" -> "Ultimate club". Never the raw id. */
+/** Readable, localised name for a policy reference: "promotion-qualification:seed-ultimate-club" -> "Ultimate club". Never the raw id. */
 export function policyLabel(ref: PolicyRef | string | null | undefined, name?: Bilingual | null, lang: Locale = "en"): string {
   if (name) return (lang === "ar" ? name.ar : name.en) || name.en || name.ar;
   const id = typeof ref === "string" ? ref : ref?.id ?? "";
-  const tail = id.includes(":") ? id.slice(id.indexOf(":") + 1) : id;
-  const cleaned = tail.replace(/^seed[-_]/, "").replace(/[-_]+/g, " ").trim();
-  if (!cleaned) return lang === "ar" ? "غير محدد" : "Not set";
-  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  return policyDisplayName(id, lang) || (lang === "ar" ? "غير محدد" : "Not set");
 }
 
 export const roofLabels: Record<ScopeItem["roof"], Bilingual> = {
@@ -135,4 +134,40 @@ export const splitList = (value: string) => value.split(/[\n,،]/).map((item) =>
 
 export function isExpired(row: Pick<QuoteRevision, "state" | "validThrough">, today = todayIso()): boolean {
   return row.state === "offered" && !!row.validThrough && row.validThrough < today;
+}
+
+/** Whole days from `from` to `to` (YYYY-MM-DD); negative when `to` is earlier. */
+export function daysBetween(from: string, to: string): number {
+  return Math.round((Date.parse(`${to.slice(0, 10)}T00:00:00Z`) - Date.parse(`${from.slice(0, 10)}T00:00:00Z`)) / 86_400_000);
+}
+
+const EXPIRED_BASE = 100_000;
+
+/**
+ * Sort key that puts upcoming dates first (soonest at the top), then past dates (most recent first).
+ * null when there is no date (DataTable sorts empty values last).
+ */
+export function upcomingFirstKey(date: string | null | undefined, today = todayIso()): number | null {
+  if (!date) return null;
+  const days = daysBetween(today, date);
+  return days >= 0 ? days : EXPIRED_BASE - days;
+}
+
+/** Quotes list default order: offered quotes that are about to expire, then expired offers, then everything else. */
+export function quoteAttentionKey(row: Pick<QuoteRevision, "state" | "validThrough">, today = todayIso()): number {
+  if (row.state !== "offered") return 1_000_000;
+  return upcomingFirstKey(row.validThrough, today) ?? 500_000;
+}
+
+/** A follow-up somebody still has to act on (shown as a column only when at least one quote has it). */
+export const hasOpenFollowup = (row: Pick<QuoteRow, "state" | "followup">) =>
+  row.state === "offered" && (row.followup.status === "requested" || row.followup.status === "preparing");
+
+/** "Expires today" / "Expires tomorrow" / "Expires in 3 days" for dates 0 to `window` days away, otherwise null. */
+export function expiresSoonLabel(date: string | null | undefined, lang: Locale, today = todayIso(), window = 7): string | null {
+  if (!date) return null;
+  const days = daysBetween(today, date);
+  if (days < 0 || days > window) return null;
+  if (lang === "ar") return days === 0 ? "ينتهي اليوم" : days === 1 ? "ينتهي غداً" : days === 2 ? "ينتهي بعد يومين" : `ينتهي بعد ${days} أيام`;
+  return days === 0 ? "Expires today" : days === 1 ? "Expires tomorrow" : `Expires in ${days} days`;
 }

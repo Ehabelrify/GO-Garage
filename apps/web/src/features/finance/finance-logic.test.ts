@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MoneyEvent } from "@garage/domain";
 import {
   canViewFinance, canWriteFinance, definitionMetric, emptyEventFilter, filterEvents, metricGroups, periodRange, reasonLabel, reportBranchOptions,
-  signedMinor, toEvidenceRef, validateMoneyEvent, type MoneyEventDraft,
+  signedMinor, toEvidenceRef, isInverseMetric, reconciliationGap, localParts, sparklinePoints, validateMoneyEvent, type MoneyEventDraft,
 } from "./finance-logic";
 
 const event = (over: Partial<MoneyEvent>): MoneyEvent => ({
@@ -83,5 +83,32 @@ describe("filters and periods", () => {
     expect(periodRange("month", now)).toEqual({ from: "2026-11-01", to: "2026-11-21", groupBy: "day" });
     expect(periodRange("last-month", now)).toEqual({ from: "2026-10-01", to: "2026-10-31", groupBy: "day" });
     expect(periodRange("ytd", now)).toEqual({ from: "2026-01-01", to: "2026-11-21", groupBy: "month" });
+  });
+});
+
+describe("finance display helpers", () => {
+  it("treats costs and receivables as inverse", () => {
+    expect(isInverseMetric("outstanding")).toBe(true);
+    expect(isInverseMetric("direct-cost")).toBe(true);
+    expect(isInverseMetric("collections")).toBe(false);
+  });
+  it("computes the revenue vs collections gap only when both are present in one currency", () => {
+    const money = (minor: number, currency = "EGP") => ({ state: "available", amount: { minor, currency } });
+    expect(reconciliationGap({ collections: money(29347040), "recognized-revenue": money(39400000) })).toEqual({ gapMinor: 10052960, currency: "EGP" });
+    expect(reconciliationGap({ collections: money(100), "recognized-revenue": { state: "unavailable" } })).toBeNull();
+    expect(reconciliationGap({ collections: money(100), "recognized-revenue": money(100) })).toBeNull();
+    expect(reconciliationGap({ collections: money(100), "recognized-revenue": money(200, "SAR") })).toBeNull();
+  });
+  it("splits an instant into local date and time", () => {
+    const parts = localParts("2026-11-10T10:00:00Z");
+    expect(parts?.date).toMatch(/^2026-11-1\d$/);
+    expect(parts?.time).toMatch(/^\d\d:\d\d$/);
+    expect(localParts("nope")).toBeNull();
+  });
+  it("builds sparkline points", () => {
+    expect(sparklinePoints([1], 100, 20)).toBeNull();
+    expect(sparklinePoints([null, null], 100, 20)).toBeNull();
+    expect(sparklinePoints([0, 10], 100, 20, 0)).toBe("0,20 100,0");
+    expect(sparklinePoints([5, 5, 5], 100, 20, 0)).toBe("0,10 50,10 100,10");
   });
 });

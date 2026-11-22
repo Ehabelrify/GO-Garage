@@ -4,7 +4,7 @@ import { DetailDrawer, EmptyState, Field, FormSection, RequiredNote } from "../.
 import { quoteApi, warrantyAuthorityApi } from "../../shared/store";
 import { reconcileWarrantyIssueDraft } from "../../shared/task-steps";
 import { getWarrantyTaskPrerequisites, useWarrantyDraftState } from "./warranty-form-state";
-import { branchAllowed, expiryPreview } from "./warranty-logic";
+import { branchAllowed, expiryPreview, policyDisplayName } from "./warranty-logic";
 import type { WarrantyScope } from "./warranty-scope";
 
 type RetiredOutcome = "approved" | "not-retired" | "missing-accepted-binding" | "owner-exception-required";
@@ -99,7 +99,7 @@ export function IssueCoverage({ scope, open, onClose }: { scope: WarrantyScope; 
     : policy.startRule === "owner-selected-date" && !issueDate ? t("Enter the coverage start date.", "أدخل تاريخ بداية التغطية.")
     : "";
 
-  const policyLabel = (p: (typeof issuable)[number]) => `${p.name} · v${p.version}${p.status === "retired" ? ` · ${t("Retired", "متقاعد")}` : ""}`;
+  const policyLabel = (p: (typeof issuable)[number]) => `${policyDisplayName(p.name)} · v${p.version}${p.status === "retired" ? ` · ${t("Retired", "متقاعد")}` : ""}`;
   const jobLabel = (j: (typeof state.jobs)[number]) => `${scope.customerName(j.customerId)} · ${scope.vehicleOf(j.customerId, j.vehicleId)?.plate ?? "—"} · ${scope.serviceName(j.serviceId)}`;
   const componentLabel = (componentId: string, index: number) => {
     const work = quote?.input.work.find((component) => component.id === componentId);

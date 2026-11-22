@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PackageVersion } from "@garage/domain";
-import { occupancyOptions, addOnUsage, approvalGap, confirmation, historyOf, latestById, priceMatrix, roofState, toggleId } from "./catalogue-logic";
+import { packageSegment, segmentCounts, occupancyOptions, addOnUsage, approvalGap, confirmation, historyOf, latestById, priceMatrix, roofState, toggleId } from "./catalogue-logic";
 
 const base = (id: string, version: number, over: Partial<PackageVersion> = {}): PackageVersion => ({
   ref: { id, version }, revision: version, kind: "package", name: { ar: "ا", en: "A" }, vehicleCategoryIds: ["sedan"], vehicleModels: [],
@@ -70,5 +70,20 @@ describe("draft helpers", () => {
   it("needs approved price, tax and aggregation to publish", () => {
     expect(isPublishable(base("a", 1))).toBe(false);
     expect(isPublishable(base("a", 1, { price: approved, tax: approved as never, workAggregation: approved as never }))).toBe(true);
+  });
+});
+
+describe("package segments", () => {
+  it("separates offers, unconfirmed items and real packages", () => {
+    const offer = base("seed-pkg-promo-nov-from", 1, { provenance: "5 November announcement" });
+    const draft = base("seed-pkg-draft-wrapping", 1, { kind: "standalone", state: "draft" });
+    const pkg = base("seed-pkg-ppf-pro", 1, { state: "published", price: approved });
+    expect(packageSegment(offer)).toBe("offer");
+    expect(packageSegment(draft)).toBe("unconfirmed");
+    expect(packageSegment(pkg)).toBe("package");
+    expect(segmentCounts([offer, draft, pkg, pkg])).toEqual({ package: 2, offer: 1, unconfirmed: 1 });
+  });
+  it("keeps a priced standalone draft in the package list", () => {
+    expect(packageSegment(base("x", 1, { kind: "standalone", state: "draft", price: approved }))).toBe("package");
   });
 });

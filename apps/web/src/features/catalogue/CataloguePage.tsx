@@ -3,12 +3,12 @@ import { hasCapability } from "../../shared/capabilities";
 import { DEFAULT_CURRENCY, isSupportedCurrency, resolveCurrency, type GradeVersion, type PackageVersion } from "@garage/domain";
 import { useGarageStore } from "../../shared/store";
 import {
-  Collapsible, ConfirmDialog, DataTable, DetailDrawer, EmptyState, Field, FilterBar, FormSection, Money, Notice, PageHeader,
-  RequiredNote, StatusBadge, TabBar, TabPanel, formatMoney, majorToMinor, minorToMajor, useUrlState, type Column,
+  Collapsible, ConfirmDialog, DataTable, DateText, Delta, DetailDrawer, EmptyState, Field, FilterBar, FormSection, Money, Notice, PageHeader,
+  RequiredNote, Skeleton, StatusBadge, TabBar, TabPanel, majorToMinor, minorToMajor, useUrlState, type Column,
 } from "../../shared/components";
 import {
-  addOnUsage, approvalGap, confirmation, gradeLabel, historyOf, latestById, normaliseDraft, occupancyOptions,
-  priceMatrix, priceMinor, roofState, validateDraft, type Category, type MatrixRow, type RoofState,
+  addOnUsage, approvalGap, confirmation, gradeLabel, historyOf, latestById, normaliseDraft, occupancyOptions, packageSegment,
+  priceMatrix, priceMinor, roofState, segmentCounts, validateDraft, type Category, type MatrixRow, type PackageSegment, type RoofState,
 } from "./catalogue-logic";
 import { PackageForm } from "./PackageForm";
 import { PriceEditor, PriceHistory } from "./PriceEditor";
@@ -64,6 +64,7 @@ export function CataloguePage({ lang }: { lang: Lang }) {
 
   const [tab, setTab] = useUrlState("tab", "packages");
   const [view, setView] = useUrlState("view", "list");
+  const [rawSegment, setSegment] = useUrlState("segment", "package");
   const [openId, setOpenId] = useUrlState("record", "");
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState("all");
@@ -141,14 +142,17 @@ export function CataloguePage({ lang }: { lang: Lang }) {
   })[state];
 
   const priceBadge = (p: PackageVersion) => confirmation(p) === "confirmed"
-    ? <span className="status" data-tone="success">{t("Confirmed", "مؤكد")}</span>
-    : <span className="status" data-tone="warning" title={t("Example price, not yet confirmed by the owner", "سعر مثال لم يؤكده المالك بعد")}>{t("Advertised", "معلن")}</span>;
+    ? <span className="status cat-nowrap" data-tone="success">{t("Confirmed", "مؤكد")}</span>
+    : <span className="status cat-nowrap" data-tone="warning" title={t("Example price, not yet confirmed by the owner", "سعر مثال لم يؤكده المالك بعد")}>{t("Advertised", "معلن")}</span>;
   const priceCell = (p: PackageVersion) => {
     const price = priceMinor(p);
-    return price ? <Money minor={price.minor} currency={price.currency} lang={lang} /> : <span className="cat-muted">{t("Price pending", "السعر قيد التحديد")}</span>;
+    return price ? <Money minor={price.minor} currency={price.currency} lang={lang} /> : <span className="cat-muted cat-nowrap">{t("Price pending", "السعر قيد التحديد")}</span>;
   };
 
+  const counts = useMemo(() => segmentCounts(latestPackages), [latestPackages]);
+  const segment: PackageSegment = rawSegment === "offer" || rawSegment === "unconfirmed" ? rawSegment : "package";
   const filteredPackages = latestPackages.filter((p) => {
+    if (packageSegment(p) !== segment) return false;
     if (stateFilter !== "all" && p.state !== stateFilter) return false;
     if (categoryFilter !== "all" && !p.vehicleCategoryIds.includes(categoryFilter)) return false;
     const q = search.trim().toLowerCase();
@@ -247,13 +251,13 @@ export function CataloguePage({ lang }: { lang: Lang }) {
   const startAction = (next: Action) => { setEvidenceRef(""); setReason(""); setAction(next); };
 
   const packageColumns: Column<PackageVersion>[] = [
-    { key: "name", header: t("Package", "الباقة"), primary: true, sortable: true, sortValue: (p) => p.name[lang], render: (p) => <>{p.name[lang]}{p.kind === "standalone" && <span className="tag">{t("Service", "خدمة")}</span>}</> },
+    { key: "name", header: t("Package", "الباقة"), primary: true, sortable: true, sortValue: (p) => p.name[lang], render: (p) => <span className="cat-name">{p.name[lang]}{p.kind === "standalone" && <span className="tag">{t("Service", "خدمة")}</span>}</span> },
     { key: "categories", header: t("Vehicles", "المركبات"), render: (p) => p.vehicleCategoryIds.map(categoryName).join(", ") || <span className="cat-muted">{t("Not set", "غير محدد")}</span> },
     { key: "price", header: t("Price", "السعر"), numeric: true, sortable: true, sortValue: (p) => priceMinor(p)?.minor ?? null, render: priceCell },
     { key: "basis", header: t("Price status", "حالة السعر"), render: priceBadge },
     { key: "state", header: t("State", "الحالة"), sortable: true, sortValue: (p) => p.state, render: (p) => <StatusBadge status={p.state} domain="policy" lang={lang} /> },
     { key: "actions", header: "", hideOnCard: true, render: (p) => canManage && p.state !== "retired"
-      ? <button type="button" className="btn btn-sm" onClick={(e) => { e.stopPropagation(); startPrice(p); }}>{t("Edit price", "تعديل السعر")}</button> : null },
+      ? <button type="button" className="btn btn-sm cat-nowrap" onClick={(e) => { e.stopPropagation(); startPrice(p); }}>{t("Edit price", "تعديل السعر")}</button> : null },
   ];
 
   const matrixColumns: Column<MatrixRow>[] = [
@@ -313,14 +317,13 @@ export function CataloguePage({ lang }: { lang: Lang }) {
   return <div dir={lang === "ar" ? "rtl" : "ltr"}>
     <PageHeader
       title={t("Catalogue", "الكتالوج")}
-      actions={canManage ? <button type="button" className="btn btn-primary" onClick={onAdd}>{addLabel}</button> : undefined}
+      actions={canManage ? <button type="button" className="btn btn-primary cat-nowrap" onClick={onAdd}>{addLabel}</button> : undefined}
+      tabs={forbidden ? undefined : <TabBar tabs={tabs} value={activeTab} onChange={setTab} ariaLabel={t("Catalogue sections", "أقسام الكتالوج")} idPrefix="cat" />}
     />
     {message ? <Notice tone={message.tone}>{message.text}</Notice>
       : hasAdvertised && <Notice tone="info">{t("Advertised prices are examples until the owner confirms them.", "الأسعار المعلنة أمثلة حتى يؤكدها المالك.")}</Notice>}
 
     {forbidden ? <EmptyState variant="error" title={t("No access", "لا يوجد وصول")} text={t("Managing the catalogue needs owner permission.", "إدارة الكتالوج تحتاج صلاحية المالك.")} /> : <>
-      <TabBar tabs={tabs} value={activeTab} onChange={setTab} ariaLabel={t("Catalogue sections", "أقسام الكتالوج")} idPrefix="cat" />
-
       <TabPanel idPrefix="cat" id="packages" active={activeTab === "packages"}>
         <FilterBar lang={lang} onClear={clearFilters} resultCount={filteredPackages.length}
           search={{ value: search, onChange: setSearch, placeholder: t("Search packages", "ابحث في الباقات") }}
@@ -328,9 +331,13 @@ export function CataloguePage({ lang }: { lang: Lang }) {
             { key: "state", label: t("State", "الحالة"), value: stateFilter, onChange: setStateFilter, options: [{ value: "all", label: t("All states", "كل الحالات") }, { value: "draft", label: t("Draft", "مسودة") }, { value: "published", label: t("Published", "منشورة") }, { value: "retired", label: t("Retired", "متقاعدة") }] },
             { key: "category", label: t("Vehicle", "المركبة"), value: categoryFilter, onChange: setCategoryFilter, options: [{ value: "all", label: t("All vehicles", "كل المركبات") }, ...categories.map((c) => ({ value: c.id, label: c.name[lang] }))] },
           ]}>
-          <div className="cat-actions" role="group" aria-label={t("View", "العرض")}>
-            <button type="button" className={`btn btn-sm${view !== "matrix" ? " btn-primary" : ""}`} aria-pressed={view !== "matrix"} onClick={() => setView("list")}>{t("List", "قائمة")}</button>
-            <button type="button" className={`btn btn-sm${view === "matrix" ? " btn-primary" : ""}`} aria-pressed={view === "matrix"} onClick={() => setView("matrix")}>{t("Price matrix", "جدول الأسعار")}</button>
+          <div className="seg" role="group" aria-label={t("Show", "عرض")}>
+            {([["package", t("Packages", "الباقات")], ["offer", t("Offers", "العروض")], ["unconfirmed", t("Unconfirmed", "غير مؤكدة")]] as const).map(([id, label]) =>
+              <button key={id} type="button" className="seg-btn" aria-pressed={segment === id} onClick={() => setSegment(id)}>{label}<span className="seg-count">{counts[id]}</span></button>)}
+          </div>
+          <div className="seg" role="group" aria-label={t("View", "العرض")}>
+            <button type="button" className="seg-btn" aria-pressed={view !== "matrix"} onClick={() => setView("list")}>{t("List", "قائمة")}</button>
+            <button type="button" className="seg-btn" aria-pressed={view === "matrix"} onClick={() => setView("matrix")}>{t("Price matrix", "جدول الأسعار")}</button>
           </div>
         </FilterBar>
         {view !== "matrix"
@@ -356,7 +363,7 @@ export function CataloguePage({ lang }: { lang: Lang }) {
       </TabPanel>
 
       <TabPanel idPrefix="cat" id="categories" active={activeTab === "categories"}>
-        {loading ? <p className="cat-muted">{t("Loading", "جارٍ التحميل")}</p> : loadError ? <EmptyState variant="error" title={loadError} action={<button type="button" className="btn" onClick={load}>{t("Retry", "إعادة المحاولة")}</button>} />
+        {loading ? <Skeleton rows={4} label={t("Loading", "جارٍ التحميل")} /> : loadError ? <EmptyState variant="error" title={loadError} action={<button type="button" className="btn" onClick={load}>{t("Retry", "إعادة المحاولة")}</button>} />
           : categories.length === 0 ? <EmptyState title={t("No categories yet", "لا توجد فئات بعد")} action={canManage ? <button type="button" className="btn btn-primary" onClick={() => setCategoryOpen(true)}>{t("Add category", "إضافة فئة")}</button> : undefined} />
           : <ul className="cat-list">{categories.map((c) => <li key={c.id}><strong>{c.name[lang]}</strong><span className="cat-muted">{c.name[lang === "ar" ? "en" : "ar"]}</span></li>)}</ul>}
         {canManage && categories.length > 0 && <Collapsible title={t("Classify a vehicle", "تصنيف مركبة")}>
@@ -387,12 +394,12 @@ export function CataloguePage({ lang }: { lang: Lang }) {
         <dl className="cat-kv">
           <dt>{t("State", "الحالة")}</dt><dd><StatusBadge status={current.state} domain="policy" lang={lang} /></dd>
           <dt>{t("Price", "السعر")}</dt><dd>{priceCell(current)} {priceBadge(current)}{isExampleData(current) && <span className="tag" title={t("Example data, not approved policy", "بيانات مثال وليست سياسة معتمدة")}>{t("Example data, not approved policy", "بيانات مثال وليست سياسة معتمدة")}</span>}</dd>
-          {current.priceChange && <><dt>{t("Pending price", "السعر المقترح")}</dt><dd><Money minor={current.priceChange.price.minor} currency={current.priceChange.price.currency} lang={lang} /> · {t("effective", "سارٍ")} {current.priceChange.effectiveFrom}</dd></>}
+          {current.priceChange && <><dt>{t("Pending price", "السعر المقترح")}</dt><dd><Money minor={current.priceChange.price.minor} currency={current.priceChange.price.currency} lang={lang} /> · {t("effective", "سارٍ")} <DateText value={current.priceChange.effectiveFrom} lang={lang} /></dd></>}
           <dt>{t("Tax", "الضريبة")}</dt><dd>{current.tax.state === "approved" ? (current.tax.value.amount ? <Money minor={current.tax.value.amount.minor} currency={current.tax.value.amount.currency} lang={lang} /> : t("Rule applied", "قاعدة مطبقة")) : <span className="cat-muted">{t("Not set", "غير محدد")}</span>}</dd>
           <dt>{t("Vehicles", "المركبات")}</dt><dd>{current.vehicleCategoryIds.map(categoryName).join(", ") || "—"}</dd>
           <dt>{t("Branches", "الفروع")}</dt><dd>{current.branchIds.map(branchName).join(", ") || "—"}</dd>
           <dt>{t("Roof", "السقف")}</dt><dd>{roofLabel(roofState(current.scope))}</dd>
-          <dt>{t("Valid", "الصلاحية")}</dt><dd>{current.effectiveFrom ?? t("Now", "الآن")} – {current.effectiveThrough ?? t("No end date", "بلا نهاية")}</dd>
+          <dt>{t("Valid", "الصلاحية")}</dt><dd>{current.effectiveFrom ? <DateText value={current.effectiveFrom} lang={lang} /> : t("Now", "الآن")} – {current.effectiveThrough ? <DateText value={current.effectiveThrough} lang={lang} /> : t("No end date", "بلا نهاية")}</dd>
           {current.provenance && <><dt>{t("Source", "المصدر")}</dt><dd>{current.provenance}</dd></>}
         </dl>
         <Collapsible title={t("Included work", "العمل المشمول")} count={current.scope.length} defaultOpen>
@@ -410,7 +417,7 @@ export function CataloguePage({ lang }: { lang: Lang }) {
           <ul className="cat-list">{historyOf(versions, current.ref.id).map((v) => <li key={v.ref.version}>
             <strong>{t("Version", "الإصدار")} {v.ref.version}</strong>
             <StatusBadge status={v.state} domain="policy" lang={lang} />
-            {v.approval && <span className="cat-muted">{new Date(v.approval.approvedAt).toLocaleDateString(lang === "ar" ? "ar-EG-u-nu-latn" : "en-GB")} · {v.approval.reason}</span>}
+            {v.approval && <span className="cat-muted"><DateText value={v.approval.approvedAt} lang={lang} /> · {v.approval.reason}</span>}
           </li>)}</ul>
         </Collapsible>
       </>}
@@ -456,10 +463,10 @@ export function CataloguePage({ lang }: { lang: Lang }) {
       {diff && publishing?.priceChange && <dl className="cat-kv cat-diff-summary">
         <dt>{t("Price", "السعر")}</dt>
         <dd>{diff.before ? <><Money minor={diff.before.minor} currency={diff.before.currency} lang={lang} /> <span aria-hidden="true">{lang === "ar" ? "←" : "→"}</span><span className="sr-only">{t("to", "إلى")}</span> </> : <span className="cat-muted">{t("No approved price", "بدون سعر معتمد")} </span>}<Money minor={diff.after.minor} currency={diff.after.currency} lang={lang} /></dd>
-        {diff.delta !== null && <><dt>{t("Change", "الفرق")}</dt><dd>{diff.delta > 0 ? "+" : ""}{formatMoney(diff.delta, diff.after.currency, lang)}</dd></>}
+        {diff.delta !== null && <><dt>{t("Change", "الفرق")}</dt><dd><Delta value={diff.delta} unit="minor" currency={diff.after.currency} lang={lang} /></dd></>}
         {!diff.sameCurrency && <><dt>{t("Currency", "العملة")}</dt><dd>{t("Currency changes. Prices are not compared.", "تتغير العملة. لا تتم مقارنة الأسعار.")}</dd></>}
         <dt>{t("Tax", "الضريبة")}</dt><dd><Money minor={publishing.priceChange.tax.minor} currency={publishing.priceChange.tax.currency} lang={lang} /></dd>
-        <dt>{t("Effective", "ساري من")}</dt><dd>{publishing.priceChange.effectiveFrom}</dd>
+        <dt>{t("Effective", "ساري من")}</dt><dd><DateText value={publishing.priceChange.effectiveFrom} lang={lang} /></dd>
         <dt>{t("Reason", "السبب")}</dt><dd>{publishing.priceChange.reason}</dd>
       </dl>}
       {needsEvidence && <Field label={t("Approval evidence", "دليل الموافقة")} required><input className="field-input" dir="ltr" placeholder="private:..." value={evidenceRef} onChange={(e) => setEvidenceRef(e.target.value)} /></Field>}

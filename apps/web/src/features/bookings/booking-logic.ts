@@ -92,3 +92,39 @@ export function matchesCustomer(customer: { name: string; phone: string; vehicle
     || (digits.length > 0 && customer.phone.replace(/\D/g, "").includes(digits))
     || customer.vehicles.some((vehicle) => plateMatchesQuery(vehicle.plate, needle) || vehicle.plate.toLowerCase().replace(/\s/g, "").includes(compact) || vehicle.makeModel.toLowerCase().includes(needle));
 }
+
+/** The booking list opens on "today and upcoming" (inDateRange "upcoming" is date >= today). */
+export const defaultRange: DateRange = "upcoming";
+
+/** Upcoming-style ranges read soonest first; "all" and "past" read newest first. */
+export function sortBookings<T extends Pick<Booking, "dropoffDate" | "dropoffTime">>(rows: T[], range: DateRange): T[] {
+  const direction = range === "all" || range === "past" ? -1 : 1;
+  return [...rows].sort((a, b) => direction * sortKey(a).localeCompare(sortKey(b)));
+}
+
+/** The Branch column only helps when the viewer can see more than one branch and has not narrowed to one. */
+export function showBranchColumn(branchCount: number, currentBranch: string): boolean {
+  return branchCount > 1 && currentBranch === "all";
+}
+
+const phoneDigits = (phone: string | null | undefined): string => {
+  const raw = (phone ?? "").trim();
+  if (!raw) return "";
+  const cleaned = raw.replace(/[^\d+]/g, "").replace(/^00/, "+");
+  const local = /^0(1\d{9})$/.exec(cleaned);
+  const digits = (local ? `20${local[1]}` : cleaned).replace(/\D/g, "");
+  return digits.length >= 8 && digits.length <= 15 ? digits : "";
+};
+
+/** tel: link for a stored phone, or null when it is not dialable. */
+export function telHref(phone: string | null | undefined): string | null {
+  const digits = phoneDigits(phone);
+  return digits ? `tel:+${digits}` : null;
+}
+
+/** wa.me link for a stored phone (international digits only), or null. */
+export function whatsappHref(phone: string | null | undefined): string | null {
+  const digits = phoneDigits(phone);
+  return digits ? `https://wa.me/${digits}` : null;
+}
+

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BenefitEntitlement } from "@garage/domain";
-import { benefitName, expiryText, filterBenefits, limitText, reasonText, totalUses } from "./benefit-logic";
+import { benefitName, expiryText, filterBenefits, groupBenefits, groupStatus, limitText, reasonText, shortLimitText, totalUses, usageText } from "./benefit-logic";
 
 const approval = { approvedBy: "o", approvedAt: "x", evidenceRef: "protected", reason: "r" };
 const quantity = (n: number) => ({ state: "approved" as const, value: { kind: "quantity" as const, quantity: n }, policy: { id: "p", version: 1 }, approval });
@@ -36,5 +36,28 @@ describe("benefit logic", () => {
   it("humanises eligibility reason codes", () => {
     expect(reasonText("limit-reached", "en")).toBe("Limit reached");
     expect(reasonText("Requested quantity exceeds remaining eligibility.", "en")).toBe("Requested quantity exceeds remaining eligibility.");
+  });
+});
+
+describe("benefit grouping and labels", () => {
+  it("humanises and localises benefit names", () => {
+    expect(benefitName({ id: "benefit-eligibility:seed-vip-transport" }, "en")).toBe("VIP transport");
+    expect(benefitName({ id: "benefit-eligibility:seed-fourth-car" }, "ar")).toBe("السيارة الرابعة مجاناً");
+    expect(benefitName({ id: "benefit-eligibility:seed-cairo-tow" }, "en")).toBe("Cairo tow");
+  });
+  it("shows used and remaining for fixed quantities only", () => {
+    expect(usageText(quantity(2), 1, "en")).toBe("1 of 2 used, 1 left");
+    expect(usageText(quantity(2), 5, "en")).toBe("5 of 2 used, 0 left");
+    expect(usageText({ state: "unconfigured", missing: [] }, 0, "en")).toBeNull();
+    expect(shortLimitText(quantity(1), "en")).toBe("1 use");
+    expect(shortLimitText(quantity(3), "ar")).toBe("3 استخدامات");
+  });
+  it("groups one row per customer and vehicle with active benefits first", () => {
+    const rows = [entitlement({ id: "a", status: "exhausted" }), entitlement({ id: "b" }), entitlement({ id: "c", vehicleId: "v2" }), entitlement({ id: "d", customerId: "c2" })];
+    const groups = groupBenefits(rows);
+    expect(groups).toHaveLength(3);
+    expect(groups[0].items.map((item) => item.id)).toEqual(["b", "a"]);
+    expect(groupStatus(groups[0])).toBe("active");
+    expect(groupStatus({ ...groups[0], items: [entitlement({ status: "cancelled" })] })).toBe("cancelled");
   });
 });

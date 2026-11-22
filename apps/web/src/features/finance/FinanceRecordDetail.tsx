@@ -1,9 +1,9 @@
 import { useState } from "react";
 import type { Locale, MoneyEvent } from "@garage/domain";
 import { financeApi } from "../../shared/store";
-import { Collapsible, ConfirmDialog, Field, Money, Notice, RecordRef } from "../../shared/components";
+import { Amount, Collapsible, ConfirmDialog, Field, Notice, RecordRef } from "../../shared/components";
 import { definitionLabel, errorText, kindLabels, signedMinor, sourceMethodLabel, toEvidenceRef } from "./finance-logic";
-import { dateTimeLabel, makeT, Pill, type FinanceLookups } from "./finance-ui";
+import { EventDate, makeT, Pill, type FinanceLookups } from "./finance-ui";
 
 export interface FinanceRecordDetailProps {
   event: MoneyEvent;
@@ -41,12 +41,12 @@ export function FinanceRecordDetail({ event, lang, lookups, canWrite, onChanged 
   const customer = event.customerId ? lookups.customerName(event.customerId) : undefined;
   return <div className="finance-detail">
     <div className="finance-detail-head">
-      <strong className="finance-detail-amount"><Money minor={signedMinor(event.kind, event.amount.minor)} currency={event.amount.currency} lang={lang} /></strong>
-      <Pill tone={event.reversed ? "neutral" : "success"}>{event.reversed ? t("Reversed", "معكوس") : t("Recorded", "مسجل")}</Pill>
+      <strong className="finance-detail-amount"><Amount variant="detail" minor={signedMinor(event.kind, event.amount.minor)} currency={event.amount.currency} lang={lang} /></strong>
+      <Pill lang={lang} tone={event.reversed ? "neutral" : "success"}>{event.reversed ? t("Reversed", "معكوس") : t("Recorded", "مسجل")}</Pill>
     </div>
     <dl className="kv-grid">
       <div><dt>{t("Type", "النوع")}</dt><dd>{kindLabels[event.kind][lang]}</dd></div>
-      <div><dt>{t("Date", "التاريخ")}</dt><dd>{dateTimeLabel(event.effectiveAt, lang)}</dd></div>
+      <div><dt>{t("Date", "التاريخ")}</dt><dd><EventDate value={event.effectiveAt} lang={lang} /></dd></div>
       <div><dt>{t("Branch", "الفرع")}</dt><dd>{lookups.branchName(event.branchId)}</dd></div>
       <div><dt>{t("Method", "الطريقة")}</dt><dd>{sourceMethodLabel(event.sourceMethod, lang)}</dd></div>
       <div><dt>{t("Reference", "المرجع")}</dt><dd className="mono">{event.sourceReference}</dd></div>

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supportedCurrencies, type Locale } from "@garage/domain";
-import { ConfirmDialog, DetailDrawer, EmptyState, Field, Money, RecordRef, Skeleton, StatusBadge } from "../../shared/components";
-import { dateLabel } from "../../shared/ui";
+import { Amount, ConfirmDialog, DateText, DetailDrawer, EmptyState, Field, RecordRef, Skeleton, StatusBadge } from "../../shared/components";
 import { addInfo, closeRequest, decide, readRequest, requestErrorMessage, startReview } from "./special-requests-api";
 import {
   actionLabel, dateRange, decisionPayload, emptyReplyForm, validateReply,
@@ -89,7 +88,7 @@ export function RequestDrawer({ lang, id, canReview, canStaffAct, onClose, onCha
       <dl className="sr-facts">
         <dt>{t("Customer", "العميل")}</dt><dd><RecordRef type="customer" id={request.customerId} label={request.customerName} mode="link" /></dd>
         <dt>{t("Vehicle", "المركبة")}</dt><dd><RecordRef type="vehicle" id={request.vehicleId} label={request.plate} mode="link" /></dd>
-        <dt>{t("Requested date", "التاريخ المطلوب")}</dt><dd><bdi>{dateRange(request.requestedFrom, request.requestedTo)}</bdi></dd>
+        <dt>{t("Requested date", "التاريخ المطلوب")}</dt><dd><bdi dir="ltr" className="date-text">{dateRange(request.requestedFrom, request.requestedTo)}</bdi></dd>
         {request.preferredTimeNote && <><dt>{t("Time note", "ملاحظة الوقت")}</dt><dd>{request.preferredTimeNote}</dd></>}
         {request.budgetNote && <><dt>{t("Budget note", "ملاحظة الميزانية")}</dt><dd>{request.budgetNote}</dd></>}
         {request.branchId && <><dt>{t("Branch", "الفرع")}</dt><dd>{request.branchId}</dd></>}
@@ -100,10 +99,10 @@ export function RequestDrawer({ lang, id, canReview, canStaffAct, onClose, onCha
         <h3>{t("Reply to the customer", "الرد على العميل")}</h3>
         {request.reply.message && <p className="sr-text">{request.reply.message}</p>}
         {request.reply.decision === "accepted" && <dl className="sr-facts">
-          {request.reply.quotedPrice && <><dt>{t("Quoted price", "السعر المعروض")}</dt><dd><Money minor={request.reply.quotedPrice.minor} currency={request.reply.quotedPrice.currency} lang={lang} /></dd></>}
+          {request.reply.quotedPrice && <><dt>{t("Quoted price", "السعر المعروض")}</dt><dd><Amount variant="detail" minor={request.reply.quotedPrice.minor} currency={request.reply.quotedPrice.currency} lang={lang} /></dd></>}
           {request.reply.durationDays && <><dt>{t("Time frame", "المدة")}</dt><dd>{t(`${request.reply.durationDays} day(s)`, `${request.reply.durationDays} يوم`)}{request.reply.durationNote ? ` · ${request.reply.durationNote}` : ""}</dd></>}
-          {request.reply.availableFrom && <><dt>{t("Available from", "متاح من")}</dt><dd>{dateLabel(request.reply.availableFrom, lang)}</dd></>}
-          {request.reply.offerValidUntil && <><dt>{t("Offer valid until", "العرض صالح حتى")}</dt><dd>{dateLabel(request.reply.offerValidUntil, lang)}</dd></>}
+          {request.reply.availableFrom && <><dt>{t("Available from", "متاح من")}</dt><dd><DateText value={request.reply.availableFrom} lang={lang} /></dd></>}
+          {request.reply.offerValidUntil && <><dt>{t("Offer valid until", "العرض صالح حتى")}</dt><dd><DateText value={request.reply.offerValidUntil} lang={lang} /></dd></>}
         </dl>}
       </div>}
       {request.ownerNotes && <div className="sr-box internal"><h3>{t("Internal notes (not shown to the customer)", "ملاحظات داخلية (لا تظهر للعميل)")}</h3><p className="sr-text">{request.ownerNotes}</p></div>}
@@ -176,7 +175,7 @@ export function RequestDrawer({ lang, id, canReview, canStaffAct, onClose, onCha
       <div className="sr-box"><h3>{t("History", "السجل")}</h3>
         <ol className="sr-history">{data!.history.map((event) => <li key={event.seq}>
           <strong>{actionLabel(event.action, lang)}</strong>
-          <span className="sr-muted">{[event.actorName, event.occurredAt ? dateLabel(event.occurredAt.slice(0, 10), lang) : ""].filter(Boolean).join(" · ")}</span>
+          <span className="sr-muted">{event.actorName}{event.actorName && event.occurredAt ? " · " : ""}{event.occurredAt && <DateText value={event.occurredAt.slice(0, 10)} lang={lang} />}</span>
           {event.reason && event.action !== "quote-linked" && <span className="sr-text">{event.reason}</span>}
         </li>)}</ol>
       </div>
