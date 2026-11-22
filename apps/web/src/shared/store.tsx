@@ -201,7 +201,7 @@ interface GarageStore {
   createCustomer: (input: CreateCustomerInput) => Promise<StoreMutationWith<{ customerId: string }>>;
   createBookingRequest: (input: CreateBookingInput) => Promise<StoreMutationWith<{ bookingId: string; status: string }>>;
   confirmBooking: (bookingId: string) => Promise<StoreMutationResult>;
-  cancelBooking: (bookingId: string) => Promise<StoreMutationResult>;
+  cancelBooking: (bookingId: string, reason: string) => Promise<StoreMutationResult>;
   transitionJob: (jobId: string, nextStage: JobStage) => Promise<StoreMutationResult>;
   assignJob: (jobId: string, technicianUserId: string) => Promise<StoreMutationResult>;
   createWarrantyPolicy: (input: WarrantyPolicyInput) => Promise<StoreMutationResult>;
@@ -349,9 +349,9 @@ export function GarageStoreProvider({ children }: PropsWithChildren) {
     }
   }, [completeMutation]);
 
-  const cancelBooking = useCallback(async (bookingId: string) => {
+  const cancelBooking = useCallback(async (bookingId: string, reason: string) => {
     try {
-      await requestJson(`/api/bookings/${encodeURIComponent(bookingId)}/cancel`, { method: "PATCH", body:JSON.stringify({reason:"Cancelled by authorized staff"}) });
+      await requestJson(`/api/bookings/${encodeURIComponent(bookingId)}/cancel`, { method: "PATCH", body: JSON.stringify({ reason: reason.trim() }) });
       return await completeMutation({});
     } catch (error) {
       return { ok: false as const, error: failureCode(error) };

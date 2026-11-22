@@ -61,6 +61,7 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState<PendingAction>(null);
+  const [cancelReason, setCancelReason] = useState("");
   const [bulkConfirm, setBulkConfirm] = useState<Booking[] | null>(null);
   const [acting, setActing] = useState(false);
   const [moving, setMoving] = useState<{ date: string; time: string } | null>(null);
@@ -156,13 +157,14 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
     setActing(true);
     const booking = state.bookings.find((item) => item.id === pending.bookingId);
     let result;
-    if (pending.kind === "cancel") result = await store.cancelBooking(pending.bookingId);
+    if (pending.kind === "cancel") result = await store.cancelBooking(pending.bookingId, cancelReason);
     else {
       const job = booking ? noShowJob(booking, state.jobs, role) : null;
       result = job ? await store.transitionJob(job.id, "no-show") : { ok: false as const, error: "REQUEST_FAILED" };
     }
     setActing(false);
     setPending(null);
+    setCancelReason("");
     notify(result.ok
       ? pending.kind === "cancel" ? t("Booking cancelled.", "تم إلغاء الحجز.") : t("Marked as no-show.", "تم تسجيله كلم يحضر.")
       : message(result.error, { en: "The change could not be saved.", ar: "تعذر حفظ التغيير." }));
@@ -380,12 +382,18 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
       lang={lang}
       danger
       busy={acting}
+      confirmDisabled={pending?.kind === "cancel" && cancelReason.trim().length < 3}
+      disabledReason={t("Enter the cancellation reason to continue.", "اكتب سبب الإلغاء للمتابعة.")}
       title={pending?.kind === "no-show" ? t("Mark as no-show?", "تسجيل أنه لم يحضر؟") : t("Cancel this booking?", "إلغاء هذا الحجز؟")}
       body={`${pendingWho}. ${pending?.kind === "no-show" ? t("The job is closed. No message is sent.", "يُغلق أمر الشغل. لا تُرسل رسالة.") : t("The workshop job is cancelled too. No message is sent.", "يُلغى أمر الشغل أيضاً. لا تُرسل رسالة.")}`}
       confirmLabel={pending?.kind === "no-show" ? t("Mark no-show", "تسجيل لم يحضر") : t("Cancel booking", "إلغاء الحجز")}
       cancelLabel={t("Keep booking", "إبقاء الحجز")}
       onConfirm={() => void runPending()}
-      onCancel={() => setPending(null)}
-    />
+      onCancel={() => { setPending(null); setCancelReason(""); }}
+    >
+      {pending?.kind === "cancel" && <Field label={t("Cancellation reason", "سبب الإلغاء")} required>
+        <textarea className="field-input" rows={3} maxLength={300} value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} />
+      </Field>}
+    </ConfirmDialog>
   </>;
 }

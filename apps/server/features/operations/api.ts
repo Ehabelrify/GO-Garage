@@ -487,6 +487,7 @@ router.patch("/bookings/:bookingId/reschedule",async(req,res)=>{
 });
 router.patch("/bookings/:bookingId/cancel", async (req, res) => {
   const currentActor = actor(req);
+  const suppliedReason = z.string().trim().min(1).max(300).safeParse(req.body?.reason);
   if (!canManageBookings(currentActor)) return forbidden(res);
   const commercialLink=await pool.query("SELECT 1 FROM promotion_reservations WHERE booking_id=$1 AND status IN ('scheduled','redeemed')",[req.params.bookingId]);
   if(commercialLink.rowCount)return routeError(res,409,"RESERVATION_CANCELLATION_REQUIRED","Cancel the linked reservation through its authorized correction flow.");
@@ -518,8 +519,8 @@ router.patch("/bookings/:bookingId/cancel", async (req, res) => {
       await client.query("UPDATE jobs SET stage = 'cancelled', updated_at = now() WHERE id = $1", [activeJob.rows[0].id]);
       await client.query(
         `INSERT INTO job_events (id, job_id, from_stage, to_stage, actor_user_id, note)
-         VALUES ($1, $2, $3, 'cancelled', $4, 'Booking cancelled')`,
-        [makeId("event"), activeJob.rows[0].id, activeJob.rows[0].stage, currentActor.userId],
+         VALUES ($1, $2, $3, 'cancelled', $4, $5)`,
+        [makeId("event"), activeJob.rows[0].id, activeJob.rows[0].stage, currentActor.userId, suppliedReason.success ? `Booking cancelled: ${suppliedReason.data}` : "Booking cancelled"],
       );
     }
     return "ok" as const;
