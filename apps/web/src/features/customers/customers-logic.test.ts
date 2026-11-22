@@ -63,9 +63,9 @@ describe("360 parsing", () => {
     expect(parsed?.sections.purchases.unavailable).toBe(true);
   });
   it("describes a purchase with its own currency and source links, and a special request", () => {
-    const purchase = describeItem("purchases", { id: "quote:q1", quoteId: "q1", bookingId: "b1", jobId: "j1", warrantyId: "w1", labelEn: "PPF", labelAr: "حماية", quantity: 2, amount: { minor: 250000, currency: "SAR" }, purchasedOn: "2026-11-01", status: "delivered" }, env);
+    const purchase = describeItem("purchases", { id: "quote:q1", quoteId: "q1", bookingId: "b1", jobId: "j1", warrantyId: "w1", labelEn: "PPF", labelAr: "حماية", genericInvoiceId: "inv1", quantity: 2, amount: { minor: 250000, currency: "SAR" }, purchasedOn: "2026-11-01", status: "delivered" }, env);
     expect(purchase).toMatchObject({ type: "quote", id: "q1", label: "PPF", amount: { minor: 250000, currency: "SAR" }, domain: "purchase" });
-    expect(purchase?.links?.map((link) => link.type)).toEqual(["booking", "job", "warranty"]);
+    expect(purchase?.links?.map((link) => link.type)).toEqual(["booking", "job", "warranty", "invoice"]);
     expect(describeItem("purchases", { id: "job:j2", jobId: "j2", labelEn: "Tint", purchasedOn: "2026-10-01", status: "delivered" }, env)).toMatchObject({ type: "job", amount: null });
     expect(describeItem("customRequests", { id: "r1", title: "Roof film", status: "accepted", quotedPrice: { minor: 1000, currency: "EGP" } }, env)).toMatchObject({ type: "special-request", domain: "request", amount: { minor: 1000, currency: "EGP" } });
   });

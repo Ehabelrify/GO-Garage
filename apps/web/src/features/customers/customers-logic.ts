@@ -226,7 +226,7 @@ export function describeItem(section: SectionKey, raw: Record<string, unknown>, 
       const bookingId = str(raw.bookingId);
       if (bookingId) links.push({ type: "booking", id: bookingId });
       if (jobId && quoteId) links.push({ type: "job", id: jobId });
-      for (const [key, type] of [["warrantyId", "warranty"], ["invoiceId", "invoice"]] as const) { const value = str(raw[key]); if (value) links.push({ type, id: value }); }
+      for (const [key, type] of [["warrantyId", "warranty"], ["invoiceId", "invoice"], ["genericInvoiceId", "invoice"]] as const) { const value = str(raw[key]); if (value) links.push({ type, id: value }); }
       return {
         type: quoteId ? "quote" : jobId ? "job" : null, id: quoteId ?? jobId ?? id, label,
         subtitle: join(quantity, plate, shortDate(date, lang)), status: str(raw.status), domain: "purchase", date,
