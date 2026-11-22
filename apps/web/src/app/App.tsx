@@ -11,6 +11,7 @@ import { GlobalSearch } from "../shared/components/GlobalSearch";
 import { RecordProvider } from "../shared/components/RecordRef";
 import { ViewerProvider } from "../shared/viewer";
 import { ShortcutsHost } from "./ShortcutsHost";
+import { EmptyState } from "../shared/components/EmptyState";
 import { hasCapability } from "../shared/capabilities";
 import { useFullPrecision } from "../shared/preferences";
 import { buildRecordRegistry } from "./record-registry";
@@ -167,6 +168,17 @@ function ReadyWorkspace({
   const has = useMemo(() => (capability: string) => hasCapability(actor, capability as never), [actor]);
   const resolved = resolveWorkspacePage(actor.role, segment, has);
   const page = resolved?.page;
+  // P2T-015: a known page whose capability gate fails shows an explanation instead of a blank workspace.
+  const pageGates: Record<string, boolean> = {
+    catalogue: hasCapability(actor, "catalogue.manage"),
+    quotes: hasCapability(actor, "quotes.view") || hasCapability(actor, "quotes.manage"),
+    finance: hasCapability(actor, "finance.view"),
+    settings: actor.role === "owner",
+    customers: hasCapability(actor, "customers.read"),
+    warranties: actor.role !== "technician",
+    whatsapp: hasCapability(actor, "whatsapp.use"),
+  };
+  const pageBlocked = page !== undefined && page in pageGates && !pageGates[page];
   const menuPage = resolved?.menu;
   const navItems = navigationForRole(actor.role, has);
   const mobileNavItems = primaryNavigationForRole(actor.role, has);
@@ -272,6 +284,7 @@ function ReadyWorkspace({
         {page === "customers" && hasCapability(actor, "customers.read") && <RouteChunk loader={customersPage} lang={lang} pageProps={{ lang, t, state, notify }} />}
         {page === "warranties" && actor.role !== "technician" && <RouteChunk loader={warrantiesPage} lang={lang} pageProps={{ lang, t, state, notify }} />}
         {page === "whatsapp" && hasCapability(actor, "whatsapp.use") && <RouteChunk loader={whatsappPage} lang={lang} pageProps={{ lang, t, state, notify, branchName, role: actor.role }} />}
+        {pageBlocked && <EmptyState variant="error" title={t("You do not have access to this page", "ليس لديك صلاحية الوصول إلى هذه الصفحة")} text={t("Ask the owner to grant the permission, or go back to the overview.", "اطلب من المالك منح الصلاحية، أو ارجع إلى نظرة عامة.")} action={<Link className="btn" href="/workspace/overview">{t("Back to overview", "العودة إلى نظرة عامة")}</Link>} />}
       </main><IntakeHost lang={lang} actor={actor} state={state} notify={notify} /><ShortcutsHost lang={lang} allowedPages={navItems.map((item) => item.id)} canIntake={canOpenIntake(actor)} navigate={navigate} /></RecordProvider></ViewerProvider>
     </div>
 
