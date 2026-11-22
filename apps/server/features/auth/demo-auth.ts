@@ -221,3 +221,8 @@ export async function provisionDemoActor(accountId: string): Promise<GarageActor
   if (!selectedActor) throw new DemoAuthError("DEMO_ACCOUNT_UNAVAILABLE", "This demo account is unavailable.");
   return selectedActor;
 }
+
+/** True when either demo/role-widget flag is set, regardless of SESSION_SECRET (used for fail-closed startup checks). */
+export function isDemoAuthFlagged(env: NodeJS.ProcessEnv = process.env) {
+  return env.GARAGE_ROLE_WIDGET_ENABLED === "true" || env.GARAGE_DEMO_AUTH_ENABLED === "true";
+}

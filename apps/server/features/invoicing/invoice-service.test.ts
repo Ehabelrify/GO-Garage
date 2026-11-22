@@ -82,3 +82,85 @@ describe("invoice state", () => {
     expect(await service.autoGenerateInvoiceForDeliveredJob(client, "j1")).toBeNull();
   });
 });
+
+describe("payment finance event (P2T-003)", () => {
+  const invRow = { rows: [{ id: "i1", branch_id: "branch-a", customer_id: "c1", job_id: "j1", quote_id: null, status: "issued", revision: 3, currency: "EGP", total_minor: "1000", paid_minor: "0" }], rowCount: 1 };
+  const pay = { expectedRevision: 3, amountMinor: 400, method: "cash" as const, reference: "R1", receivedOn: "2026-11-21" };
+  const run = (definitions: unknown[]) => {
+    query.mockReset();
+    query.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      if (text.includes("FROM invoices i JOIN customers")) return invRow;
+      if (text.includes("commercial_policy_active")) return { rows: definitions, rowCount: definitions.length };
+      return { rows: [], rowCount: 0 };
+    });
+  };
+  const def = { policy_id: "fin-col", version: 2, value: { currency: "EGP", minorUnitExponent: 2, reportingTimezone: "Africa/Cairo", sourceKinds: ["collection"] } };
+  it("writes one collection event keyed by invoice and reference, in the same client", async () => {
+    run([def]);
+    await service.recordPayment(actor("owner"), "i1", pay).catch(() => undefined);
+    const inserts = query.mock.calls.filter((c) => String(c[0]).includes("INSERT INTO operational_money_events"));
+    expect(inserts).toHaveLength(1);
+    expect(String(inserts[0][0])).toContain("ON CONFLICT (environment_id, kind, source_method, source_reference) DO NOTHING");
+    expect(inserts[0][1]).toEqual(expect.arrayContaining([400, "EGP", 2, "2026-11-21", "Africa/Cairo", "i1:R1", "fin-col", 2]));
+    expect(query.mock.calls.some((c) => String(c[0]).includes("INSERT INTO invoice_payment_references"))).toBe(true);
+  });
+  it("refuses the payment when no attested finance definition exists", async () => {
+    run([]);
+    await expect(service.recordPayment(actor("owner"), "i1", pay)).rejects.toMatchObject({ status: 422, code: "FINANCE_DEFINITION_REQUIRED" });
+    expect(query.mock.calls.some((c) => String(c[0]).includes("INSERT INTO operational_money_events"))).toBe(false);
+  });
+  it("does not insert a second event for a duplicate reference", async () => {
+    run([def]);
+    query.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      if (text.includes("FROM invoices i JOIN customers")) return invRow;
+      if (text.includes("FROM invoice_payment_references")) return { rows: [{}], rowCount: 1 };
+      return { rows: [], rowCount: 0 };
+    });
+    await expect(service.recordPayment(actor("owner"), "i1", pay)).rejects.toMatchObject({ code: "DUPLICATE_REFERENCE" });
+    expect(query.mock.calls.some((c) => String(c[0]).includes("INSERT INTO operational_money_events"))).toBe(false);
+  });
+});
+
+describe("late transport sync (P2T-004)", () => {
+  const fee = (currency = "EGP") => ({ rows: [{ direction: "pickup", fee: { minor: 5000, currency } }], rowCount: 1 });
+  const setup = (status: string, transport = fee(), lines: unknown[] = [{ id: "l", position: 0, kind: "service", description_en: "Tint", description_ar: "", quantity: "1", unit_minor: "10000", discount_minor: "0", tax_minor: "0" }]) => {
+    query.mockReset();
+    query.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      if (text.includes("SELECT i.id FROM invoices i JOIN jobs")) return { rows: [{ id: "i1" }], rowCount: 1 };
+      if (text.includes("tax_rate_percent::text AS tax_rate_percent FROM invoices")) return { rows: [{ status, currency: "EGP", tax_rate_percent: null }], rowCount: 1 };
+      if (text.includes("FROM transport_requests")) return transport;
+      if (text.includes("FROM invoice_lines")) return { rows: lines, rowCount: lines.length };
+      return { rows: [], rowCount: 0 };
+    });
+  };
+  const wrote = () => query.mock.calls.some((c) => String(c[0]).includes("INSERT INTO invoice_lines"));
+  it("rebuilds a draft with the transport line and recomputed totals", async () => {
+    setup("draft");
+    const r = await service.syncInvoiceTransportForBooking({ query } as never, "b1");
+    expect(r).toEqual({ invoiceId: "i1", transportAdjustmentRequired: false, transportSynced: true });
+    const inserted = query.mock.calls.filter((c) => String(c[0]).includes("INSERT INTO invoice_lines")).map((c) => c[1][3]);
+    expect(inserted).toEqual(["service", "transport"]);
+    const totals = query.mock.calls.find((c) => String(c[0]).includes("UPDATE invoices SET subtotal_minor"));
+    expect(totals?.[1]).toEqual(["i1", 15000, 0, null, null]);
+  });
+  it("is a no-op when the draft already matches", async () => {
+    setup("draft", fee(), [
+      { id: "l", position: 0, kind: "service", description_en: "Tint", description_ar: "", quantity: "1", unit_minor: "10000", discount_minor: "0", tax_minor: "0" },
+      { id: "t", position: 1, kind: "transport", description_en: "Transport (pickup)", description_ar: "", quantity: "1", unit_minor: "5000", discount_minor: "0", tax_minor: null }]);
+    expect(await service.syncInvoiceTransportForBooking({ query } as never, "b1")).toMatchObject({ transportSynced: false, transportAdjustmentRequired: false });
+    expect(wrote()).toBe(false);
+  });
+  it("never rewrites an issued invoice and flags the adjustment", async () => {
+    setup("issued");
+    expect(await service.syncInvoiceTransportForBooking({ query } as never, "b1")).toMatchObject({ transportAdjustmentRequired: true, transportSynced: false });
+    expect(wrote()).toBe(false);
+  });
+  it("ignores a fee in a different currency", async () => {
+    setup("draft", fee("USD"));
+    expect(await service.syncInvoiceTransportForBooking({ query } as never, "b1")).toMatchObject({ transportAdjustmentRequired: false, transportSynced: false });
+    expect(wrote()).toBe(false);
+  });
+});

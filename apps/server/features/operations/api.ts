@@ -76,6 +76,13 @@ function routeError(res: Response, status: number, code: string, message: string
   return res.status(status).json({ code, message });
 }
 
+/** Fail-closed guard: sends 403 and returns true when the actor is a demo/role-preview session. */
+export function rejectDemoActor(res: Response, currentActor: { isDemo?: boolean }, message: string) {
+  if (!currentActor.isDemo) return false;
+  routeError(res, 403, "DEMO_ACTION_DISABLED", message);
+  return true;
+}
+
 function duplicatePlateError(res: Response, existing: { vehicleId: string; customerId: string; plate: string }) {
   return res.status(409).json({ code: "DUPLICATE_PLATE", message: "A vehicle with this plate already exists.", existingVehicle: { id: existing.vehicleId, customerId: existing.customerId, plate: existing.plate } });
 }
@@ -160,6 +167,7 @@ router.get("/bootstrap", async (req, res) => {
 router.patch("/settings", async (req, res) => {
   const currentActor = actor(req);
   if (!canManageSettings(currentActor)) return forbidden(res);
+  if (rejectDemoActor(res, currentActor, "Settings cannot be changed in a temporary demo session.")) return;
   const parsed = z.object({
     settingId: z.string().min(1),
     scopeKey: z.string().min(1),
@@ -352,6 +360,7 @@ router.get("/availability/config/:branchId",async(req,res)=>{
 });
 router.put("/availability/config/:branchId",async(req,res)=>{
   const current=actor(req);if(current.role!=="owner")return forbidden(res);
+  if(rejectDemoActor(res,current,"Availability configuration cannot be changed in a temporary demo session."))return;
   const parsed=availabilityConfigSchema.safeParse(req.body);
   if(!parsed.success)return routeError(res,400,"INVALID_AVAILABILITY_CONFIG","Complete the branch calendar and capacity configuration.");
   const data=parsed.data;
@@ -489,10 +498,11 @@ router.patch("/bookings/:bookingId/cancel", async (req, res) => {
   const currentActor = actor(req);
   const suppliedReason = z.string().trim().min(1).max(300).safeParse(req.body?.reason);
   if (!canManageBookings(currentActor)) return forbidden(res);
+  if (rejectDemoActor(res, currentActor, "Bookings cannot be cancelled in a temporary demo session.")) return;
   const commercialLink=await pool.query("SELECT 1 FROM promotion_reservations WHERE booking_id=$1 AND status IN ('scheduled','redeemed')",[req.params.bookingId]);
   if(commercialLink.rowCount)return routeError(res,409,"RESERVATION_CANCELLATION_REQUIRED","Cancel the linked reservation through its authorized correction flow.");
   const confirmed=await pool.query<{status:string}>("SELECT status FROM bookings WHERE id=$1",[req.params.bookingId]);
-  if(confirmed.rows[0]?.status==="confirmed"){
+  if(confirmed.rows[0]?.status==="confirmed"||(confirmed.rows[0]?.status==="cancelled"&&req.get("Idempotency-Key"))){
     const parsed=z.object({reason:z.string().trim().min(1)}).safeParse(req.body);
     if(!parsed.success)return routeError(res,400,"INVALID_CANCELLATION","A cancellation reason is required.");
     const result=await withTransaction(client=>cancelConfirmedBooking(client,{kind:"staff",userId:currentActor.userId},{bookingId:req.params.bookingId,idempotencyKey:req.get("Idempotency-Key")||`cancel:${req.params.bookingId}`,reason:parsed.data.reason}));
@@ -633,6 +643,7 @@ router.patch("/jobs/:jobId/stage", async (req, res) => {
 router.patch("/jobs/:jobId/assignment", async (req, res) => {
   const currentActor = actor(req);
   if (!["owner", "branch-manager"].includes(currentActor.role)) return forbidden(res);
+  if (rejectDemoActor(res, currentActor, "Assignments cannot be changed in a temporary demo session.")) return;
   const parsed = z.object({ technicianUserId: z.string().min(1) }).safeParse(req.body);
   if (!parsed.success) return routeError(res, 400, "INVALID_ASSIGNMENT", "Choose a technician.");
   const result = await withTransaction(async (client) => {

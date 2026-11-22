@@ -159,24 +159,70 @@ async function buildDraftLines(client: Runner, job: JobContext): Promise<{ lines
     lines.push({ kind: "service", descriptionEn: job.serviceEn, descriptionAr: job.serviceAr, quantity: 1, unitMinor: null, discountMinor: 0, taxMinor: null });
     notes.push("No accepted quote: the price must be entered before issuing.");
   }
+  const transport = await buildTransportLines(client, job.bookingId, currency);
+  lines.push(...transport.lines);
+  notes.push(...transport.notes);
+  return { lines, currency, notes };
+}
+
+/** Completed transport fees as invoice lines, in a fixed (direction) order so rebuilding is deterministic. */
+async function buildTransportLines(client: Runner, bookingId: string, currency: string): Promise<{ lines: LineInput[]; notes: string[] }> {
+  const lines: LineInput[] = [];
+  const notes: string[] = [];
   const transport = await client.query<{ direction: string; fee: { minor: number; currency: string } | null }>(
-    "SELECT direction, fee FROM transport_requests WHERE booking_id = $1 AND environment_id = $2 AND status = 'completed' ORDER BY direction", [job.bookingId, commercialContext.environmentId]);
+    "SELECT direction, fee FROM transport_requests WHERE booking_id = $1 AND environment_id = $2 AND status = 'completed' ORDER BY direction", [bookingId, commercialContext.environmentId]);
   for (const row of transport.rows) {
     if (!row.fee) continue;
     if (row.fee.currency !== currency) { notes.push(`A ${row.direction} transport fee in ${row.fee.currency} was not added because the invoice is in ${currency}.`); continue; }
     lines.push({ kind: "transport", descriptionEn: `Transport (${row.direction})`, descriptionAr: row.direction === "pickup" ? "نقل (استلام)" : row.direction === "return" ? "نقل (تسليم)" : "نقل", quantity: 1, unitMinor: row.fee.minor, discountMinor: 0, taxMinor: null });
   }
-  return { lines, currency, notes };
+  return { lines, notes };
+}
+
+const sameLine = (a: LineInput, b: LineInput) => a.descriptionEn === b.descriptionEn && a.unitMinor === b.unitMinor && a.quantity === b.quantity;
+
+/**
+ * Brings the transport lines of an existing invoice in line with completed transport requests (P2T-004).
+ * A DRAFT is rebuilt deterministically (non-transport lines untouched, tax rate re-applied, totals recomputed).
+ * An ISSUED/paid/void invoice is never rewritten; `transportAdjustmentRequired` tells the caller a fee is not on it.
+ */
+async function syncTransportLines(client: Runner, invoiceId: string, bookingId: string, actorId: string | null): Promise<{ transportAdjustmentRequired: boolean; transportSynced: boolean }> {
+  const inv = (await client.query<{ status: InvoiceStatus; currency: string; tax_rate_percent: string | null }>(
+    "SELECT status, currency, tax_rate_percent::text AS tax_rate_percent FROM invoices WHERE id = $1 FOR UPDATE", [invoiceId])).rows[0];
+  if (!inv) return { transportAdjustmentRequired: false, transportSynced: false };
+  const wanted = (await buildTransportLines(client, bookingId, inv.currency)).lines;
+  const current = (await client.query<LineRow>(LINES, [invoiceId])).rows.map(toLine);
+  const have = current.filter((l) => l.kind === "transport");
+  const differs = wanted.length !== have.length || wanted.some((w, i) => !sameLine(w, have[i]));
+  if (!differs) return { transportAdjustmentRequired: false, transportSynced: false };
+  if (inv.status !== "draft") return { transportAdjustmentRequired: true, transportSynced: false };
+  const kept: LineInput[] = current.filter((l) => l.kind !== "transport")
+    .map(({ kind, descriptionEn, descriptionAr, quantity, unitMinor, discountMinor, taxMinor }) => ({ kind, descriptionEn, descriptionAr, quantity, unitMinor, discountMinor, taxMinor }));
+  const rate = inv.tax_rate_percent === null ? null : Number(inv.tax_rate_percent);
+  const lines = applyTaxRate([...kept, ...wanted], rate);
+  await writeLines(client, invoiceId, lines);
+  const totals = await writeTotals(client, invoiceId, lines);
+  await client.query("UPDATE invoices SET revision = revision + 1, updated_at = now() WHERE id = $1", [invoiceId]);
+  await appendEvent(client, invoiceId, "edited", "draft", "draft", actorId, "Transport fees updated from completed transport", { currency: inv.currency, lineCount: lines.length, ...totals });
+  return { transportAdjustmentRequired: false, transportSynced: true };
+}
+
+/** For the transport-completion path: refresh the job's invoice after a transport completes. Call inside the completing transaction. */
+export async function syncInvoiceTransportForBooking(client: PoolClient, bookingId: string): Promise<{ invoiceId: string; transportAdjustmentRequired: boolean; transportSynced: boolean } | null> {
+  const found = await client.query<{ id: string }>(
+    "SELECT i.id FROM invoices i JOIN jobs j ON j.id = i.job_id WHERE j.booking_id = $1 AND i.environment_id = $2 AND i.idempotency_key = 'job:' || j.id", [bookingId, commercialContext.environmentId]);
+  if (!found.rows[0]) return null;
+  return { invoiceId: found.rows[0].id, ...(await syncTransportLines(client, found.rows[0].id, bookingId, null)) };
 }
 
 /**
  * Creates the draft for a job exactly once. The idempotency key is `job:<jobId>`, so repeated delivery,
  * retries and the manual button all return the same invoice. Never throws on a duplicate.
  */
-async function generateForContext(client: Runner, job: JobContext, actorId: string | null): Promise<{ id: string; created: boolean }> {
+async function generateForContext(client: Runner, job: JobContext, actorId: string | null): Promise<{ id: string; created: boolean; transportAdjustmentRequired?: boolean }> {
   const key = `job:${job.jobId}`;
   const existing = await client.query<{ id: string }>("SELECT id FROM invoices WHERE environment_id = $1 AND idempotency_key = $2", [commercialContext.environmentId, key]);
-  if (existing.rows[0]) return { id: existing.rows[0].id, created: false };
+  if (existing.rows[0]) return { id: existing.rows[0].id, created: false, ...(await syncTransportLines(client, existing.rows[0].id, job.bookingId, actorId)) };
   const { lines, currency, notes } = await buildDraftLines(client, job);
   const warranty = await client.query<{ id: string }>("SELECT id FROM warranties WHERE job_id = $1 AND status <> 'void' ORDER BY issued_at LIMIT 1", [job.jobId]);
   const id = `inv-${randomUUID()}`;
@@ -213,14 +259,14 @@ export async function autoGenerateInvoiceForDeliveredJob(client: PoolClient, job
 
 export async function generateInvoice(actor: GarageActor, by: { jobId?: string; bookingId?: string }) {
   requireWriter(actor);
-  const id = await withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     const job = await loadJobContext(client, by);
     if (!job) return fail(404, "JOB_NOT_FOUND", "No job exists for that record yet.");
     if (actor.role !== "owner" && !actor.branchIds.includes(job.branchId)) return fail(403, "FORBIDDEN", "You cannot invoice a job in this branch.");
     if (!["ready", "delivered"].includes(job.stage)) return fail(409, "JOB_NOT_COMPLETE", "An invoice can be generated once the job is ready or delivered.");
-    return (await generateForContext(client, job, actor.userId)).id;
+    return generateForContext(client, job, actor.userId);
   });
-  return getInvoice(actor, id);
+  return { ...(await getInvoice(actor, result.id)), transportAdjustmentRequired: result.transportAdjustmentRequired ?? false };
 }
 
 /* ------------------------------ edits ------------------------------ */
@@ -270,16 +316,45 @@ export const issueInvoice = (actor: GarageActor, id: string, expectedRevision: n
     await appendEvent(client, id, "issued", "draft", "issued", actor.userId, "", { number, currency: row.currency, ...totals });
   });
 
-export const recordPayment = (actor: GarageActor, id: string, input: PaymentInput) =>
+/**
+ * Writes the finance `collection` event for a payment inside the payment's own transaction (P2T-003).
+ * Idempotent on (environment, kind, source_method, source_reference); the reference is scoped by invoice id.
+ * Needs an approved, attested finance definition for collections in the invoice currency; without one the
+ * payment is refused and nothing is written (the transaction rolls back).
+ */
+async function recordCollectionEvent(client: Runner, actor: GarageActor, row: InvoiceRow, paymentId: string, input: PaymentInput) {
+  const defs = await client.query<{ policy_id: string; version: number; value: { currency: string; minorUnitExponent: number; reportingTimezone: string; sourceKinds: string[] } }>(
+    `SELECT v.policy_id, v.version, v.value FROM commercial_policy_active a JOIN commercial_policy_versions v USING (policy_id, version)
+     JOIN finance_definition_attestations t ON t.environment_id = $1 AND t.definition_id = v.policy_id AND t.definition_version = v.version
+       AND t.currency = v.value->>'currency' AND t.minor_unit_exponent = (v.value->>'minorUnitExponent')::int
+     WHERE v.family = 'finance-definition' AND v.state = 'approved' AND v.approved_by IS NOT NULL AND v.evidence_ref IS NOT NULL
+       AND v.value->>'metric' = 'collections' AND v.value->>'currency' = $2 ORDER BY v.version DESC`,
+    [commercialContext.environmentId, row.currency]);
+  const def = defs.rows.find((d) => Array.isArray(d.value.sourceKinds) && d.value.sourceKinds.includes("collection")
+    && Number.isInteger(d.value.minorUnitExponent) && typeof d.value.reportingTimezone === "string" && d.value.reportingTimezone.trim());
+  if (!def) return fail(422, "FINANCE_DEFINITION_REQUIRED", `An approved, attested finance definition for ${row.currency} collections is required before payments can be recorded.`);
+  await client.query(
+    `INSERT INTO operational_money_events (id, environment_id, kind, amount_minor, currency, minor_unit_exponent, effective_at, branch_id, customer_id, job_id, quote_id,
+       source_method, source_reference, definition_id, definition_version, reason, evidence_ref, recorded_by)
+     VALUES ($1,$2,'collection',$3,$4,$5,($6::date::timestamp AT TIME ZONE $7),$8,$9,$10,$11,'invoice-payment',$12,$13,$14,$15,$16,$17)
+     ON CONFLICT (environment_id, kind, source_method, source_reference) DO NOTHING`,
+    [`mev-${randomUUID()}`, commercialContext.environmentId, input.amountMinor, row.currency, def.value.minorUnitExponent, input.receivedOn, def.value.reportingTimezone,
+      row.branch_id, row.customer_id, row.job_id, row.quote_id, `${row.id}:${input.reference}`, def.policy_id, def.version,
+      `Invoice payment ${input.reference}`, `private:invoice-payment/${paymentId}`, actor.userId]);
+}
+
+export const recordPayment =(actor: GarageActor, id: string, input: PaymentInput) =>
   mutate(actor, id, input.expectedRevision, "payment", canWrite, async (client, row) => {
     const total = Number(row.total_minor);
     const paid = Number(row.paid_minor) + input.amountMinor;
     if (paid > total) return fail(409, "OVERPAYMENT", "The payment is larger than the remaining balance.");
     const dup = await client.query("SELECT 1 FROM invoice_payment_references WHERE invoice_id = $1 AND reference = $2", [id, input.reference]);
     if (dup.rowCount) return fail(409, "DUPLICATE_REFERENCE", "This payment reference was already recorded.");
+    const paymentId = `invpay-${randomUUID()}`;
     await client.query(
       `INSERT INTO invoice_payment_references (id, invoice_id, amount_minor, currency, method, reference, received_on, recorded_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [`invpay-${randomUUID()}`, id, input.amountMinor, row.currency, input.method, input.reference, input.receivedOn, actor.userId]);
+      [paymentId, id, input.amountMinor, row.currency, input.method, input.reference, input.receivedOn, actor.userId]);
+    await recordCollectionEvent(client, actor, row, paymentId, input);
     const next = paymentStatus(total, paid);
     await client.query("UPDATE invoices SET paid_minor = $2, status = $3 WHERE id = $1", [id, paid, next]);
     await appendEvent(client, id, "payment-recorded", row.status, next, actor.userId, input.reference, { amountMinor: input.amountMinor, method: input.method, currency: row.currency });
