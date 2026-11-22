@@ -11,10 +11,11 @@ export const sameDenomination = (a: FinancialSourceRow["amount"], b: FinancialSo
  */
 export function computeOutstanding(quoted: FinancialSourceRow[], events: FinancialSourceRow[], metricId: FinancialSourceRow["metricId"]) {
   const unreconciled: FinancialSourceRow[] = [];
+  const byQuote = new Map<FinancialSourceRow["relatedQuoteId"], FinancialSourceRow[]>();
+  for (const event of events) { const group = byQuote.get(event.relatedQuoteId); if (group) group.push(event); else byQuote.set(event.relatedQuoteId, [event]); }
   const rows = quoted.map((quote) => {
     let applied = 0;
-    for (const event of events) {
-      if (event.relatedQuoteId !== quote.relatedQuoteId) continue;
+    for (const event of byQuote.get(quote.relatedQuoteId) ?? []) {
       if (!sameDenomination(quote.amount, event.amount)) { unreconciled.push(event); continue; }
       applied += event.amount.minor;
     }
