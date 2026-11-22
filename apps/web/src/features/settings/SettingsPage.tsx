@@ -14,6 +14,8 @@ import "./settings.css";
 
 const PolicyManager = lazy(() => import("../warranty/PolicyManager").then((m) => ({ default: m.PolicyManager })));
 const StaffPage = lazy(() => import("../staff/StaffPage").then((m) => ({ default: m.StaffPage })));
+const ActivityLogTab = lazy(() => import("../audit/ActivityLogTab").then((m) => ({ default: m.ActivityLogTab })));
+const DailySummaryTab = lazy(() => import("../audit/DailySummaryTab").then((m) => ({ default: m.DailySummaryTab })));
 
 const ruleHelp: Record<string, { en: string; ar: string }> = {
   "booking-confirmation": { en: "Who confirms a booking once capacity is checked.", ar: "مين بيأكد الحجز بعد فحص السعة." },
@@ -91,6 +93,8 @@ export function SettingsPage({ lang, t, state, notify, branchName }: BranchPageP
     { id: "policies", label: t("Policies", "السياسات"), hidden: !isOwner },
     { id: "warranty", label: t("Warranty", "الضمان"), hidden: !isOwner },
     { id: "access", label: t("Staff & permissions", "الفريق والصلاحيات"), hidden: !isOwner },
+    { id: "activity", label: t("Activity log", "سجل النشاط"), hidden: !isOwner },
+    { id: "summary", label: t("Daily summary", "ملخص اليوم"), hidden: !isOwner },
   ];
   const activeTab = tabs.some((item) => item.id === tab && !item.hidden) ? tab : "general";
   const prefix = "settings";
@@ -215,6 +219,18 @@ export function SettingsPage({ lang, t, state, notify, branchName }: BranchPageP
     <TabPanel idPrefix={prefix} id="access" active={activeTab === "access" && isOwner}>
       <Suspense fallback={<Skeleton rows={5} />}>
         <StaffPage embedded lang={lang} t={t} state={state} notify={notify} />
+      </Suspense>
+    </TabPanel>
+
+    <TabPanel idPrefix={prefix} id="activity" active={activeTab === "activity" && isOwner}>
+      <Suspense fallback={<Skeleton rows={5} />}>
+        <ActivityLogTab lang={lang} branches={state.branches.map((branch) => ({ id: branch.id, label: branchName(branch.id) }))} />
+      </Suspense>
+    </TabPanel>
+
+    <TabPanel idPrefix={prefix} id="summary" active={activeTab === "summary" && isOwner}>
+      <Suspense fallback={<Skeleton rows={5} />}>
+        <DailySummaryTab lang={lang} notify={notify} branches={state.branches.map((branch) => ({ id: branch.id, label: branchName(branch.id) }))} />
       </Suspense>
     </TabPanel>
   </>;
