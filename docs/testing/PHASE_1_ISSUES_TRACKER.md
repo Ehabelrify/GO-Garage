@@ -4,7 +4,7 @@
 **Purpose:** Single working tracker for Phase 1 defects, investigation, implementation handoff, and retesting.  
 **Initial intake:** 25 entries: 7 code-review findings, 15 UI-test findings, and 3 engineering follow-ups.  
 **Current intake:** 62 entries (+ P1-061, P1-062 recorded 22 November 2026; 44 below plus 6 hardening/UI entries P1-045–P1-050, 5 Wave 2.5 entries P1-051–P1-055 and 2 Wave 2.6 quote entries P1-056–P1-057 2 Wave 2.6 invoice entries P1-058–P1-059 and the Wave 2.7 plate entry P1-060 recorded 21 November 2026): the original 25, 6 user-feedback/discovery follow-ups, 6 cross-industry research improvements, and 7 approved business/product additions recorded on 16 November 2026.
-**Next available ID:** `P1-068` (P1-063–P1-065 are the Wave 5 server entries, P1-066–P1-067 the Wave 5 web entries)
+**Next available ID:** `P1-079` (P1-077–P1-078 are the U-D list tools: saved views, bulk actions, shortcuts, CSV; P1-063–P1-065 are the Wave 5 server entries, P1-066–P1-067 the Wave 5 web entries; P1-068–P1-069 reminders and follow-ups; P1-070–P1-076 other Wave 6 packages, where P1-072–P1-073 are reserved for the audit-log package: check the index before using them)
 **Current ownership:** 2 entries remain Open/Unassigned; 62 entries are Ready for retest after implementation (counting the Wave 5 entries P1-063–P1-067). Ready entries are P1-001–P1-029, P1-032–P1-067. No runtime retests were performed; P1-045–P1-060 were additionally never run against a database (migrations 0026-0030, 0032 and 0033 and the seed are unapplied).
 
 ## Sources and application context
@@ -109,6 +109,17 @@ Garage OS uses React/Vite, Express, PostgreSQL, Clerk, and `@garage/domain`. It 
 | [P1-065](#p1-065) | Wave 5 (22 Nov 2026) | POST /api/intake: customer, vehicle, WhatsApp link and draft quote / booking / customer only in one transaction | High | P1 | Ready for retest | Source |
 | [P1-066](#p1-066) | Wave 5 (22 Nov 2026) | Quick-intake side panel (top-bar New, N key): customer, car, one catalogue, quote / booking / customer only | High | P1 | Ready for retest | Source |
 | [P1-067](#p1-067) | Wave 5 (22 Nov 2026) | WhatsApp inbox: unsaved numbers as New contact (phone), thread banner, create or link customer | High | P1 | Ready for retest | Source |
+| [P1-068](#p1-068) | Wave 6 (22 Nov 2026) | Reminders and follow-ups server: rules, queue, idempotent runDueReminders, consent skip, simulated send (migration 0034) | High | P1 | Ready for retest | Source |
+| [P1-069](#p1-069) | Wave 6 (22 Nov 2026) | Bookings > Follow-ups tab: queue with send now / skip / snooze, owner rules panel with preview | High | P1 | Ready for retest | Source |
+| [P1-074](#p1-074) | Wave 6 (22 Nov 2026) | Technician job extras server: notes, checklist with ready gate, photos, issue reports (migration 0037) | High | P1 | Ready for retest | Source |
+| [P1-075](#p1-075) | Wave 6 (22 Nov 2026) | Technician job view: checklist, notes, photos, Report an issue, Issues badge | High | P1 | Ready for retest | Source |
+| [P1-076](#p1-076) | Wave 6 (22 Nov 2026) | Printable warranty card with QR (card and A5, EN/AR, single and batch, reprint audit) | Medium | P2 | Ready for retest | Source |
+| [P1-077](#p1-077) | Wave 6 (22 Nov 2026) | List tools: per-user saved Views in FilterBar, opt-in bulk selection in DataTable (confirm bookings, snooze/skip follow-ups, print warranty cards), Export CSV | Medium | P2 | Ready for retest | Source |
+| [P1-078](#p1-078) | Wave 6 (22 Nov 2026) | Keyboard shortcuts: G then letter go-to (role-aware), ? help dialog, J/K/X rows, Esc | Low | P3 | Ready for retest | Source |
+| [P1-070](#p1-070) | Wave 6 (22 Nov 2026) | Duplicate customer detection and merge server: scoring, preview, one-transaction merge, undo log (migration 0035) | High | P1 | Ready for retest |
+| [P1-071](#p1-071) | Wave 6 (22 Nov 2026) | Customers > Duplicates tab, merge drawer with reason dialog, recent merges with undo | High | P1 | Ready for retest |
+| [P1-072](#p1-072) | Wave 6 (22 Nov 2026) | Owner activity log: GET /api/audit unified timeline over the append-only audit tables, keyset paging, filters, streamed CSV export (migration 0036 indexes) | Medium | P2 | Ready for retest | Engineering |
+| [P1-073](#p1-073) | Wave 6 (22 Nov 2026) | Settings > Activity log and Daily summary tabs; GET /api/reports/daily-summary with previous-day deltas, print and copy as text | Medium | P2 | Ready for retest | Engineering |
 
 ## Technical issue details
 
@@ -1533,6 +1544,143 @@ The user approved all recommendations and valuable additions derived from the Go
 
 **Retest:** Not performed; no database or browser; depends on the server projection fields and link endpoint. Not production-ready.
 
+### P1-068 — Reminders and follow-ups (server)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; Wave 6 package U-A.
+**Area:** `apps/server/features/reminders/{reminder-logic,reminder-service,reminder-routes}.ts`, migration `0034_reminders_and_followups.sql`, mount in `operations/api.ts`, [AUTOMATIONS](../engineering/AUTOMATIONS.md) section 9.
+**Evidence:** Mocked-pool and pure unit tests only (`reminders.test.ts`): due calculation, dedupe, consent skip, template rendering, authorization. Migration never applied.
+
+**Acceptance:** Six rules (booking day before and morning of, ready for pickup, warranty ending 30 days before a fixed expiry and never for lifetime, offered quote unanswered after N days, post-service check-in) create queue rows through the idempotent `runDueReminders(now)`; a rerun creates nothing new (unique `(environment_id, dedupe_key)`); a customer without active service consent gets a `skipped` row with reason `no-consent`; text is rendered in the customer's language; stale rows (booking moved or cancelled, job no longer ready, quote answered) are cancelled; delivery is simulated only (`sent-simulated`, never a provider call). `GET /api/reminders`, `GET/PUT /api/reminders/rules`, `POST /api/reminders/run|rules/preview|:id/send|skip|snooze`. View and act: `bookings.manage`; rules: owner; run: owner or branch manager; demo identities read-only.
+
+**Retest:** Not performed; needs a database. Apply 0034 to a disposable database, call `POST /api/reminders/run` twice and confirm the second summary shows `generated: 0`.
+
+### P1-069 — Follow-ups tab and rules panel (web)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; Wave 6 package U-A.
+**Area:** `apps/web/src/features/reminders/*`, tab added to `features/bookings/BookingsAndTransport.tsx`.
+**Evidence:** Typecheck and build only.
+
+**Acceptance:** Bookings has a Follow-ups tab (`?tab=followups`, `bookings.manage`): DataTable with type and status filters (default: to do), customer / car / booking / warranty / quote `RecordRef`s, a visible skip reason, Send now (simulated, says nothing was delivered), Skip, Snooze, Open conversation, and "Check now" for owner and manager. The owner also sees the rules panel: enable, lead time, auto-mark-as-sent, bilingual template text with placeholders and a preview.
+
+**Retest:** Not performed; no browser. Check the tab at 360, 768 and 1280 in EN and AR as Owner (rules panel visible), manager and receptionist (no rules panel, no Check now for the receptionist); technician has no Bookings page.
+
+### P1-074 — Technician job extras (server)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; Wave 6 package U-E.
+**Area:** Workshop, `/api/jobs/:id/notes|checklist|photos|issues|extras`, `/api/jobs/issues/open`.
+**Evidence:** Mocked-pool route tests (access, demo, validation, gate, upload) and pure rule tests; typecheck and build.
+
+**Acceptance:** Per-job internal notes, a per-service checklist and photos (before/after/damage, private storage, content sniffing, 8 MB, JPG/PNG/WebP only) and issue reports (damage found, part missing, customer request, delay) are available to the assigned technician and to owner/branch managers of the branch only; every write is audit logged; demo identities get DEMO_ACTION_DISABLED. Moving a job to `ready` through the existing PATCH `/api/jobs/:jobId/stage` returns 409 `CHECKLIST_INCOMPLETE` while mandatory items are open; owner or branch manager may resend with `overrideReason` (audited as `ready-gate-override`). Without configured storage photos answer 503 `PRIVATE_STORAGE_UNAVAILABLE` and the rest still works.
+
+**Implementation — 2026-11-22:** migration `0037_technician_job_extras.sql` (job_notes, job_checklist_templates seeded for inspection, tint, audio, ceramic, full-ppf and a generic default, job_checklist_items copied per job on first view, job_photos, job_issues, job_audit_events), `features/workshop-tech/` (tech-rules, tech-routes, tests), one import and one mount in `operations/api.ts`. Checklist steps are suggestions, not an approved procedure.
+
+**Retest:** Not performed; no database. Apply 0037 on a throwaway database, open a technician job, tick items, try Ready, upload a photo with and without storage.
+
+### P1-075 — Technician job view extras (web)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; Wave 6 package U-E.
+**Area:** Workshop drawer (technician and manager), page header.
+**Evidence:** Typecheck, build, full test run; no browser.
+
+**Acceptance:** The job drawer shows Report an issue (56 px), a grouped checklist with 52 px tick rows, notes, photos (camera capture) and issues. Mark ready shows the open mandatory steps; managers can override with a reason. A red Issues badge with the open count shows in the Workshop header. Clear states for storage not configured, closed jobs and demo sessions.
+
+**Implementation — 2026-11-22:** `features/workshop/JobExtras.tsx`, `tech-api.ts`, `WorkshopPage.tsx` (ready gate dialog, badge), `WorkshopPage.css`.
+
+**Retest:** Not performed; no browser. Check Technician at 360 px, Branch manager at 768 px, Arabic RTL.
+
+### P1-076 — Printable warranty card with QR (web)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; Wave 6 package U-F.
+**Area:** Warranties (Coverage tab, QR cards tab).
+**Evidence:** Unit tests for the card model (fixed vs lifetime wording, QR URL, missing verification); typecheck and build.
+
+**Acceptance:** A coverage drawer has a Warranty card button that opens a DetailDrawer preview (credit-card 85.6 x 54 mm or A5 certificate, front and back, EN/AR with RTL). The Coverage list can select rows and print several cards. The card shows business, warranty number, customer, plate and make/model, product, fixed expiry or the lifetime wording exactly as issued, branch and issue date. The QR resolves through the existing public verification URL and appears only when public verification is enabled and a code was prepared in this browser session (the server keeps only a hash); otherwise the card prints with a note and no QR. Printing a card with a live QR first records a print or reprint event (`POST /api/warranties/:id/verification-token/print`).
+
+**Implementation — 2026-11-22:** `features/warranty/warranty-card.ts` (+ test), `WarrantyCard.tsx`, `warranty-card.css`, `CoverageTab.tsx`, `QrTab.tsx` (remembers the freshly prepared token in memory). No server change, no migration. Back side claim wording is a placeholder until confirmed.
+
+**Retest:** Not performed; no browser. Check print dialog page size for both variants, Arabic RTL, QR scan and multi-card print.
+
+### P1-077 — Saved views, bulk actions and CSV export on big lists (web)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; Wave 6 package U-D.
+**Area:** Shared DataTable and FilterBar; Bookings, Customers, Quotes, Invoices, Follow-ups, Warranty coverage.
+**Evidence:** Unit tests (`shared/list-tools.test.ts`) for selection logic, saved-view storage, CSV escaping; typecheck and build.
+
+**Acceptance:** FilterBar `viewsId` adds a per-user, per-list Views menu (save current search, filters, sort and page size under a name, apply, rename, delete with confirmation, set or clear default, Reset), kept in localStorage behind try/catch, default view applied on first load only when the URL carries no list state. DataTable `bulk` adds a checkbox column (also in the card layout), select page, select all matching, a count bar with an actions slot, J/K to move and X to toggle; it is only passed to viewers who may write and never to demo identities. Adopted with existing endpoints only: confirm several pending bookings (`bookings.manage`), snooze 1 day or skip several follow-ups (`canAct`), print several warranty cards (replaces the old ad-hoc checkboxes), each through `BulkRunDialog` (ConfirmDialog, one request per item, per-item result list with human labels). DataTable `exportName` plus `csv`/`csvMoney` on columns adds Export CSV (this page or all loaded rows): BOM built from a code point, formula-injection guard, Latin digits, money as plain numbers with a currency column, localised headers, hidden for technicians. Owner archive/restore bulk was not added: `owner-records` only has per-item POSTs and a page for it does not exist yet.
+
+**Implementation — 2026-11-22:** `shared/selection.ts`, `csv.ts`, `saved-views.ts`, `list-state.ts`, `viewer.tsx`, `components/DataTable.tsx`, `FilterBar.tsx`, `SavedViews.tsx`, `BulkRunDialog.tsx`, styles in `components.css`; adoption in BookingsPage, CustomersPage, QuoteWorkspace, InvoicesPanel, RemindersPanel, CoverageTab. No server change, no migration.
+
+**Retest:** Not performed; no browser. Check keyboard use of checkboxes, card layout at 360 px, Arabic RTL, saved view round trip after reload, CSV opened in Excel (Arabic names, no formulas run).
+
+### P1-078 — Keyboard shortcuts and help dialog (web)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; Wave 6 package U-D.
+**Area:** App shell (`app/ShortcutsHost.tsx`), shared `shortcuts.ts`.
+**Evidence:** Unit tests for key normalisation, typing-target guard, G-then-letter sequence timeout, role-aware bindings, platform labels.
+
+**Acceptance:** G then O/I/B/W/C/Q/R/F/S goes to the page when the viewer can open it (bindings come from `navigationForRole`); `?` opens a bilingual shortcuts dialog with Ctrl or Cmd labels; J/K/X work in DataTable; `/`, Ctrl/Cmd+K and N stay with GlobalSearch and IntakeHost; Esc closes drawers and dialogs (existing focus trap). Ignored while typing and while a modal is open; letters read from the physical key so an Arabic layout works.
+
+**Implementation — 2026-11-22:** `shared/shortcuts.ts`, `app/ShortcutsHost.tsx`, `app/App.tsx` (ViewerProvider and ShortcutsHost mounted). No server change, no migration.
+
+**Retest:** Not performed; no browser.
+
+### P1-070 — Duplicate customer detection and merge (server)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; Wave 6 package U-B.
+**Area:** Customers (owner-only), `apps/server/features/customer-merge/*`.
+**Evidence:** Mocked-pool tests for scoring, preview counts, transaction ordering and undo refusal; typecheck.
+
+**Acceptance:** `GET /api/customers/duplicates` ranks pairs by confidence with reasons (same phone, same plate on two customers, near-identical name in a shared branch). `POST /api/customers/merge/preview` returns counts per table. `POST /api/customers/merge` (Owner / settings.manage, reason required, never demo) moves vehicles, bookings, quotes, reservations, allocations, benefits, transport, warranties and claims, invoices, special requests, WhatsApp conversations and contact links, and copies missing consents and branch links, in ONE transaction; plate collisions fold the vehicles (the merged-away vehicle is archived). The merged-away customer becomes an archived stub (`record_archives`, reason names the survivor), `owner_record_audit` gets a `merged` row, append-only history (quote versions, consent events, money events, invoice events, promotion events) is not rewritten. `POST /api/customers/merge/:id/undo` reverts from the stored move log within 30 days and refuses with 409 `UNDO_CONFLICT` (listing the rows) when any moved row changed since, when the survivor was merged away, or after the window. `GET /api/customers/merges` lists recent merges.
+
+**Implementation — 2026-11-22:** migration `0035_customer_merge.sql` (`customer_merges`, `customer_merge_moves`, audit actions `merged` and `merge-undone`, and the reservation, benefit and invoice immutability triggers relaxed ONLY for customer/vehicle columns while the transaction-local flag `garage.customer_merge` is on). Not applied anywhere.
+
+**Retest:** Not performed; no database. Run migration 0035 on a disposable database, merge a seeded pair, undo it, and check the trigger flag does not leak to other transactions.
+
+### P1-071 — Duplicates tab and merge drawer (web)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; Wave 6 package U-B.
+**Area:** Customers page, `apps/web/src/features/customers/{DuplicatesPanel,MergeDrawer,merge-api}`.
+**Evidence:** Typecheck and build only.
+
+**Acceptance:** Owner sees a Duplicates tab: ranked pairs with the reason chips and confidence, a Review drawer to pick the surviving customer (suggested by history), counts per table, a reason-required confirm dialog, then a list of recent merges with Undo (reason required, server explains conflicts). Hidden for non-owners; actions hidden for demo identities. EN/AR, tokens only.
+
+**Retest:** Not performed; no browser. Check the Duplicates tab at 360, 768 and 1280 in EN and AR as Owner; confirm it is absent for the manager.
+
+### P1-072 — Owner activity log and CSV export (server)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; Wave 6 package U-C.
+**Area:** `apps/server/features/audit/*`, migration `0036_audit_log_indexes.sql`.
+**Evidence:** Mocked-pool tests for the union shape (every arm exposes the same twelve columns, prefixed unique ids), filter binding, keyset paging, Owner-only access, CSV escaping and the row cap; typecheck.
+
+**Acceptance:** `GET /api/audit?from=&to=&actor=&kind=&entity=&q=&branchId=&cursor=&limit=` returns `{events, nextCursor}` newest first from one UNION ALL over setting, policy, catalogue, quote and acceptance, warranty (and QR), WhatsApp, job, owner-record, capacity, invoice, special-request, benefit, transport, reservation, customer-merge, money (and reversals), consent and inbox-access history. Owner or `settings.manage` only; other roles get 403 (branch scoping is implemented for a future opening). `GET /api/audit/actors` feeds the person filter. `GET /api/audit/export.csv` uses the same filters, streams in keyset batches with a UTF-8 BOM, neutralises cells starting with `=`, `+`, `-`, `@`, tab or CR, and stops at 10,000 rows with a closing note row. Dates are Cairo calendar days.
+
+**Implementation — 2026-11-22:** `audit-sources.ts` (union), `audit-service.ts`, `audit-routes.ts`, `audit-labels.ts`; one import and one `router.use(auditApiRouter)` line in `operations/api.ts`. Migration `0036` only adds time indexes (no table or column change). Known gaps: staff invitations, permission edits and removals, sign-ins and the simulated reminder outbox are not audited by the product, so they cannot appear.
+
+**Retest:** Not performed; no database. Run 0036, then open the log as Owner on a seeded database and check the union's query time with the full seed; export a month and open it in Excel (Arabic names, a cell starting with an equals sign).
+
+### P1-073 — Daily summary and Activity log tabs (web, plus summary endpoint)
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; Wave 6 package U-C.
+**Area:** Settings page (Owner tabs), `apps/web/src/features/audit/*`, `GET /api/reports/daily-summary`.
+**Evidence:** Unit tests for the summary maths (deltas, per-currency money, previous-day edges) and the text export; typecheck and build.
+
+**Acceptance:** Settings gains Owner-only tabs Activity log (filters: date range, type, person, branch, search; table with who, what, record via RecordRef, change summary, branch; drawer with the full event; Export CSV) and Daily summary (date picker, branch, KPI tiles with `Delta` against the day before, money per currency with `Amount`, Print through `DocumentSheet`, Copy as text). Figures are labelled honestly: bookings confirmed, no-show, jobs started and delivered come from job events (exact); bookings cancelled use the booking last-update time (approximate); open special requests, bookings awaiting review and WhatsApp awaiting reply are live counts, not for the chosen day; collections and refunds come only from recorded money events (reversed events excluded); invoice payments are shown separately and not added to collections.
+
+**Implementation — 2026-11-22:** `ActivityLogTab.tsx`, `DailySummaryTab.tsx`, `audit-logic.ts`, `audit-api.ts`, `audit.css`, surgical lazy tabs in `SettingsPage.tsx`. No other shared file changed.
+
+**Retest:** Not performed; no browser. Check Settings > Activity log and Daily summary as Owner at 360, 768 and 1280 in EN and AR; confirm the tabs are absent for the manager; print preview of the summary.
+
 ## Change log
 
 | Date | Change | Runtime verification |
@@ -1573,3 +1721,9 @@ The user approved all recommendations and valuable additions derived from the Go
 | 2026-11-22 | Recorded P1-061 (quotes.view / quotes.manage capabilities) and P1-062 (consent GET missing state, GET /api/promotions); no migration; advanced next ID to P1-063 | Source and mocked tests only; no database, no browser |
 | 2026-11-22 | Recorded P1-066 (quick-intake side panel) and P1-067 (WhatsApp new contacts, link banner), web side of Wave 5; next ID P1-068 (P1-063–P1-065 reserved for the server entries) | Source and unit tests only; no database, no browser, server endpoints unexercised |
 | 2026-11-22 | Recorded P1-063 (catalogue products, unified intake catalogue), P1-064 (WhatsApp unlinked contacts and link) and P1-065 (POST /api/intake), the server side of Wave 5; migration 0033 written, not applied | Source and mocked-pool tests only; no database, no browser |
+| 2026-11-22 | Recorded P1-076 (printable warranty card with QR, web only, no migration) | Source and unit tests only; no database, no browser |
+| 2026-11-22 | Recorded P1-070 (duplicate customer detection and merge server, migration 0035) and P1-071 (Duplicates tab and merge drawer, web) | Source and mocked-pool tests only; no database, no browser |
+| 2026-11-22 | Recorded P1-068 (reminders and follow-ups server, migration 0034) and P1-069 (Follow-ups tab and rules panel, web) | Source and mocked-pool tests only; no database, no browser |
+| 2026-11-22 | Recorded P1-074 (technician job extras server, migration 0037) and P1-075 (technician job view extras, web) | Source, mocked-pool and unit tests only; no database, no browser |
+| 2026-11-22 | Recorded P1-072 (owner activity log, CSV export, migration 0036 indexes) and P1-073 (Daily summary and Activity log tabs, summary endpoint) | Mocked-pool and unit tests only; no database, no browser |
+| 2026-11-22 | Recorded P1-077 (saved views, bulk actions, CSV export on lists) and P1-078 (keyboard shortcuts and help dialog), web only, no migration | Unit tests only; no database, no browser |

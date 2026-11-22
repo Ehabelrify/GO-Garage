@@ -82,3 +82,23 @@ Pickers (`CustomerVehiclePicker`, `QuotePicker`, `PolicyPicker`) and the Custome
 ## Printable documents (shared/print)
 
 `DocumentModel` is a pure, template-neutral type: `lang`, `business{name,subtitle?,logoUrl?}`, `title`, `number|null`, `statusLabel?`, `branch`, `issueDate|null`, `validUntil?`, `customer{label,name,lines?}`, `vehicle?{label,plate,description?}`, `lines[{description,detail?,quantity,unitMinor|null,discountMinor?,taxMinor?,amountMinor|null,currency}]`, `totals[{currency,subtotalMinor,discountMinor,taxMinor,totalMinor,paidMinor?,balanceMinor?}]` (one entry per currency), `notes?`, `terms?`, `disclaimer?`, `signatures?`, `footer?`. All amounts are minor units. Callers build the model (rules stay in their module); when the owner's confirmed template arrives, replace `DocumentSheet`/`print.css` and keep the model. The business name and logo are placeholders until the owner supplies them.
+
+## List tools (Wave 6, package U-D): saved views, bulk actions, CSV, shortcuts
+
+- **Saved views.** `FilterBar viewsId="<list>"` adds a "Views" menu: save the current search, filters, sort and page size under a name, apply, rename, delete (ConfirmDialog), set or clear the default, Reset. Stored per user and per list in `localStorage` (`garage.views.v1:<userId>:<list>`, always try/catch, max 20, 40-char names). The default applies once on load only when the URL has no list state of its own (`tab` and `record` do not count). Filters a page cannot express are skipped. Give the matching `DataTable` the same `listId` so sort and page size are captured and restored. Per-user identity comes from `ViewerProvider` (mounted by the shell); without a viewer the menu is not shown.
+- **Bulk actions.** `DataTable bulk={{ isSelectable?, actions }}` adds a checkbox column (card layout: checkbox beside the title), page checkbox with indeterminate state, "Select all N", a count bar with an actions slot, J/K to move and X to toggle. Pass `bulk` only to viewers who may write (and never to demo identities). Run the work with `BulkRunDialog` plus `runBulk` (existing single-item endpoints, one request per item, never aborts, per-item result list with human labels, not ids). Adopted: Bookings (confirm pending), Follow-ups (snooze 1 day, skip), Warranty coverage (print cards).
+- **CSV export.** `DataTable exportName="bookings"` plus `csv` (text or number) or `csvMoney` ({minor,currency}) on columns shows "Export CSV" (this page or all loaded rows when paged). Output: byte-order mark built from a code point, CRLF, cells starting with `= + - @ tab CR` get an apostrophe prefix, Arabic-Indic digits become Latin, money is a plain number with an extra currency column, headers are the localised column headers. Columns with neither `csv` nor `csvMoney` (actions, badges) are skipped. Hidden for technicians and when no viewer is provided. Server-side exports stay with the owner activity log.
+- **Keyboard shortcuts** (`shared/shortcuts.ts`, `app/ShortcutsHost.tsx`; ignored while typing, in menus and while a modal is open; letters use the physical key so an Arabic layout works):
+
+| Keys | Action |
+|---|---|
+| `/` or Ctrl/Cmd+K | Focus global search (GlobalSearch) |
+| `N` | New intake (IntakeHost) |
+| `G` then `O` `I` `B` `W` `C` `Q` `R` `F` `S` | Go to Overview, Inbox, Bookings, Workshop, Customers, Quotes, Warranties, Finance, Settings, only for pages the role and capabilities can open |
+| `?` | Shortcuts dialog (lists the viewer's own shortcuts, Cmd on Apple devices, Ctrl elsewhere) |
+| `J` / `K` | Next / previous row in a list with row click or selection |
+| `Enter` | Open the focused row (existing) |
+| `X` | Toggle the focused row in a list with selection |
+| `Esc` | Close drawer, dialog or menu (existing focus trap) |
+
+Tests: `shared/list-tools.test.ts` (selection, saved-view storage, CSV escaping, shortcut matching).

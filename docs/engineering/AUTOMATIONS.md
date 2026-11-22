@@ -112,3 +112,40 @@ Digest must be concise, branch-comparable, and link to the relevant internal das
 - Support pause/resume for individual automation types.
 - Provide an audit trail of configuration changes.
 - Provide a manual retry action for authorized users.
+
+## 9. Reminders and follow-ups (implemented, simulated delivery only)
+
+Built on the simulated outbox: a reminder row is the simulated message. **Nothing is delivered to a provider** and the UI says so ("Sent (simulated)"). Code: `apps/server/features/reminders/`; web: Bookings > Follow-ups; migration `0034`.
+
+| Rule | Created | Default lead | Skipped when |
+|---|---|---|---|
+| `booking_day_before` | confirmed booking, due 09:00 Cairo, 1 day before drop-off (1-7) | 1 day | booking is today or past, cancelled, or moved |
+| `booking_morning_of` | due 08:00 Cairo on the drop-off day | fixed | booking past or changed |
+| `ready_for_pickup` | job stage `ready`, due when it became ready | fixed | job moved on |
+| `warranty_expiry` | active fixed warranty, due 09:00 Cairo, N days before `expires_on` (1-180) | 30 days | lifetime (no expiry), void, expired |
+| `quote_followup` | current revision `offered`, not accepted, follow-up not answered or cancelled, N days after it was offered (1-60) | 3 days | quote expired, answered, accepted, superseded or archived |
+| `post_service_checkin` | job `delivered`, N days after delivery (1-60), not older than 14 days past due | 7 days | none |
+
+Behaviour:
+- **Idempotent.** `runDueReminders(now)` computes candidates, then inserts with `ON CONFLICT (environment_id, dedupe_key) DO NOTHING`; the key is rule + source + date (or quote revision). Run it as often as you like. It only looks at most 36 hours ahead so staff see "Upcoming" items without a flood.
+- **Consent.** No active `service` consent for the customer: the row is created as `skipped` with reason `no-consent` (shown in the UI). Consent is checked again when staff press Send now.
+- **Language.** The body is rendered once, when generated, in the customer's `preferred_language` from the rule's template for that language.
+- **Cancel stale.** Each run cancels open rows whose source changed (reason `source-changed`). Closed rows are never reopened.
+- **Auto send.** A rule with `auto_send` marks its due rows `sent-simulated` during the run (still simulated). Default is off: staff press Send now.
+- **Snooze** hides a due item for 1-30 days (UI offers 1, 2, 3, 7).
+
+Triggers:
+- **Manual:** `POST /api/reminders/run` (owner or branch manager, not demo identities), also the "Check now" button. Returns `{now, generated, skippedNoConsent, autoSent, cancelled, byKind}`.
+- **Scheduled (hook for the Replit scheduled task or any timer):** `apps/server/index.ts` is owned by another package and is not edited here. Call the exported function from a small script run on a schedule (hourly is enough):
+  ```ts
+  // e.g. apps/server/run-reminders.ts (not created: add it when the schedule is agreed)
+  import { runDueReminders } from "./features/reminders/reminder-service";
+  const summary = await runDueReminders(new Date(), "scheduler");
+  console.log(JSON.stringify(summary));
+  process.exit(0);
+  ```
+  Or, inside `index.ts`, `setInterval(() => void runDueReminders(new Date(), "scheduler"), 3_600_000)`. Both are safe to repeat and safe if two instances overlap (the unique key decides).
+- **Rules:** `GET /api/reminders/rules` (any `bookings.manage` role), `PUT /api/reminders/rules/:kind` (owner; optimistic `expectedRevision`), `POST /api/reminders/rules/preview`.
+- **Queue:** `GET /api/reminders`, `POST /api/reminders/:id/send|skip|snooze` (`bookings.manage`, branch scoped, demo identities read-only).
+
+Not built: real provider sends (provider delivery stays disabled), retries/backoff (nothing is sent), per-customer opt-out beyond consent, working-hours aware send windows, branch-specific rules (rules are per environment).
