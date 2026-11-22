@@ -5,6 +5,8 @@ export type GarageRole = (typeof garageRoles)[number];
 
 export const capabilities = [
   "bookings.manage",
+  "quotes.view",
+  "quotes.manage",
   "customers.read",
   "whatsapp.use",
   "transport.coordinate",
@@ -28,10 +30,10 @@ export const ownerOnlyCapabilities: readonly Capability[] = ["settings.manage", 
 export const roleDefaultCapabilities: Record<GarageRole, readonly Capability[]> = {
   owner: [...capabilities],
   "branch-manager": [
-    "bookings.manage", "customers.read", "whatsapp.use", "transport.coordinate",
+    "bookings.manage", "quotes.view", "customers.read", "whatsapp.use", "transport.coordinate",
     "warranty.view", "warranty.issue", "warranty.review", "finance.view",
   ],
-  receptionist: ["bookings.manage", "customers.read", "whatsapp.use", "transport.coordinate", "warranty.view"],
+  receptionist: ["bookings.manage", "quotes.view", "customers.read", "whatsapp.use", "transport.coordinate", "warranty.view"],
   technician: [],
 };
 
@@ -108,6 +110,16 @@ export function allowedBranchIds(actor: GarageActor, allBranchIds: string[]) {
 
 export function canManageBookings(actor: GarageActor) {
   return hasCapability(actor, "bookings.manage");
+}
+
+/** Read access to quotes, reservations, benefits and promotions (view OR manage). */
+export function canViewQuotes(actor: GarageActor) {
+  return hasCapability(actor, "quotes.view") || hasCapability(actor, "quotes.manage");
+}
+
+/** Write access (create/revise/offer/accept/cancel, reserve, redeem, qualify, generate). */
+export function canManageQuotes(actor: GarageActor) {
+  return hasCapability(actor, "quotes.manage");
 }
 
 export function canCoordinateTransport(actor: GarageActor, branchId: string) {

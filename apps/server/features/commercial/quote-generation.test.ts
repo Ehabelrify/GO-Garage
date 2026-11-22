@@ -9,7 +9,7 @@ vi.mock("../../infrastructure/database/db", () => ({
 }));
 const gen = await import("./quote-generation");
 
-const actor = (role: GarageActor["role"] = "receptionist", extra: Partial<GarageActor> = {}): GarageActor => ({ userId: "u1", email: "", name: role, role, branchIds: ["b1"], ...extra });
+const actor = (role: GarageActor["role"] = "receptionist", extra: Partial<GarageActor> = {}): GarageActor => ({ userId: "u1", email: "", name: role, role, branchIds: ["b1"], permissions: { "quotes.manage": true }, ...extra });
 const occ = { id: "work-occupancy:x", version: 1 };
 const approval = { approvedBy: "o", approvedAt: "", evidenceRef: "private:x", reason: "r" };
 const pkg = (over: Record<string, unknown> = {}): PackageVersion => ({
@@ -108,7 +108,7 @@ describe("generateQuoteDraft", () => {
   const booking = (branch = "b1") => ({ rowCount: 1, rows: [{ id: "bk1", customer_id: "c1", vehicle_id: "v1", branch_id: branch, service_id: "full-ppf", status: "confirmed", accepted_quote_id: null, accepted_quote_revision: null }] });
   it("is denied without quote authority or in a demo session, before any query", async () => {
     query.mockReset();
-    await expect(gen.generateQuoteDraft(ctx, actor("technician"), { kind: "booking", bookingId: "bk" })).rejects.toMatchObject({ status: 403 });
+    await expect(gen.generateQuoteDraft(ctx, actor("technician", { permissions: {} }), { kind: "booking", bookingId: "bk" })).rejects.toMatchObject({ status: 403 });
     await expect(gen.generateQuoteDraft(ctx, actor("owner", { isDemo: true }), { kind: "booking", bookingId: "bk" })).rejects.toMatchObject({ code: "DEMO_ACTION_DISABLED" });
     expect(query).not.toHaveBeenCalled();
   });

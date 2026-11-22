@@ -265,7 +265,7 @@ export async function listPackagePriceHistory(actor: GarageActor, packageId: str
 }
 
 /** Read access for quoting: catalogue managers and booking staff (quotes are prepared by reception). */
-const canQuote = (actor: GarageActor) => hasCapability(actor, "catalogue.manage") || hasCapability(actor, "bookings.manage");
+const canQuote = (actor: GarageActor) => hasCapability(actor, "catalogue.manage") || hasCapability(actor, "quotes.view") || hasCapability(actor, "quotes.manage");
 
 /** Published, active, non-archived packages available in the actor's branches, with the vehicle categories they name. Read-only. */
 export async function listAvailablePackages(actor: GarageActor): Promise<{ packages: PackageVersion[]; categories: Array<{ id: string; name: { ar: string; en: string } }> }> {

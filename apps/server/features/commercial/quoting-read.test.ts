@@ -26,7 +26,7 @@ describe("quoting read endpoints", () => {
     await expect(getActiveQuoteAcceptance(actor("receptionist"))).resolves.toMatchObject({ state: "unconfigured" });
     await expect(getVehicleSelection(actor("receptionist"), "missing")).rejects.toMatchObject({ status: 404 });
   });
-  it("honours a revoked bookings.manage override", async () => {
-    await expect(listAvailablePackages(actor("receptionist", { permissions: { "bookings.manage": false } }))).rejects.toMatchObject({ status: 403 });
+  it("honours a revoked quotes.view override", async () => {
+    await expect(listAvailablePackages(actor("receptionist", { permissions: { "quotes.view": false } }))).rejects.toMatchObject({ status: 403 });
   });
 });

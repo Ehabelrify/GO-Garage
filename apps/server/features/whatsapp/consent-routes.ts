@@ -54,8 +54,30 @@ customerConsentRouter.get("/", async (req, res, next) => {
     if (!actor) return res.status(401).json({ code: "SIGN_IN_REQUIRED" });
     const parsed = consentQuery.safeParse(req.query);
     if (!parsed.success) return res.status(400).json({ code: "INVALID_CONSENT_QUERY" });
-    if (!await authorizedContact(actor, parsed.data.channelId, parsed.data.customerId)) {
+    // 404 only for an unknown channel/customer or a contact the actor cannot reach.
+    // A known customer with no consent record yet is a normal state: {status:"missing"}.
+    const known = await pool.query(
+      `SELECT (SELECT count(*) FROM messaging_channels WHERE id=$1) AS channels,
+              (SELECT count(*) FROM customers WHERE id=$2) AS customers`,
+      [parsed.data.channelId, parsed.data.customerId],
+    );
+    if (!Number(known.rows[0]?.channels) || !Number(known.rows[0]?.customers)) {
       return res.status(404).json({ code: "CONSENT_NOT_FOUND" });
+    }
+    if (!hasCapability(actor, "whatsapp.use")) return res.status(404).json({ code: "CONSENT_NOT_FOUND" });
+    if (actor.isDemo) return res.json({ consent: { status: "missing", revision: 0 } });
+    const links = await pool.query<{ branch_id: string }>(
+      "SELECT branch_id FROM messaging_contact_links WHERE channel_id=$1 AND customer_id=$2",
+      [parsed.data.channelId, parsed.data.customerId],
+    );
+    if (links.rows.length) {
+      let reachable = false;
+      for (const link of links.rows) {
+        if (await canActorAccessInboxBranch(actor, link.branch_id)) { reachable = true; break; }
+      }
+      if (!reachable) return res.status(404).json({ code: "CONSENT_NOT_FOUND" });
+    } else {
+      return res.json({ consent: { status: "missing", revision: 0 } });
     }
     const result = await pool.query<{
       status: "granted" | "revoked";

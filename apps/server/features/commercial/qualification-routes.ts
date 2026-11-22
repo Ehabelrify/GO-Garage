@@ -2,10 +2,11 @@ import { Router } from "express";
 import { z } from "zod";
 import { actorFor } from "../auth/auth";
 import { withTransaction } from "../../infrastructure/database/db";
-import { commercialContext } from "./policy-service";
+import { commercialContext, CommercialPolicyError, listActivePromotions } from "./policy-service";
 import { QualificationError, allocatePromotionInTransaction, consumeAllocationInTransaction, evaluateQualification, readPromotionAllocation, reverseAllocation, verifyPromotionMembership, revokePromotionMembership } from "./qualification-service";
 
 export const qualificationRouter=Router();
+qualificationRouter.get("/",async(req,res,next)=>{try{res.json(await listActivePromotions(actorFor(req)!));}catch(e){if(e instanceof CommercialPolicyError)return res.status(e.status).json({code:e.code,message:e.message});next(e);}});
 const id=z.string().trim().min(1);
 const policyRef=z.object({id,version:z.number().int().positive()}).strict();
 const evidence=z.object({kind:z.enum(["warranty-reference","membership-verification","grouped-vehicles"]),referenceIds:z.array(id).min(1),verifiedBy:id.nullable(),verifiedAt:z.string().datetime().nullable()}).strict();

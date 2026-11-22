@@ -168,6 +168,7 @@ export const closeRequest = (actor: GarageActor, id: string, expectedRevision: n
 /** Hook for quote auto-generation (W2.6): records the quote that was created for an accepted request. */
 export async function linkQuote(actor: GarageActor, id: string, expectedRevision: number, quoteId: string) {
   requireWriter(actor, true);
+  if (!hasCapability(actor, "quotes.manage")) fail(403, "ROLE_FORBIDDEN", "Quote authority is required.");
   await withTransaction(async (client) => {
     const row = await loadScoped(actor, id, client, true);
     if (row.revision !== expectedRevision) return fail(409, "REVISION_CONFLICT", "This request changed. Reload and try again.");

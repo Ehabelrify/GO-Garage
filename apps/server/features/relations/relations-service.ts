@@ -30,7 +30,8 @@ const notArchived = (kind: string, column: string) =>
 function scopeOf(actor: GarageActor) {
   return { owner: actor.role === "owner", branchIds: actor.branchIds };
 }
-const can = (actor: GarageActor, capability: Capability) => hasCapability(actor, capability);
+const can = (actor: GarageActor, capability: Capability) =>
+  hasCapability(actor, capability) || (capability === "quotes.view" && hasCapability(actor, "quotes.manage"));
 /** Contact details are hidden for demo identities (same stance as transport contacts). */
 const phoneFor = (actor: GarageActor, phone: string): string | null => (actor.isDemo ? null : phone);
 
@@ -86,7 +87,7 @@ export async function globalSearch(actor: GarageActor, rawQuery: string, types: 
       results.push({ type: "booking", id: row.id, title: row.id, subtitle: `${row.name} - ${row.dropoff_date}`, badge: row.status, route: routes.booking(row.id) });
     }
   }
-  if (types.includes("quote") && can(actor, "bookings.manage")) {
+  if (types.includes("quote") && can(actor, "quotes.view")) {
     const rows = await pool.query<{ id: string; state: string | null; name: string }>(
       `SELECT h.id, CASE WHEN h.accepted_revision IS NOT NULL THEN 'accepted' ELSE v.state END AS state, c.name
        FROM quote_heads h JOIN customers c ON c.id = h.customer_id
@@ -134,16 +135,16 @@ const sectionSpecs: SectionSpec[] = [
   { key: "jobs", capability: "bookings.manage",
     sql: (s) => `SELECT x.id, x.branch_id, x.booking_id, x.stage, x.assigned_user_id, x.updated_at, count(*) OVER() AS total FROM jobs x JOIN bookings b ON b.id = x.booking_id WHERE b.${s}=$1 AND ${branchScope} ORDER BY x.updated_at DESC LIMIT ${PREVIEW_LIMIT}`,
     map: (r) => ({ id: r.id, branchId: r.branch_id, bookingId: r.booking_id, stage: r.stage, assignedUserId: r.assigned_user_id, updatedAt: iso(r.updated_at) }) },
-  { key: "quotes", capability: "bookings.manage",
+  { key: "quotes", capability: "quotes.view",
     sql: (s) => `SELECT x.id, x.branch_id, x.vehicle_id, x.current_revision, x.accepted_revision, v.state, v.snapshot->'total' AS total_amount, count(*) OVER() AS total
       FROM quote_heads x LEFT JOIN quote_versions v ON v.quote_id = x.id AND v.revision = x.current_revision
       WHERE x.${s}=$1 AND x.environment_id=$4 AND ${branchScope} AND ${notArchived("quote", "x.id")} ORDER BY x.created_at DESC LIMIT ${PREVIEW_LIMIT}`,
     map: (r) => ({ id: r.id, branchId: r.branch_id, vehicleId: r.vehicle_id, revision: r.current_revision, state: r.accepted_revision != null ? "accepted" : r.state, total: r.total_amount ?? null }) },
-  { key: "reservations", capability: "bookings.manage",
+  { key: "reservations", capability: "quotes.view",
     sql: (s) => `SELECT x.id, x.branch_id, x.vehicle_id, x.quote_id, x.promotion_id, x.status, x.effective_on::text AS effective_on, x.expires_on::text AS expires_on, count(*) OVER() AS total
       FROM promotion_reservations x WHERE ${s === "customer_id" ? "x.beneficiary_id" : "x.vehicle_id"}=$1 AND x.environment_id=$4 AND ${branchScope} AND ${notArchived("reservation", "x.id")} ORDER BY x.created_at DESC LIMIT ${PREVIEW_LIMIT}`,
     map: (r) => ({ id: r.id, branchId: r.branch_id, vehicleId: r.vehicle_id, quoteId: r.quote_id, promotionId: r.promotion_id, status: r.status, effectiveOn: r.effective_on, expiresOn: r.expires_on }) },
-  { key: "benefits", capability: "bookings.manage",
+  { key: "benefits", capability: "quotes.view",
     sql: (s) => `SELECT x.id, x.benefit_id, x.vehicle_id, x.status, x.source_quote_id, count(*) OVER() AS total
       FROM benefit_entitlements x WHERE x.${s}=$1 AND x.environment_id=$4 AND ($2 OR x.branch_ids && $3::text[]) ORDER BY x.created_at DESC LIMIT ${PREVIEW_LIMIT}`,
     map: (r) => ({ id: r.id, benefitId: r.benefit_id, vehicleId: r.vehicle_id, status: r.status, quoteId: r.source_quote_id }) },

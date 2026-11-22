@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Money, PackageVersion, PolicyRef, QuoteDraftInput, QuoteLine, QuoteVersionRef, ScopeItem, VehicleSelection, WorkComponent } from "@garage/domain";
 import { DEFAULT_CURRENCY, findMixedCurrency, isSupportedCurrency } from "@garage/domain";
 import { pool, withTransaction } from "../../infrastructure/database/db";
-import { canAccessBranch, canManageBookings, type GarageActor } from "../auth/authz";
+import { canAccessBranch, canManageQuotes, type GarageActor } from "../auth/authz";
 import { getEligiblePackages } from "./catalogue-service";
 import { getActiveQuoteAcceptance, type ExecutionContext } from "./policy-service";
 import { QuoteError, createQuoteRevision } from "./quote-service";
@@ -233,10 +233,10 @@ async function existingRef(context: ExecutionContext, quoteId: string): Promise<
 
 /**
  * Builds (or returns the already built) draft quote for a source. Idempotent: the quote id derives from the source key.
- * Generated drafts need quote authority (bookings.manage on the branch) like any other quote write.
+ * Generated drafts need quote authority (quotes.manage on the branch) like any other quote write.
  */
 export async function generateQuoteDraft(context: ExecutionContext, actor: GarageActor, source: QuoteSource): Promise<GenerateResult> {
-  if (!canManageBookings(actor)) return fail(403, "ROLE_FORBIDDEN", "Quote authority is required.");
+  if (!canManageQuotes(actor)) return fail(403, "ROLE_FORBIDDEN", "Quote authority is required.");
   if (actor.isDemo) return fail(403, "DEMO_ACTION_DISABLED", "Quotes cannot be generated in a role preview session.");
   const resolved = await resolveSource(actor, source);
   const archived = await pool.query("SELECT 1 FROM record_archives WHERE entity_kind='customer' AND entity_id=$1", [resolved.customerId]);
@@ -286,7 +286,7 @@ export interface QuoteSourceOption { key: string; kind: "special-request" | "boo
 
 /** Recent service work for a customer (newest first, max 8), used by the "Create quote" picker. */
 export async function listQuoteSources(actor: GarageActor, input: { customerId: string; vehicleId?: string }): Promise<QuoteSourceOption[]> {
-  if (!canManageBookings(actor)) return fail(403, "ROLE_FORBIDDEN", "Quote authority is required.");
+  if (!canManageQuotes(actor)) return fail(403, "ROLE_FORBIDDEN", "Quote authority is required.");
   const scope = inScope(actor);
   const bookings = await pool.query<{ id: string; vehicle_id: string; service_id: string; date: string; status: string; stage: string | null }>(
     `SELECT b.id,b.vehicle_id,b.service_id,b.dropoff_date::text AS date,b.status,j.stage FROM bookings b LEFT JOIN jobs j ON j.booking_id=b.id

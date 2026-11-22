@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { PoolClient } from "pg";
 import type { AcceptedQuoteSnapshot, Money, QuoteDraftInput, QuoteFollowup, QuoteRevision, QuoteVersionRef } from "@garage/domain";
 import { withTransaction, pool } from "../../infrastructure/database/db";
-import { canAccessBranch, canManageBookings, type GarageActor } from "../auth/authz";
+import { canAccessBranch, canManageQuotes, canViewQuotes, type GarageActor } from "../auth/authz";
 import { commercialContext, type ExecutionContext } from "./policy-service";
 import { materializeBenefitsInTransaction } from "./benefit-service";
 
@@ -31,7 +31,7 @@ type Head = { id: string; environment_id:string; branch_id: string; customer_id:
 const fail = (status: number, code: string, message: string): never => { throw new QuoteError(status, code, message); };
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, item) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
 const hash = (value: unknown) => createHash("sha256").update(canonical(value)).digest("hex");
-function scoped(actor: GarageActor, branchId: string) { if (!canManageBookings(actor)) fail(403, "ROLE_FORBIDDEN", "Quote authority is required."); if (!canAccessBranch(actor, branchId)) fail(404, "QUOTE_NOT_FOUND", "Quote not found."); }
+function scoped(actor: GarageActor, branchId: string) { if (!canManageQuotes(actor)) fail(403, "ROLE_FORBIDDEN", "Quote authority is required."); if (!canAccessBranch(actor, branchId)) fail(404, "QUOTE_NOT_FOUND", "Quote not found."); }
 function totalFor(lines: QuoteDraftInput["lines"]): Money {
   const currency = lines[0]?.unitPrice.currency;
   if (!currency) return fail(422, "POLICY_UNCONFIGURED", "Currency is required.");
@@ -115,12 +115,12 @@ export async function createQuoteRevision(context: ExecutionContext, actor: Gara
 export async function readQuoteRevision(context: ExecutionContext, actor: GarageActor, ref: QuoteVersionRef): Promise<QuoteRevision> {
   const result = await pool.query<VersionRow & { branch_id: string; current_revision: number; accepted_revision: number | null }>("SELECT v.*,h.branch_id,h.current_revision,h.accepted_revision FROM quote_versions v JOIN quote_heads h ON h.id=v.quote_id WHERE v.quote_id=$1 AND v.revision=$2 AND h.environment_id=$3",[ref.quoteId,ref.revision,context.environmentId]);
   const row = result.rows[0];
-  if (!row || !canAccessBranch(actor,row.branch_id) || !canManageBookings(actor)) return fail(404,"QUOTE_NOT_FOUND","Quote not found.");
+  if (!row || !canAccessBranch(actor,row.branch_id) || !canViewQuotes(actor)) return fail(404,"QUOTE_NOT_FOUND","Quote not found.");
   const state = row.accepted_revision === row.revision ? "accepted" : row.revision < row.current_revision ? "superseded" : row.state;
   return { ref, state, input: row.snapshot.input, total: row.snapshot.total, digest: row.digest, validThrough: row.valid_through && String(row.valid_through).slice(0,10) };
 }
 export async function listQuotes(context: ExecutionContext, actor: GarageActor): Promise<Array<QuoteRevision & { followup: QuoteFollowup }>> {
-  if (!canManageBookings(actor)) return fail(403,"ROLE_FORBIDDEN","Quote access is required.");
+  if (!canViewQuotes(actor)) return fail(403,"ROLE_FORBIDDEN","Quote access is required.");
   const rows = await pool.query<VersionRow & { current_revision: number; accepted_revision: number | null; requested_at: Date; responsible_user_id: string | null; status: QuoteFollowup["status"]; answered_at: Date | null; promised_response_at: Date | null }>("SELECT v.*,h.current_revision,h.accepted_revision,f.* FROM quote_heads h JOIN quote_versions v ON v.quote_id=h.id AND v.revision=h.current_revision JOIN quote_followups f ON f.quote_id=h.id WHERE h.environment_id=$1 AND NOT EXISTS(SELECT 1 FROM record_archives ra WHERE ra.entity_kind='quote' AND ra.entity_id=h.id) AND ($2='owner' OR h.branch_id=ANY($3::text[])) ORDER BY v.created_at DESC",[context.environmentId,actor.role,actor.branchIds]);
   return rows.rows.map((r) => ({ ref: { quoteId:r.quote_id,revision:r.revision }, state:r.accepted_revision===r.revision?"accepted":r.state, input:r.snapshot.input,total:r.snapshot.total,digest:r.digest,validThrough:r.valid_through&&String(r.valid_through).slice(0,10),followup:{ requestedAt:r.requested_at.toISOString(),responsibleUserId:r.responsible_user_id,status:r.status,answeredAt:r.answered_at?.toISOString()??null,promisedResponseAt:r.promised_response_at?.toISOString()??null } }));
 }
@@ -129,7 +129,7 @@ export async function acceptQuote(context: ExecutionContext, actor: GarageActor,
   const requestHash = hash(input);
   return withTransaction(async (client) => {
     const head = (await client.query<Head>("SELECT * FROM quote_heads WHERE id=$1 AND environment_id=$2 FOR UPDATE",[input.ref.quoteId,context.environmentId])).rows[0];
-    if (!head || !canAccessBranch(actor,head.branch_id) || !canManageBookings(actor)) return fail(404,"QUOTE_NOT_FOUND","Quote not found.");
+    if (!head || !canAccessBranch(actor,head.branch_id) || !canManageQuotes(actor)) return fail(404,"QUOTE_NOT_FOUND","Quote not found.");
     const prior = await client.query<{ request_hash: string; accepted_snapshot: AcceptedQuoteSnapshot }>("SELECT request_hash,accepted_snapshot FROM quote_acceptance_events WHERE environment_id=$1 AND actor_id=$2 AND quote_id=$3 AND idempotency_key=$4",[context.environmentId,actor.userId,input.ref.quoteId,input.idempotencyKey]);
     if (prior.rowCount) { if (prior.rows[0].request_hash !== requestHash) return fail(409,"IDEMPOTENCY_CONFLICT","This key belongs to a different acceptance request."); return prior.rows[0].accepted_snapshot; }
     if (head.accepted_revision !== null || head.current_revision !== input.ref.revision) return fail(409,"STALE_QUOTE_REVISION","Quote revision changed or was already accepted.");
@@ -153,19 +153,19 @@ export async function acceptQuote(context: ExecutionContext, actor: GarageActor,
 }
 export async function readAcceptanceOutcome(context: ExecutionContext, actor: GarageActor, quoteId: string, idempotencyKey: string): Promise<AcceptedQuoteSnapshot | null> {
   const h = await pool.query<Head>("SELECT * FROM quote_heads WHERE id=$1 AND environment_id=$2",[quoteId,context.environmentId]);
-  if (!h.rowCount || !canManageBookings(actor) || !canAccessBranch(actor,h.rows[0].branch_id)) return fail(404,"QUOTE_NOT_FOUND","Quote not found.");
+  if (!h.rowCount || !canViewQuotes(actor) || !canAccessBranch(actor,h.rows[0].branch_id)) return fail(404,"QUOTE_NOT_FOUND","Quote not found.");
   const event = await pool.query<{ accepted_snapshot: AcceptedQuoteSnapshot }>("SELECT accepted_snapshot FROM quote_acceptance_events WHERE environment_id=$1 AND actor_id=$2 AND quote_id=$3 AND idempotency_key=$4",[context.environmentId,actor.userId,quoteId,idempotencyKey]);
   return event.rows[0]?.accepted_snapshot ?? null;
 }
 export async function readAcceptedQuote(context: ExecutionContext, actor: GarageActor, ref: QuoteVersionRef): Promise<AcceptedQuoteSnapshot> {
   const event = await pool.query<{ branch_id: string; accepted_snapshot: AcceptedQuoteSnapshot }>("SELECT h.branch_id,e.accepted_snapshot FROM quote_acceptance_events e JOIN quote_heads h ON h.id=e.quote_id WHERE e.quote_id=$1 AND e.revision=$2 AND e.environment_id=$3 AND h.environment_id=$3",[ref.quoteId,ref.revision,context.environmentId]);
-  if (!event.rowCount || !canManageBookings(actor) || !canAccessBranch(actor,event.rows[0].branch_id)) return fail(404,"QUOTE_NOT_FOUND","Accepted quote not found.");
+  if (!event.rowCount || !canViewQuotes(actor) || !canAccessBranch(actor,event.rows[0].branch_id)) return fail(404,"QUOTE_NOT_FOUND","Accepted quote not found.");
   return event.rows[0].accepted_snapshot;
 }
 export async function recordQuoteFollowup(context: ExecutionContext, actor: GarageActor, input: { quoteId: string; expectedRevision: number; nextStatus: QuoteFollowup["status"]; responsibleUserId?: string | null; promisedResponseAt?: string | null }): Promise<void> {
   await withTransaction(async (client) => {
     const head = (await client.query<Head>("SELECT * FROM quote_heads WHERE id=$1 AND environment_id=$2 FOR UPDATE",[input.quoteId,context.environmentId])).rows[0];
-    if (!head || !canManageBookings(actor) || !canAccessBranch(actor,head.branch_id)) return fail(404,"QUOTE_NOT_FOUND","Quote not found.");
+    if (!head || !canManageQuotes(actor) || !canAccessBranch(actor,head.branch_id)) return fail(404,"QUOTE_NOT_FOUND","Quote not found.");
     if (head.current_revision !== input.expectedRevision) return fail(409,"STALE_QUOTE_REVISION","Refresh quote follow-up.");
     const current = (await client.query<{ status: QuoteFollowup["status"] }>("SELECT status FROM quote_followups WHERE quote_id=$1 FOR UPDATE",[input.quoteId])).rows[0];
     if (!current || current.status === "cancelled" || current.status === "answered" || !({ requested:["preparing","answered","cancelled"],preparing:["requested","answered","cancelled"] } as Record<string,string[]>)[current.status]?.includes(input.nextStatus)) return fail(409,"FOLLOWUP_TRANSITION_INVALID","Follow-up transition is unavailable.");

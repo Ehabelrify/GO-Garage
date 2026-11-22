@@ -127,7 +127,7 @@ export async function commercialPolicyReview(actor: GarageActor, id: string) {
 
 /** Active approved quote-acceptance rule (tax + validity) for quoting staff. Read-only; no id needs to be known. */
 export async function getActiveQuoteAcceptance(actor: GarageActor): Promise<Configured<unknown>> {
-  if (!hasCapability(actor, "catalogue.manage") && !hasCapability(actor, "bookings.manage")) throw new CommercialPolicyError(403, "ROLE_FORBIDDEN", "Quoting permission is required.");
+  if (!hasCapability(actor, "catalogue.manage") && !hasCapability(actor, "quotes.view") && !hasCapability(actor, "quotes.manage")) throw new CommercialPolicyError(403, "ROLE_FORBIDDEN", "Quoting permission is required.");
   const active = await pool.query<{ policy_id: string }>("SELECT policy_id FROM commercial_policy_active WHERE policy_id LIKE 'quote-acceptance:%' ORDER BY policy_id");
   const approved: Array<Configured<unknown> & { state: "approved" }> = [];
   for (const row of active.rows) {
@@ -138,4 +138,31 @@ export async function getActiveQuoteAcceptance(actor: GarageActor): Promise<Conf
   const rule = approved.find((policy) => (policy.value as { taxTreatment?: { id?: string } }).taxTreatment?.id !== policy.policy.id) ?? approved[0];
   if (rule) return rule;
   return { state: "unconfigured", missing: ["approved quote-acceptance policy"] };
+}
+
+export type PromotionListItem = { ref: PolicyRef; name: { ar: string; en: string }; kind: "promotion-qualification"; value: unknown; validFrom: string | null; validUntil: string | null; status: "active" };
+/**
+ * Active, approved, currently effective promotion policies for anyone who can see quotes
+ * (quotes.view or quotes.manage). Branch-scoped policies are limited to the actor's branches.
+ * `name` is the policy's bilingual beneficiary rule (the policy value carries no separate title).
+ */
+export async function listActivePromotions(actor: GarageActor): Promise<PromotionListItem[]> {
+  if (!hasCapability(actor, "quotes.view") && !hasCapability(actor, "quotes.manage")) throw new CommercialPolicyError(403, "ROLE_FORBIDDEN", "Quote access is required.");
+  const rows = await pool.query<Row>(
+    `SELECT v.* FROM commercial_policy_active a JOIN commercial_policy_versions v USING (policy_id, version)
+     WHERE v.family = 'promotion-qualification' AND v.state = 'approved' AND v.approved_by IS NOT NULL AND v.approved_at IS NOT NULL
+     ORDER BY a.policy_id`,
+  );
+  const today = new Date().toISOString().slice(0, 10);
+  const out: PromotionListItem[] = [];
+  for (const row of rows.rows) {
+    if (row.branch_id && !canAccessBranch(actor, row.branch_id)) continue;
+    const from = row.effective_from ? String(row.effective_from).slice(0, 10) : null;
+    const until = row.effective_through ? String(row.effective_through).slice(0, 10) : null;
+    if ((from && from > today) || (until && until < today)) continue;
+    const parsed = schemas["promotion-qualification"].safeParse(row.value);
+    if (!parsed.success) continue;
+    out.push({ ref: { id: row.policy_id, version: row.version }, name: parsed.data.beneficiaryRule, kind: "promotion-qualification", value: parsed.data, validFrom: from, validUntil: until, status: "active" });
+  }
+  return out;
 }

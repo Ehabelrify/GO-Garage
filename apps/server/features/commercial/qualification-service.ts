@@ -2,14 +2,14 @@ import { createHash, randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import type { EligibilityResult, PromotionAllocation, PromotionRule, QualificationEvidence, PolicyRef, QuoteVersionRef } from "@garage/domain";
 import { pool, withTransaction } from "../../infrastructure/database/db";
-import { canAccessBranch, canManageBookings, type GarageActor } from "../auth/authz";
+import { canAccessBranch, canManageQuotes, canViewQuotes, type GarageActor } from "../auth/authz";
 import { getCommercialPolicy, type ExecutionContext } from "./policy-service";
 
 export class QualificationError extends Error { constructor(public status:number,public code:string,message:string){super(message);} }
 const fail=(status:number,code:string,message:string):never=>{throw new QualificationError(status,code,message);};
 const digest=(x:unknown)=>createHash("sha256").update(JSON.stringify(x)).digest("hex");
 const protectedRef=(x:string)=>/^private:[A-Za-z0-9/_-]+$/.test(x);
-const authorize=(actor:GarageActor)=>{if(!canManageBookings(actor)) fail(403,"ROLE_FORBIDDEN","Commercial authority required.");};
+const authorize=(actor:GarageActor,write=true)=>{if(!(write?canManageQuotes(actor):canViewQuotes(actor))) fail(403,"ROLE_FORBIDDEN","Commercial authority required.");};
 type QualificationRow={id:string;environment_id:string;promotion_id:string;policy_version:number;branch_id:string;beneficiary_id:string;vehicle_ids:string[];state:string};
 type AllocationRow={id:string;environment_id:string;promotion_id:string;policy_version:number;qualification_id:string;beneficiary_id:string;vehicle_id:string;discount_minor:string;currency:string;units:number;status:PromotionAllocation["status"]};
 const projection=(x:AllocationRow):PromotionAllocation=>({id:x.id,promotion:{id:x.promotion_id,version:x.policy_version},qualificationId:x.qualification_id,beneficiaryId:x.beneficiary_id,vehicleId:x.vehicle_id,discount:{minor:Number(x.discount_minor),currency:x.currency},benefitVersion:null,units:x.units,status:x.status});
@@ -177,7 +177,7 @@ async function changeAllocation(client:PoolClient,context:ExecutionContext,actor
 export async function consumeAllocationInTransaction(client:PoolClient,context:ExecutionContext,actor:GarageActor,input:{allocationId:string;idempotencyKey:string}):Promise<PromotionAllocation>{return changeAllocation(client,context,actor,input,"consume");}
 export async function reverseAllocation(context:ExecutionContext,actor:GarageActor,input:{allocationId:string;reason:string;evidenceRef:string;idempotencyKey:string}):Promise<PromotionAllocation>{return withTransaction(client=>changeAllocation(client,context,actor,input,"reverse"));}
 export async function readPromotionAllocation(context:ExecutionContext,actor:GarageActor,id:string){
-  authorize(actor);
+  authorize(actor,false);
   const row=(await pool.query<AllocationRow&{branch_id:string;maximum_units:number;reserved_units:number;consumed_units:number}>("SELECT a.*,q.branch_id,p.maximum_units,p.reserved_units,p.consumed_units FROM promotion_allocations a JOIN promotion_qualifications q ON q.id=a.qualification_id JOIN promotion_pools p ON (p.environment_id,p.promotion_id,p.policy_version)=(a.environment_id,a.promotion_id,a.policy_version) WHERE a.id=$1 AND a.environment_id=$2",[id,context.environmentId])).rows[0];
   if(!row||!canAccessBranch(actor,row.branch_id)) fail(404,"ALLOCATION_NOT_FOUND","Allocation not found.");
   const events=await pool.query<{action:string;occurred_at:Date}>("SELECT action,occurred_at FROM promotion_allocation_events WHERE allocation_id=$1 ORDER BY id",[id]);

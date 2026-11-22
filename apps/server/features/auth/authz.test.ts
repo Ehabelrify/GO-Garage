@@ -111,7 +111,7 @@ describe("role and branch access", () => {
   });
 });
 
-import { hasCapability, roleDefaultCapabilities, sanitizeOverrides, capabilities } from "./authz";
+import { hasCapability, roleDefaultCapabilities, sanitizeOverrides, capabilities, canManageQuotes, canViewQuotes } from "./authz";
 
 describe("per-user capability resolution", () => {
   const withPerms = (role: GarageActor["role"], permissions: GarageActor["permissions"], extra: Partial<GarageActor> = {}) =>
@@ -162,5 +162,21 @@ describe("per-user capability resolution", () => {
     expect(manager).not.toContain("finance.view");
     expect(manager).toContain("catalogue.manage");
     expect(effectiveCapabilities(withPerms("receptionist", { "warranty.issue": true }, { isDemo: true }))).not.toContain("warranty.issue");
+  });
+
+  it("quotes.view / quotes.manage: view for manager and receptionist, manage owner-grantable, technician denied", () => {
+    expect(hasCapability(actor("owner", ["a"]), "quotes.manage")).toBe(true);
+    for (const role of ["branch-manager", "receptionist"] as const) {
+      expect(hasCapability(actor(role, ["a"]), "quotes.view")).toBe(true);
+      expect(hasCapability(actor(role, ["a"]), "quotes.manage")).toBe(false);
+    }
+    expect(hasCapability(actor("technician", ["a"]), "quotes.view")).toBe(false);
+    expect(hasCapability(actor("technician", ["a"]), "quotes.manage")).toBe(false);
+    expect(canManageQuotes(withPerms("branch-manager", { "quotes.manage": true }))).toBe(true);
+    expect(canViewQuotes(withPerms("receptionist", { "quotes.manage": true, "quotes.view": false }))).toBe(true);
+    expect(canManageQuotes(withPerms("branch-manager", { "quotes.manage": true }, { isDemo: true }))).toBe(false);
+    expect(sanitizeOverrides("branch-manager", { "quotes.manage": true, "quotes.view": true })).toEqual({ "quotes.manage": true });
+    expect(effectiveCapabilities(actor("branch-manager", ["a"]))).toContain("quotes.view");
+    expect(effectiveCapabilities(actor("branch-manager", ["a"]))).not.toContain("quotes.manage");
   });
 });
