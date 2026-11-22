@@ -280,10 +280,10 @@ async function runTask(browser, cookies, { role, locale, width }, routes, rows) 
 // ---------------------------------------------------------------------------------------------------------------
 // Flows (owner role)
 // ---------------------------------------------------------------------------------------------------------------
-async function runFlow(browser, cookies, name, { locale, width }, fn) {
+async function runFlow(browser, cookies, name, { locale, width, role = "owner" }, fn) {
   const variant = `${locale}/${width}`;
   const flow = { name, variant, status: "PASS", detail: "", consoleErrors: [], pageErrors: [], failedRequests: [], apiFailures: [], screenshots: [], hard: false };
-  const context = await newContext(browser, { role: "owner", locale, width, cookie: cookies.owner });
+  const context = await newContext(browser, { role, locale, width, cookie: cookies[role] });
   const collector = instrument(context);
   const page = await context.newPage();
   const shotDir = path.join(OUT, "screenshots", "flows");
@@ -402,6 +402,113 @@ async function pdfFlow({ context, page }) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// W5 flows: send-to-customer, cancel reason, staff permission groups, audit filter, no-access message.
+// Tolerant by design: a missing control or empty list is SKIP, never FAIL. Nothing is ever confirmed or sent.
+// ---------------------------------------------------------------------------------------------------------------
+const SEND_NAME = /send to customer|إرسال للعميل/i;
+
+async function sendButtonFlow(kind, { page, shot }) {
+  const dialog = page.locator('[role="dialog"]');
+  if (kind === "invoice") await openWorkspace(page, "/workspace/bookings?tab=invoices");
+  else if (kind === "quote") await openWorkspace(page, "/workspace/quotes");
+  else await openWorkspace(page, "/workspace/warranties?tab=qr");
+  const rows = page.locator("tr.clickable");
+  const count = await rows.count();
+  if (!count) return { status: "SKIP", detail: `no ${kind} rows to open` };
+  // Only some rows qualify (issued invoices, offered or accepted quotes, active warranties), so try the first few.
+  const limit = Math.min(count, 6);
+  for (let i = 0; i < limit; i += 1) {
+    await rows.nth(i).click().catch(() => {});
+    await dialog.first().waitFor({ state: "visible", timeout: 5_000 }).catch(() => {});
+    await settle(page);
+    const button = dialog.getByRole("button", { name: SEND_NAME }).first();
+    if (await button.count()) {
+      await shot(`${kind}-drawer`);
+      const disabled = await button.isDisabled().catch(() => false);
+      await page.keyboard.press("Escape");
+      return { detail: `Send to customer button present on the ${kind} drawer (row ${i + 1}${disabled ? ", disabled" : ""}); not clicked` };
+    }
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+  }
+  await shot(`${kind}-no-button`);
+  return { status: "SKIP", detail: `opened ${limit} ${kind} row(s) but none showed Send to customer (no sendable document in the seed?)` };
+}
+
+async function cancelDialogFlow({ page, shot }) {
+  await openWorkspace(page, "/workspace/bookings");
+  const menu = page.getByRole("button", { name: /row actions|إجراءات الصف/i });
+  const total = await menu.count();
+  if (!total) return { status: "SKIP", detail: "no booking row action menu on the bookings page" };
+  for (let i = 0; i < Math.min(total, 8); i += 1) {
+    await menu.nth(i).click().catch(() => {});
+    const item = page.getByRole("menuitem", { name: /cancel booking|إلغاء الحجز/i }).first();
+    if (!(await item.count())) { await page.keyboard.press("Escape"); continue; }
+    await item.click();
+    const dialog = page.locator('[role="dialog"], [role="alertdialog"]').first();
+    await dialog.waitFor({ state: "visible", timeout: 6_000 }).catch(() => {});
+    const area = dialog.locator("textarea").first();
+    if (!(await area.count())) { await shot("cancel-no-reason"); await page.keyboard.press("Escape"); return { status: "FAIL", detail: "Cancel booking dialog opened without a reason textarea" }; }
+    await shot("cancel-dialog");
+    // The confirm button is the dialog's danger action; locate it by label and never click it.
+    const confirm = dialog.getByRole("button", { name: /cancel booking|إلغاء الحجز/i }).first();
+    if (!(await confirm.count())) { await page.keyboard.press("Escape"); return { status: "SKIP", detail: "reason field shown but the confirm button could not be located" }; }
+    const disabledEmpty = await confirm.isDisabled();
+    await area.fill("visual check, not confirmed");
+    const stillDisabled = await confirm.isDisabled();
+    await page.keyboard.press("Escape");
+    if (!disabledEmpty) return { status: "FAIL", detail: "confirm button was enabled with no reason entered" };
+    return { detail: `reason textarea present; confirm disabled while empty${stillDisabled ? " (stays disabled until a category is also chosen)" : " and enabled once text is entered"}; dialog dismissed, nothing confirmed` };
+  }
+  return { status: "SKIP", detail: "no booking row offered Cancel booking (all rows already closed?)" };
+}
+
+async function staffGroupsFlow({ page, shot }) {
+  // The staff alias redirects to /workspace/settings?tab=access.
+  await openWorkspace(page, "/workspace/staff");
+  const where = new URL(page.url()).pathname + new URL(page.url()).search;
+  const row = page.locator("tr.clickable, [role=row].clickable, .data-card.clickable").first();
+  if (await row.count()) {
+    await row.click().catch(() => {});
+    await page.waitForSelector('[role="dialog"]', { timeout: 6_000 }).catch(() => {});
+    await settle(page);
+  }
+  const group = page.getByText(/^\s*(invoices|الفواتير)\s*$/i).first();
+  await shot("staff-permissions");
+  if (await group.count()) return { detail: `permissions page shows an Invoices group (${where})` };
+  return { status: "SKIP", detail: `no Invoices group visible at ${where} (no editable member selected?)` };
+}
+
+async function auditFilterFlow({ page, shot }) {
+  await openWorkspace(page, "/workspace/settings?tab=activity");
+  const selects = page.locator("select.filter-select");
+  const n = await selects.count();
+  if (!n) return { status: "SKIP", detail: "no filter select on the activity log (tab hidden or empty)" };
+  for (let i = 0; i < n; i += 1) {
+    const labels = await selects.nth(i).locator("option").allTextContents();
+    if (labels.some((l) => /all types|كل الأنواع/i.test(l))) {
+      await shot("audit-filter");
+      return labels.some((l) => /customer records|سجلات العملاء/i.test(l))
+        ? { detail: "type filter lists Customer records" }
+        : { status: "FAIL", detail: `type filter lacks Customer records (${labels.slice(0, 12).join(", ")})` };
+    }
+  }
+  return { status: "SKIP", detail: "no Type filter found among the activity log filters" };
+}
+
+async function noAccessFlow({ page, shot }) {
+  await page.goto(`${BASE}/workspace/finance`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("main.page-wrap, .access-state", { state: "attached", timeout: RENDER_TIMEOUT }).catch(() => {});
+  await settle(page);
+  const finalPath = new URL(page.url()).pathname;
+  await shot("technician-finance");
+  const message = page.getByText(/do not have access to this page|ليس لديك صلاحية الوصول/i).first();
+  if (await message.count()) return { detail: `technician sees the access message at ${finalPath}` };
+  if (finalPath !== "/workspace/finance") return { detail: `technician was redirected to ${finalPath} (no message shown)` };
+  return { status: "FAIL", detail: "technician stayed on /workspace/finance with neither an access message nor a redirect" };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 async function main() {
   ensure(OUT);
   const nav = parseNavigation(NAV_FILE);
@@ -452,6 +559,15 @@ async function main() {
         flows.push(await runFlow(browser, cookies, "print-quote", v, (ctx) => printFlow("quotes", ctx)));
         flows.push(await runFlow(browser, cookies, "print-invoice", v, (ctx) => printFlow("finance", ctx)));
         flows.push(await runFlow(browser, cookies, "print-warranty", v, (ctx) => printFlow("warranties", ctx)));
+      }
+      for (const v of printVariants) {
+        flows.push(await runFlow(browser, cookies, "send-invoice-drawer", v, (ctx) => sendButtonFlow("invoice", ctx)));
+        flows.push(await runFlow(browser, cookies, "send-quote-drawer", v, (ctx) => sendButtonFlow("quote", ctx)));
+        flows.push(await runFlow(browser, cookies, "send-warranty-qr", v, (ctx) => sendButtonFlow("warranty", ctx)));
+        flows.push(await runFlow(browser, cookies, "booking-cancel-reason", v, cancelDialogFlow));
+        flows.push(await runFlow(browser, cookies, "staff-invoices-group", v, staffGroupsFlow));
+        flows.push(await runFlow(browser, cookies, "audit-customer-records-filter", v, auditFilterFlow));
+        if (cookies.technician) flows.push(await runFlow(browser, cookies, "technician-finance-no-access", { ...v, role: "technician" }, noAccessFlow));
       }
       if (printVariants[0]) flows.push(await runFlow(browser, cookies, "pdf-customer-360", printVariants[0], pdfFlow));
     }
