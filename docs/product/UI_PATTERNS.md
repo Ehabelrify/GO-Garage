@@ -22,6 +22,40 @@ Page recipe: `PageHeader` (title + optional one-line subtitle) + `FilterBar` + `
 | `GlobalSearch` | `lang`, `onNavigate(route)`, `fetcher?`, `debounceMs?`, `minLength?` | Mounted in the topbar. `/` (outside inputs) and Ctrl/Cmd+K focus it; 250 ms debounce; results grouped by type; arrow/Enter/Esc. Default fetcher is `fetchSearch`. |
 | `DocumentSheet`, `PrintButton` | `DocumentSheet{model: DocumentModel, className?}`; `PrintButton{lang,label?,disabled?}`; `PrintHost{model}` | Any printable business document (invoice, quote). Generic A4 template: header (business, title, number, status stamp), branch / issue date / valid-until, customer + vehicle (plate), line table (description, qty, unit, discount, tax, amount), totals per currency (never mixed), notes/terms, disclaimer, signatures/footer. `dir` follows `model.lang`; logical CSS; `@media print` hides app chrome and prints only `.doc-print-root` on A4. `PrintHost` portals a screen-hidden copy of the sheet to `document.body`; `PrintButton` sets `body.printing-document` and calls `window.print()` (choose Save as PDF), so only the host prints (scoped; the warranty QR print path is untouched). Files: `shared/print/{DocumentSheet.tsx,document-model.ts,print.css}`. |
 
+## Wave 4 design system (WP0, 22 Nov 2026)
+
+### Type scale (tokens in `shared/styles/tokens.css`; never write a raw `font-size` in feature CSS)
+
+| Token | Desktop / tablet / phone | Use |
+|---|---|---|
+| `--fs-display` | 28 / 26 / 22 px, 1.15 | Page title (H1) only |
+| `--fs-kpi` | 24 / 22 / 20 px, 1.1, tabular | KPI numbers (use `.stat-value` or `clamp(18px, 1.9vw, var(--fs-kpi))`) |
+| `--fs-h2` | 18 / 18 / 17 px | Panel, section and drawer titles |
+| `--fs-h3` | 15 px | Card titles, form section titles, table primary cell |
+| `--fs-body` | 14 px | Table cells, controls, buttons |
+| `--fs-label` | 12 px, 600 | Table headers, field labels, badges, meta |
+| `--fs-caption` | 12 px | Hints, timestamps (never below 12) |
+| `--fs-nav` | 11 px | Phone bottom-nav label only |
+
+Line heights: `--lh-display/kpi/heading/body`, Arabic body uses `--lh-ar` (1.65). Controls: `--control-h` 40 px (44 px on phones), `--control-h-sm` 32, `--control-h-lg` 48. AA colours: `--muted` #52646a, `--tone-neutral-fg` #44575a, `--tone-warning-fg` #7a4f0e, `--nav-fg`, `--banner-fg`, `--fg-placeholder`. `shared/design-system.test.ts` fails if shared CSS adds a raw `font-size` below 12px (run by `npm test`).
+
+### Numbers (numeric rule)
+
+- Money goes through `Amount` (or the `Money` wrapper): tabular lining numbers, `bdi dir="ltr"`, nowrap, real minus sign (U+2212) before the number, Latin digits in both locales.
+- `variant="kpi"`: whole EGP; from 100,000 up compact (`EGP 11.8M`, `EGP 293K`) with the full value in `title` and `aria-label`. `variant="table"` (default) and `"detail"`: always 2 decimals, right-aligned, min 9ch, never mixed in a column.
+- Viewer option "Show full precision" (avatar menu, `useFullPrecision()` in `shared/preferences.ts`, saved in this browser only) shows exact fractions everywhere and disables compaction.
+- `Delta` (`value`, `unit` percent|number|minor, `inverse` for liabilities and costs): sign + number + unit in one LTR isolate, arrow icon plus semantic colour.
+- `Plate` (`value`): one chip via `formatPlateDisplay`, Latin digits, isolate with `dir` by script. `Phone` (`value`, `link`, `whatsapp`): LTR isolate, `+20 122 000 1046`. `DateText` (`value`, `lang`, `time?`): `dateLabel`, Latin digits, isolate. `Select` (`options`, `label`): styled native select, one chevron, width by content (max 240px).
+- KPI tiles: container `min-width: 0; overflow: hidden`; never concatenate plate, phone, date or amount into one string.
+
+### Lists and paging
+
+`DataTable` pages by default: 25 rows, selectable 25/50/100, footer "Showing 1-25 of N" with previous/next buttons (keyboard accessible, `aria-live` range), sticky header. Props: `paging` (default true), `pageSize`, `pageSizes`. The pager appears only when rows exceed the smallest size. Below about 1000px the table becomes compact cards (title line + wrapped meta line); the wrapper has `min-width: 0` so a table never widens the page. Use `white-space: nowrap` for buttons and badges in cells. Overview "Needs attention" is a feature concern (top 10 grouped by type, View all).
+
+### Shell: topbar and rail
+
+Single-row topbar: branch select, global search, avatar menu (name, email, role, language switch, Show full precision, Sign out; the only Sign out). `Role preview account` is one thin banner above the topbar. Full sidebar above 1024px, icon-only rail (64px) at 1024px and below, bottom navigation at 760px and below (short labels via `shortEn`/`shortAr`, 11px). `PageHeader` slot contract: title, subtitle, meta on the start side, actions on the end side (one primary), `tabs` (or a `TabBar`) directly under. `TabBar` fades the scrolling edge and scrolls the active tab into view. `FilterBar` is one grid row (search, up to 3 selects, Clear and count at the end; extra controls in a second row). `StatusBadge` carries a tone icon. `EmptyState` shows an icon, one-sentence reason and action. `RouteChunk` shows `RouteSkeleton` while a page loads and an error with Retry after 10 s.
+
 ## Registering record types (features)
 
 The shell mounts `<RecordProvider lang={lang}>` around the page. Features register how to label, route and preview their record type by passing a `registry` (`{ customer: { label: id => name, route: id => path, preview: (record, lang) => <Preview/> } }`). Until a feature registers, `defaultRecordRoutes` (shared/record-types.ts) and a minimal preview are used. TODO W2-11: build the registry in `App.tsx` from store data and each feature's preview component.
@@ -35,7 +69,7 @@ The shell mounts `<RecordProvider lang={lang}>` around the page. Features regist
 
 ## Navigation (app/navigation.ts)
 
-Owner 10 items, branch manager 7, receptionist 5, technician 1; sidebar and mobile bar render from the same list (bottom bar shows up to 4 plus More when more than 5). Merged pages (`reservations`, `benefits`, `promotions` into Quotes & offers; `transport` into Bookings; `staff` into Settings) are `routeAliases`: hidden from the menu, old URLs still work, shown as a temporary tab strip under the parent via `sectionPagesFor`. TODO W2-11 map is in the header comment of `navigation.ts`; add an alias to `redirectedAliases` once its merged tab exists.
+Owner 10 items, branch manager 8 (with Finance), receptionist 5, technician 1; Quotes & offers shows for `quotes.view` or `quotes.manage`; sidebar and mobile bar render from the same list (bottom bar shows up to 4 plus More when more than 5). Merged pages (`reservations`, `benefits`, `promotions` into Quotes & offers; `transport` into Bookings; `staff` into Settings) are `routeAliases`: hidden from the menu, old URLs still work, shown as a temporary tab strip under the parent via `sectionPagesFor`. TODO W2-11 map is in the header comment of `navigation.ts`; add an alias to `redirectedAliases` once its merged tab exists.
 
 ## Not yet built (deferred)
 

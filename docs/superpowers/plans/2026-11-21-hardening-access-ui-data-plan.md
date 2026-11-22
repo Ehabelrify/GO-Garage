@@ -76,6 +76,44 @@ Planned, awaiting user decision/priority (NOT started): role-widget protection (
 server-side paging for big lists, health check + error monitoring + backups, CSP once domain known, owner 2FA (Clerk setting),
 remaining role-based checks, large/dense file refactors, tracker summary header.
 
+## Wave 4: visual-review fixes (decisions by the user, 22 Nov 2026)
+Source: docs/testing/visual/2026-11-21/VISUAL_REVIEW_REPORT.md (work packages WP0-WP10). Decisions:
+1. **Branch managers see Quotes, Reservations, Benefits and Promotions but cannot add, edit or remove.** Split the
+   capability: `quotes.view` (owner + branch-manager + receptionist read) and `quotes.manage` (owner by default,
+   grantable). Server enforces; UI hides write actions for view-only users.
+2. **Money:** whole EGP on dashboards/KPIs (compact 11.8M / 293K when large), 2 decimals in tables. PLUS a per-viewer
+   option "Show full precision" (exact amounts with fractions everywhere). Stored in the browser only.
+3. **Paging (user unsure; my call):** classic pages, default 25 rows, selectable 25/50/100, "Showing 1-25 of N",
+   sticky header; Overview "Needs attention" shows the top 10 grouped by type with a View all link.
+4. **Tablet:** icon-only sidebar rail at <=1024 px; tables switch to cards below ~1000 px.
+5. **Promotions tab is shown** and gets dummy data from the confirmed facts (GS-F021..F026: Ultimate club 44,999,
+   Plus lifetime 52,999, Ultimate 39,999, from 32,999 with benefits, referral/warranty-card 10,000 discount,
+   multi-car fourth-car-free). Labelled as advertised examples, never approved policy.
+6. **Names (user unsure; my call):** customer names are shown exactly as entered, never translated. Interface text and
+   service/catalogue labels follow the UI language. Seed data uses one script per customer name, not mixed inside a
+   single name.
+Packages: WP0 shared design system first (serial). In parallel with WP0 (disjoint files): WP-S server (quotes.view/manage,
+consents -> "missing", GET /api/promotions) and WP9 seed data. Then WP1-WP8 feature packages in parallel, then WP10 harness.
+
+## Wave 5: quick intake side panel (user request, 22 Nov 2026; starts after Wave 4 finishes — touches customers, bookings, quotes, whatsapp, catalogue)
+One global side panel (top-bar "New" button, also opened from a WhatsApp chat) to handle a walk-in or an unsaved number without
+leaving the page: (1) find or create the customer, (2) find or add the vehicle (plate normaliser + duplicate check), (3) pick
+requested items from ONE catalogue listing services, packages and products, (4) finish as Create quote (default), Book
+appointment or Save customer only. Gaps found in the code: the provider webhook rejects unknown contacts (409
+CONTACT_UNMAPPED) and whatsapp_conversations.customer_id / vehicle_id are NOT NULL, so an unsaved number cannot create a
+conversation today (needs nullable links + an unlinked-contact state + a "link to customer" action); catalogue_package_versions.kind
+only allows 'package' | 'standalone', so parts/accessories need a third kind ('product': name, category, price, tax, no stock;
+inventory stays out of scope for Wave 5) and quote lines for products must not need bay time.
+**User answers (22 Nov 2026):** (1) Products start as name/category/price/tax only. Stock tracking and inventory monitoring
+are REQUIRED later, together with the customer mobile app / storefront launch (Phase 5): design the product record so stock
+(quantity on hand, reorder level, per-branch stock, movements) can be added without reshaping it (own product id, branch
+availability already in the model, no stock columns hard-coded into quotes). (2) An unsaved WhatsApp number appears in the inbox
+as "New contact (<phone number>)" visible to receptionists and managers; once the customer is created or linked through the
+side panel, the conversation is linked and the list shows the customer's name from then on.
+
+Phase 5 (customer mobile app) must also include: stock tracking and inventory monitoring (per-branch quantity, reorder alerts,
+movements, reservation of stock for quotes/orders), as the user requires before launching the storefront.
+
 ## Wave 3
 Stabilization gate (P4): typecheck, test, build, DB-integration run, tracker + docs updates, report to user.
 

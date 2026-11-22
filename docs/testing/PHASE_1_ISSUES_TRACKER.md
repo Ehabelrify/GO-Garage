@@ -3,9 +3,9 @@
 **Created / last updated:** 15 November 2026 / 21 November 2026
 **Purpose:** Single working tracker for Phase 1 defects, investigation, implementation handoff, and retesting.  
 **Initial intake:** 25 entries: 7 code-review findings, 15 UI-test findings, and 3 engineering follow-ups.  
-**Current intake:** 60 entries (44 below plus 6 hardening/UI entries P1-045–P1-050, 5 Wave 2.5 entries P1-051–P1-055 and 2 Wave 2.6 quote entries P1-056–P1-057 2 Wave 2.6 invoice entries P1-058–P1-059 and the Wave 2.7 plate entry P1-060 recorded 21 November 2026): the original 25, 6 user-feedback/discovery follow-ups, 6 cross-industry research improvements, and 7 approved business/product additions recorded on 16 November 2026.
-**Next available ID:** `P1-061`
-**Current ownership:** 2 entries remain Open/Unassigned and 58 entries are Ready for retest after implementation. Ready entries are P1-001–P1-029 and P1-032–P1-060. No runtime retests were performed; P1-045–P1-060 were additionally never run against a database (migrations 0026-0030 and 0032 and the seed are unapplied).
+**Current intake:** 62 entries (+ P1-061, P1-062 recorded 22 November 2026; 44 below plus 6 hardening/UI entries P1-045–P1-050, 5 Wave 2.5 entries P1-051–P1-055 and 2 Wave 2.6 quote entries P1-056–P1-057 2 Wave 2.6 invoice entries P1-058–P1-059 and the Wave 2.7 plate entry P1-060 recorded 21 November 2026): the original 25, 6 user-feedback/discovery follow-ups, 6 cross-industry research improvements, and 7 approved business/product additions recorded on 16 November 2026.
+**Next available ID:** `P1-063`
+**Current ownership:** 2 entries remain Open/Unassigned and 60 entries are Ready for retest after implementation. Ready entries are P1-001–P1-029 and P1-032–P1-062. No runtime retests were performed; P1-045–P1-060 were additionally never run against a database (migrations 0026-0030 and 0032 and the seed are unapplied).
 
 ## Sources and application context
 
@@ -102,6 +102,8 @@ Garage OS uses React/Vite, Express, PostgreSQL, Clerk, and `@garage/domain`. It 
 | [P1-058](#p1-058) | Wave 2.6 (21 Nov 2026) | Generic invoices: auto-generated from delivered jobs, numbering, lifecycle, Invoices tab | High | P2 | Ready for retest | Source |
 | [P1-059](#p1-059) | Wave 2.6 (21 Nov 2026) | Shared printable A4 document sheet, invoice print and warranty invoice print | Medium | P2 | Ready for retest | Source |
 | [P1-060](#p1-060) | Wave 2.7 (21 Nov 2026) | Robust Egyptian plate normalisation: search, duplicate check, inputs | Medium | P2 | Ready for retest | Source |
+| [P1-061](#p1-061) | Wave 4 (22 Nov 2026) | Quotes view vs manage capabilities (managers see, cannot change) | High | P1 | Ready for retest | Source |
+| [P1-062](#p1-062) | Wave 4 (22 Nov 2026) | WhatsApp consent GET returns missing instead of 404; GET /api/promotions list | Medium | P2 | Ready for retest | Source |
 
 ## Technical issue details
 
@@ -1423,6 +1425,34 @@ The user approved all recommendations and valuable additions derived from the Go
 
 **Retest:** Not performed; no browser check of A4 layout, page breaks, RTL or the print dialog. Business name and logo are placeholders. Not production-ready.
 
+<a id="p1-061"></a>
+
+### P1-061 — Quotes view vs manage capabilities
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; user decision D1 (branch managers can see Quotes, Reservations, Benefits and Promotions but cannot add, edit or remove).
+**Area:** Authorization, commercial routes.
+**Evidence:** Source and mocked-pool tests (`authz.test.ts`, `commercial/quotes-access.test.ts`).
+
+**Acceptance:** Capabilities `quotes.view` (owner, branch-manager, receptionist) and `quotes.manage` (owner; grantable by the Owner through permission overrides; never for demo identities). Read routes accept either; every write (create/revise/offer/accept/follow-up, reservations, benefit redeem/reverse, qualification and membership, allocations, quote generation, linking a quote to a special request) needs `quotes.manage`. Bookings stay under `bookings.manage`.
+
+**Implementation — 2026-11-22:** `authz.ts` (capabilities, role defaults, `canViewQuotes`, `canManageQuotes`), quote, reservation, benefit, qualification, generation, catalogue-read and policy-read services re-gated; relations search and 360 sections use `quotes.view`; special-request quote linking needs `quotes.manage`. No migration.
+
+**Retest:** Not performed; no database. Existing staff keep their stored overrides; receptionists lose quote writes unless the Owner grants `quotes.manage` (behaviour change). Not production-ready.
+
+<a id="p1-062"></a>
+
+### P1-062 — WhatsApp consent GET returns "missing"; promotions list endpoint
+
+**Status / owner:** Ready for retest / Engineering (delegated implementation).
+**Reported:** 2026-11-22; visual review WP9.
+**Area:** WhatsApp consent, promotions.
+**Evidence:** Mocked-pool tests (`whatsapp/consent-get.test.ts`, `commercial/quotes-access.test.ts`).
+
+**Acceptance:** `GET /api/whatsapp/consents` returns 200 `{consent:{status:"missing",revision:0}}` for a known customer without a consent record (404 only for an unknown channel/customer or an unreachable contact). `GET /api/promotions` returns active approved promotion policies `[{ref,name:{ar,en},kind,value,validFrom,validUntil,status}]` to anyone with `quotes.view` or `quotes.manage`, branch scoped.
+
+**Retest:** Not performed; no database. Not production-ready.
+
 ## Change log
 
 | Date | Change | Runtime verification |
@@ -1460,3 +1490,4 @@ The user approved all recommendations and valuable additions derived from the Go
 | 2026-11-21 | Recorded P1-056 (auto-generated draft quotes, shared Create quote action) and P1-057 (printable quote, special-request currency dropdown); no migration; advanced next ID to P1-058 | Source and mocked tests only; no database, no browser or print check, no runtime retests |
 | 2026-11-21 | Recorded P1-060 (Egyptian plate normalisation in domain, search, duplicate check and inputs); migration 0032 written, not applied | Source and unit tests only; no database, no browser, no runtime retest |
 | 2026-11-21 | Recorded P1-058 (generic invoices auto-generated from delivered jobs, numbering, lifecycle, Invoices tab) and P1-059 (shared printable document sheet, invoice and warranty invoice print); migration 0030 written, not applied | Source and mocked tests only; no database, no browser, no print check |
+| 2026-11-22 | Recorded P1-061 (quotes.view / quotes.manage capabilities) and P1-062 (consent GET missing state, GET /api/promotions); no migration; advanced next ID to P1-063 | Source and mocked tests only; no database, no browser |
