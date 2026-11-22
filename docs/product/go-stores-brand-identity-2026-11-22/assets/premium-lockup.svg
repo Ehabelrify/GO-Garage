@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">GO Stores premium lockup</title>
+  <desc id="desc">Gold GO turbine mark with warm-white STORES wordmark and a small crown reserved for premium campaigns.</desc>
+  <g fill="none" stroke="#F3B61F" stroke-linecap="square" stroke-linejoin="round">
+    <path d="M270 132C244 96 202 77 157 80C84 85 38 138 38 206C38 278 91 332 163 332C220 332 267 304 288 258V207H178" stroke-width="60"/>
+    <circle cx="411" cy="206" r="101" stroke-width="58"/>
+  </g>
+  <path d="M445 90H535L518 145H461Z" fill="#F3B61F"/>
+  <circle cx="411" cy="206" r="70" fill="#17191D"/>
+  <g fill="#F6F4EF"><path id="blade" d="M418 198C425 174 443 158 463 156C458 179 445 197 422 207Z"/><use href="#blade" transform="rotate(45 411 206)"/><use href="#blade" transform="rotate(90 411 206)"/><use href="#blade" transform="rotate(135 411 206)"/><use href="#blade" transform="rotate(180 411 206)"/><use href="#blade" transform="rotate(225 411 206)"/><use href="#blade" transform="rotate(270 411 206)"/><use href="#blade" transform="rotate(315 411 206)"/></g>
+  <circle cx="411" cy="206" r="14" fill="#B9BEC4" stroke="#F6F4EF" stroke-width="5"/>
+  <g fill="#F6F4EF" transform="translate(535 131) skewX(-9)">
+    <path d="M14 0H104L98 28H38L32 58H84L102 79L91 150H-3L3 122H66L72 88H20L1 67Z"/><path d="M113 0H221L215 30H178L154 150H119L143 30H107Z"/><path fill-rule="evenodd" d="M235 0H329L299 150H205ZM260 29L241 121H274L293 29Z"/><path fill-rule="evenodd" d="M349 0H431Q455 0 450 27L440 76Q436 94 417 99L442 150H404L383 101H369L359 150H325ZM377 28L368 73H400Q407 73 409 64L414 39Q416 28 406 28Z"/><path d="M470 0H564L558 29H499L493 59H547L542 87H487L480 121H540L534 150H439Z"/><path d="M582 0H672L666 28H606L600 58H652L670 79L659 150H565L571 122H634L640 88H588L569 67Z"/>
+  </g>
+  <g fill="#F3B61F" transform="translate(90 12)">
+    <path d="M0 60L18 10L50 45L84 0L116 45L148 10L166 60Z"/>
+    <rect y="68" width="166" height="18" rx="5"/>
+  </g>
+  <text x="738" y="355" fill="#F3B61F" font-family="Arial, sans-serif" font-size="42" font-weight="700" letter-spacing="12">PREMIUM</text>
+</svg>

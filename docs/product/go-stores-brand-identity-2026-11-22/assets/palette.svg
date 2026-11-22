@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">GO Stores brand color palette</title>
+  <desc id="desc">Primary, supporting and semantic colors with hexadecimal codes and usage guidance.</desc>
+  <rect width="1200" height="720" fill="#F6F4EF"/>
+  <text x="64" y="76" fill="#17191D" font-family="Arial, sans-serif" font-size="42" font-weight="700">GO STORES — COLOR SYSTEM</text>
+  <text x="64" y="116" fill="#555A5F" font-family="Arial, sans-serif" font-size="20">Graphite and warm white lead. Red identifies the brand. Yellow-gold is a controlled accent.</text>
+  <g font-family="Arial, sans-serif">
+    <g transform="translate(64 160)"><rect width="200" height="200" rx="16" fill="#17191D"/><text y="238" fill="#17191D" font-size="23" font-weight="700">Graphite</text><text y="268" fill="#555A5F" font-size="19">#17191D</text><text y="298" fill="#555A5F" font-size="16">Navigation · type · dark fields</text></g>
+    <g transform="translate(286 160)"><rect width="200" height="200" rx="16" fill="#FFFFFF" stroke="#D6D4CF" stroke-width="2"/><text y="238" fill="#17191D" font-size="23" font-weight="700">Warm White</text><text y="268" fill="#555A5F" font-size="19">#F6F4EF</text><text y="298" fill="#555A5F" font-size="16">Canvas · quiet surfaces</text></g>
+    <g transform="translate(508 160)"><rect width="200" height="200" rx="16" fill="#C82127"/><text y="238" fill="#17191D" font-size="23" font-weight="700">Performance Red</text><text y="268" fill="#555A5F" font-size="19">#C82127</text><text y="298" fill="#555A5F" font-size="16">Logo · active · primary CTA</text></g>
+    <g transform="translate(730 160)"><rect width="200" height="200" rx="16" fill="#F3B61F"/><text y="238" fill="#17191D" font-size="23" font-weight="700">Yellow-Gold</text><text y="268" fill="#555A5F" font-size="19">#F3B61F</text><text y="298" fill="#555A5F" font-size="16">Attention · selected · premium</text></g>
+    <g transform="translate(952 160)"><rect width="184" height="200" rx="16" fill="#B9BEC4"/><text y="238" fill="#17191D" font-size="23" font-weight="700">Brushed Silver</text><text y="268" fill="#555A5F" font-size="19">#B9BEC4</text><text y="298" fill="#555A5F" font-size="16">Borders · turbine · support</text></g>
+  </g>
+  <text x="64" y="520" fill="#17191D" font-family="Arial, sans-serif" font-size="28" font-weight="700">Recommended balance</text>
+  <rect x="64" y="550" width="642" height="52" rx="10" fill="#F6F4EF" stroke="#D6D4CF"/>
+  <rect x="64" y="550" width="385" height="52" rx="10" fill="#F6F4EF"/>
+  <rect x="449" y="550" width="160" height="52" fill="#17191D"/>
+  <rect x="609" y="550" width="64" height="52" fill="#C82127"/>
+  <rect x="673" y="550" width="33" height="52" rx="0 10 10 0" fill="#F3B61F"/>
+  <text x="64" y="636" fill="#555A5F" font-family="Arial, sans-serif" font-size="18">60% warm white · 25% graphite · 10% red · 5% yellow-gold/silver</text>
+  <g transform="translate(760 515)" font-family="Arial, sans-serif">
+    <rect width="376" height="150" rx="14" fill="#17191D"/>
+    <text x="24" y="40" fill="#F6F4EF" font-size="20" font-weight="700">Accent rule</text>
+    <text x="24" y="74" fill="#F6F4EF" font-size="17">Do not place large red and gold fields together.</text>
+    <text x="24" y="104" fill="#F3B61F" font-size="17">Gold uses graphite text; never white body text.</text>
+    <text x="24" y="132" fill="#B9BEC4" font-size="17">Status colors remain semantic and labeled.</text>
+  </g>
+</svg>

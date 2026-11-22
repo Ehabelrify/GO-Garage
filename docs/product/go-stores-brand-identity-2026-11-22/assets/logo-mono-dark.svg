@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-labelledby="title">
+  <title id="title">GO Stores monochrome dark logo</title>
+  <g fill="none" stroke="#17191D" stroke-linecap="square" stroke-linejoin="round">
+    <path d="M270 106C244 70 202 51 157 54C84 59 38 112 38 180C38 252 91 306 163 306C220 306 267 278 288 232V181H178" stroke-width="60"/>
+    <circle cx="411" cy="180" r="101" stroke-width="58"/>
+  </g>
+  <path d="M445 64H535L518 119H461Z" fill="#17191D"/>
+  <circle cx="411" cy="180" r="69" fill="#F6F4EF"/>
+  <g fill="#17191D"><path id="blade" d="M418 172C425 148 443 132 463 130C458 153 445 171 422 181Z"/><use href="#blade" transform="rotate(45 411 180)"/><use href="#blade" transform="rotate(90 411 180)"/><use href="#blade" transform="rotate(135 411 180)"/><use href="#blade" transform="rotate(180 411 180)"/><use href="#blade" transform="rotate(225 411 180)"/><use href="#blade" transform="rotate(270 411 180)"/><use href="#blade" transform="rotate(315 411 180)"/><circle cx="411" cy="180" r="14"/></g>
+  <g fill="#17191D" transform="translate(535 105) skewX(-9)">
+    <path d="M14 0H104L98 28H38L32 58H84L102 79L91 150H-3L3 122H66L72 88H20L1 67Z"/><path d="M113 0H221L215 30H178L154 150H119L143 30H107Z"/><path fill-rule="evenodd" d="M235 0H329L299 150H205ZM260 29L241 121H274L293 29Z"/><path fill-rule="evenodd" d="M349 0H431Q455 0 450 27L440 76Q436 94 417 99L442 150H404L383 101H369L359 150H325ZM377 28L368 73H400Q407 73 409 64L414 39Q416 28 406 28Z"/><path d="M470 0H564L558 29H499L493 59H547L542 87H487L480 121H540L534 150H439Z"/><path d="M582 0H672L666 28H606L600 58H652L670 79L659 150H565L571 122H634L640 88H588L569 67Z"/>
+  </g>
+</svg>

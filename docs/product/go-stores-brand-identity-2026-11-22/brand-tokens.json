@@ -1,0 +1,27 @@
+{
+  "brand": {
+    "graphite": "#17191D",
+    "graphiteSoft": "#2A2E33",
+    "warmWhite": "#F6F4EF",
+    "surface": "#FFFFFF",
+    "performanceRed": "#C82127",
+    "performanceRedDark": "#98171B",
+    "yellowGold": "#F3B61F",
+    "yellowGoldDark": "#A86F00",
+    "brushedSilver": "#B9BEC4",
+    "line": "#D6D4CF",
+    "muted": "#676B70"
+  },
+  "semantic": {
+    "info": "#2D6FA3",
+    "success": "#2D7A4F",
+    "warning": "#9A6700",
+    "danger": "#B42318"
+  },
+  "usageRatio": {
+    "warmWhite": 60,
+    "graphite": 25,
+    "performanceRed": 10,
+    "yellowGoldAndSilver": 5
+  }
+}
