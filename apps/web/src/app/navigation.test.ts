@@ -77,9 +77,20 @@ describe("workspace navigation", () => {
     const list = (role: Parameters<typeof navigationForRole>[0], granted: string[]) => navigationForRole(role, has(granted)).map((item) => item.id);
     expect(list("receptionist", ["finance.view"])).toContain("finance");
     expect(list("branch-manager", [])).not.toContain("finance");
-    expect(list("branch-manager", ["finance.view", "catalogue.manage"])).toEqual(["overview", "whatsapp", "bookings", "workshop", "customers", "quotes", "warranties", "finance", "catalogue"]);
+    expect(list("branch-manager", ["finance.view", "catalogue.manage", "quotes.view"])).toEqual(["overview", "whatsapp", "bookings", "workshop", "customers", "quotes", "warranties", "finance", "catalogue"]);
     expect(resolveWorkspacePage("receptionist", "catalogue", has(["catalogue.manage"]))?.page).toBe("catalogue");
     expect(list("owner", ["finance.view", "catalogue.manage"])).toContain("settings");
+  });
+
+  it("shows Quotes & offers to anyone with quotes.view or quotes.manage", () => {
+    const has = (granted: string[]) => (capability: string) => granted.includes(capability);
+    const list = (role: Parameters<typeof navigationForRole>[0], granted: string[]) => navigationForRole(role, has(granted)).map((item) => item.id);
+    expect(list("receptionist", ["bookings.manage"])).not.toContain("quotes");
+    expect(list("receptionist", ["quotes.view"])).toContain("quotes");
+    expect(list("branch-manager", ["quotes.manage"])).toContain("quotes");
+    expect(list("technician", ["quotes.view"])).toContain("quotes");
+    expect(resolveWorkspacePage("branch-manager", "reservations", has(["quotes.view"]))?.menu).toBe("quotes");
+    expect(resolveWorkspacePage("receptionist", "quotes", has([]))).toBeNull();
   });
 
   it("keeps the public automation demo outside the staff inbox navigation", () => {

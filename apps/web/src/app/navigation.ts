@@ -40,6 +40,9 @@ export interface WorkspaceNavigationItem {
   en: string;
   ar: string;
   roles: GarageRole[];
+  /** Short labels for the phone bottom bar and the icon rail tooltip (one word where possible). */
+  shortEn?: string;
+  shortAr?: string;
 }
 
 const all: GarageRole[] = ["owner", "branch-manager", "receptionist", "technician"];
@@ -49,12 +52,12 @@ const managers: GarageRole[] = ["owner", "branch-manager"];
 /** Visible menu entries in display order (role order is applied by `navigationForRole`). */
 export const navigation: WorkspaceNavigationItem[] = [
   { id: "overview", path: "/workspace/overview", icon: Gauge, en: "Overview", ar: "نظرة عامة", roles: managers },
-  { id: "whatsapp", path: "/workspace/whatsapp", icon: MessageCircle, en: "Inbox", ar: "صندوق الرسائل", roles: office },
+  { id: "whatsapp", path: "/workspace/whatsapp", icon: MessageCircle, en: "Inbox", ar: "صندوق الرسائل", shortAr: "الرسائل", roles: office },
   { id: "bookings", path: "/workspace/bookings", icon: CalendarDays, en: "Bookings", ar: "الحجوزات", roles: office },
   { id: "workshop", path: "/workspace/workshop", icon: Wrench, en: "Workshop", ar: "الورشة", roles: ["owner", "branch-manager", "technician"] },
-  { id: "customers", path: "/workspace/customers", icon: Users, en: "Customers", ar: "العملاء", roles: office },
-  { id: "quotes", path: "/workspace/quotes", icon: ClipboardList, en: "Quotes & offers", ar: "عروض الأسعار والعروض", roles: office },
-  { id: "warranties", path: "/workspace/warranties", icon: ShieldCheck, en: "Warranties", ar: "الضمانات", roles: office },
+  { id: "customers", path: "/workspace/customers", icon: Users, en: "Customers", ar: "العملاء", shortEn: "Clients", roles: office },
+  { id: "quotes", path: "/workspace/quotes", icon: ClipboardList, en: "Quotes & offers", ar: "عروض الأسعار والعروض", shortEn: "Quotes", shortAr: "العروض", roles: office },
+  { id: "warranties", path: "/workspace/warranties", icon: ShieldCheck, en: "Warranties", ar: "الضمانات", shortEn: "Warranty", roles: office },
   { id: "finance", path: "/workspace/finance", icon: CircleDollarSign, en: "Finance", ar: "المالية", roles: ["owner", "branch-manager", "receptionist"] },
   { id: "catalogue", path: "/workspace/catalogue", icon: Package, en: "Catalogue", ar: "الكتالوج", roles: ["owner", "branch-manager", "receptionist"] },
   { id: "settings", path: "/workspace/settings", icon: Settings2, en: "Settings", ar: "الإعدادات", roles: ["owner"] },
@@ -101,14 +104,23 @@ export const MOBILE_BAR_LIMIT = 5;
 /** Pages gated by one capability instead of the role matrix (the matrix is the default; an override can add or remove). */
 const capabilityPages: Partial<Record<PageId, string>> = { finance: "finance.view", catalogue: "catalogue.manage" };
 
+/** Pages visible with any one of several capabilities (Quotes & offers: view or manage). */
+const anyCapabilityPages: Partial<Record<PageId, string[]>> = { quotes: ["quotes.view", "quotes.manage"] };
+
 /** Capability probe for the signed-in actor; omit to use the role defaults only. */
 export type CapabilityProbe = (capability: string) => boolean;
 
 export function navigationForRole(role: GarageRole, has?: CapabilityProbe): WorkspaceNavigationItem[] {
-  const gated = (id: PageId) => { const capability = capabilityPages[id]; return capability !== undefined && has !== undefined ? has(capability) : undefined; };
+  const gated = (id: PageId) => {
+    if (has === undefined) return undefined;
+    const any = anyCapabilityPages[id];
+    if (any) return any.some((capability) => has(capability));
+    const capability = capabilityPages[id];
+    return capability !== undefined ? has(capability) : undefined;
+  };
   const kept = primaryNavigationByRole[role].filter((id) => gated(id) ?? true);
   // Capability-gated pages the role does not list by default are appended (settings stays last for owners, who list it by default).
-  const extra = has ? (Object.keys(capabilityPages) as PageId[]).filter((id) => !kept.includes(id) && gated(id)) : [];
+  const extra = has ? ([...Object.keys(capabilityPages), ...Object.keys(anyCapabilityPages)] as PageId[]).filter((id) => !kept.includes(id) && gated(id)) : [];
   return [...kept, ...extra]
     .map((id) => navigation.find((item) => item.id === id))
     .filter((item): item is WorkspaceNavigationItem => item !== undefined);

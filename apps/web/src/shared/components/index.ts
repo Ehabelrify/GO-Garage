@@ -1,6 +1,6 @@
 export { PageHeader, type PageHeaderProps } from "./PageHeader";
 export { FilterBar, activeFilterCount, type FilterBarProps, type FilterDef, type FilterOption } from "./FilterBar";
-export { DataTable, sortRows, nextSort, type Column, type DataTableProps, type SortState } from "./DataTable";
+export { DataTable, sortRows, nextSort, pageWindow, DEFAULT_PAGE_SIZES, type Column, type DataTableProps, type SortState } from "./DataTable";
 export { FormSection, Field, RequiredNote, type FormSectionProps, type FieldProps } from "./Form";
 export { DetailDrawer, type DetailDrawerProps } from "./DetailDrawer";
 export { Collapsible, Accordion, type CollapsibleProps, type AccordionSection } from "./Collapsible";
@@ -10,6 +10,14 @@ export { EmptyState, Skeleton, type EmptyStateProps, type EmptyVariant } from ".
 export { Notice } from "./Notice";
 export { ConfirmDialog, type ConfirmDialogProps } from "./ConfirmDialog";
 export { Money } from "./Money";
+export { Amount, Delta, type AmountProps, type DeltaProps } from "./Amount";
+export { Plate, type PlateProps } from "./Plate";
+export { Phone, type PhoneProps } from "./Phone";
+export { DateText, type DateTextProps } from "./DateText";
+export { Select, type SelectProps, type SelectOption } from "./Select";
+export { useFullPrecision, getFullPrecision, setFullPrecision } from "../preferences";
+export { formatAmount, formatDelta, formatPhone, type AmountVariant, type AmountOptions, type AmountParts } from "../format";
+export { dateLabel, timeLabel } from "../ui";
 export {
   RecordProvider, RecordRef, RecordRefList, useRecords, recordIcons,
   type RecordRefProps, type RecordRegistry, type RecordResolver, type RecordSummary,

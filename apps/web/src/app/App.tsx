@@ -1,5 +1,5 @@
-﻿import { useEffect, useMemo, useState } from "react";
-import { Activity, CheckCircle2, ChevronDown, ClipboardList, MoreHorizontal, ShieldAlert, Wrench, X } from "lucide-react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { CheckCircle2, ChevronDown, ClipboardList, LogOut, MoreHorizontal, ShieldAlert, Wrench, X } from "lucide-react";
 import { useClerk, useUser } from "@clerk/react";
 import { Link, useLocation } from "wouter";
 import { useGarageStore, type GarageActor } from "../shared/store";
@@ -10,6 +10,7 @@ import { ConfirmDialog } from "../shared/components/ConfirmDialog";
 import { GlobalSearch } from "../shared/components/GlobalSearch";
 import { RecordProvider } from "../shared/components/RecordRef";
 import { hasCapability } from "../shared/capabilities";
+import { useFullPrecision } from "../shared/preferences";
 import { buildRecordRegistry } from "./record-registry";
 import {
   defaultPageForRole, navigationForRole, overflowNavigationForRole, primaryNavigationForRole,
@@ -104,6 +105,41 @@ export function App() {
   />;
 }
 
+function AvatarMenu({ lang, name, email, roleLabel, onLanguage, onSignOut }: {
+  lang: Lang; name: string; email: string; roleLabel: string; onLanguage: (lang: Lang) => void; onSignOut: () => void;
+}) {
+  const t = (english: string, arabic: string) => lang === "ar" ? arabic : english;
+  const [open, setOpen] = useState(false);
+  const [fullPrecision, setFullPrecision] = useFullPrecision();
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: MouseEvent) => { if (root.current && !root.current.contains(event.target as Node)) setOpen(false); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onPointer); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+  return <div className="avatar-menu" ref={root}>
+    <button type="button" className="avatar-button" aria-haspopup="dialog" aria-expanded={open} aria-label={t("Account menu", "قائمة الحساب")} onClick={() => setOpen((value) => !value)}>
+      <span className="avatar-initial">{name.slice(0, 1).toUpperCase()}</span><ChevronDown size={14} aria-hidden="true" />
+    </button>
+    {open && <div className="avatar-popover" role="dialog" aria-label={t("Account", "الحساب")}>
+      <div className="avatar-identity"><strong>{name}</strong><span dir="ltr">{email}</span><span>{roleLabel}</span></div>
+      <div className="avatar-row">
+        <span>{t("Language", "اللغة")}</span>
+        <div className="lang-switch" role="group" aria-label={t("Choose language", "اختر اللغة")}>
+          <button type="button" className={lang === "ar" ? "selected" : ""} aria-pressed={lang === "ar"} onClick={() => onLanguage("ar")}>عربي</button>
+          <button type="button" className={lang === "en" ? "selected" : ""} aria-pressed={lang === "en"} onClick={() => onLanguage("en")}>EN</button>
+        </div>
+      </div>
+      <div className="avatar-row"><label><input type="checkbox" checked={fullPrecision} onChange={(event) => setFullPrecision(event.target.checked)} />{t("Show full precision", "إظهار الأرقام كاملة")}</label></div>
+      <p className="avatar-hint">{t("Exact amounts with fractions everywhere. Saved on this device only.", "المبالغ الدقيقة بالكسور في كل مكان. تُحفظ على هذا الجهاز فقط.")}</p>
+      <button type="button" className="btn avatar-signout" onClick={onSignOut}><LogOut size={15} aria-hidden="true" />{t("Sign out", "تسجيل الخروج")}</button>
+    </div>}
+  </div>;
+}
+
 function ReadyWorkspace({
   actor, state, store, userEmail, navigate, notify, signOut, toast, modal, setModal,
 }: {
@@ -181,39 +217,34 @@ function ReadyWorkspace({
         <span><strong className="brand-name">Garage OS</strong><small className="brand-sub">GO STORES · EGYPT</small></span>
       </Link>
       <nav className="nav-list" aria-label={t("Main navigation", "التنقل الأساسي")}>
-        {navItems.map(({ id, path, icon: Icon, en, ar }) => <Link key={id} className={`nav-item ${menuPage === id ? "active" : ""}`} href={path} aria-current={menuPage === id ? "page" : undefined}>
+        {navItems.map(({ id, path, icon: Icon, en, ar }) => <Link key={id} className={`nav-item ${menuPage === id ? "active" : ""}`} href={path} title={t(en, ar)} aria-label={t(en, ar)} aria-current={menuPage === id ? "page" : undefined}>
           <Icon size={17} strokeWidth={1.8} /><span>{t(en, ar)}</span>
         </Link>)}
       </nav>
-      <div className="sidebar-spacer" />
-      <div className="sidebar-account">
-        <span className="account-avatar">{profileName.slice(0, 1).toUpperCase()}</span>
-        <span className="account-copy"><strong>{profileName}</strong><small>{t(roleLabels[actor.role].en, roleLabels[actor.role].ar)}</small></span>
-      </div>
-      <button className="signout-button" type="button" onClick={signOut}>{t("Sign out", "تسجيل الخروج")}</button>
     </aside>
 
     <div className="main-area">
+      {actor.isDemo && <div className="preview-banner" role="note"><ClipboardList size={13} aria-hidden="true" />{t("Role preview account", "حساب معاينة الدور")}</div>}
       <header className="topbar">
         <div className="topbar-start">
           {state.branches.length > 1 && <label className="branch-context">
             <span className="sr-only">{t("Branch", "الفرع")}</span>
-            <select className="branch-select" value={state.currentBranch} onChange={(event) => store.setCurrentBranch(event.target.value as typeof state.currentBranch)}>
+            <select className="select branch-select" value={state.currentBranch} onChange={(event) => store.setCurrentBranch(event.target.value as typeof state.currentBranch)}>
               {actor.role === "owner" && <option value="all">{t("All branches", "كل الفروع")}</option>}
               {state.branches.map((branch) => <option key={branch.id} value={branch.id}>{branchName(branch.id)}</option>)}
-            </select><ChevronDown size={14} />
+            </select>
           </label>}
-          <span className="workspace-role"><Activity size={14} />{t(roleLabels[actor.role].en, roleLabels[actor.role].ar)}</span>
         </div>
         <div className="topbar-search"><GlobalSearch lang={lang} onNavigate={navigate} /></div>
         <div className="topbar-end">
-          {actor.isDemo && <span className="environment-label"><ClipboardList size={13} />{t("Role preview account", "حساب معاينة الدور")}</span>}
-          <div className="lang-switch" aria-label={t("Choose language", "اختر اللغة")}>
-            <button className={lang === "ar" ? "selected" : ""} onClick={() => store.setLocale("ar")}>عربي</button>
-            <button className={lang === "en" ? "selected" : ""} onClick={() => store.setLocale("en")}>EN</button>
-          </div>
-          <span className="header-user" title={userEmail}>{userEmail}</span>
-          <button className="mobile-signout-button" type="button" onClick={signOut}>{t("Sign out", "تسجيل الخروج")}</button>
+          <AvatarMenu
+            lang={lang}
+            name={profileName}
+            email={userEmail}
+            roleLabel={t(roleLabels[actor.role].en, roleLabels[actor.role].ar)}
+            onLanguage={(next) => store.setLocale(next)}
+            onSignOut={signOut}
+          />
         </div>
       </header>
       {sectionPages.length > 1 && <nav className="tabbar page-wrap-tabs" aria-label={t("Sections", "الأقسام")} style={{ paddingInline: "clamp(14px, 3vw, 34px)", background: "var(--paper)", marginBlockEnd: 0 }}>
@@ -226,7 +257,7 @@ function ReadyWorkspace({
       <RecordProvider lang={lang} registry={recordRegistry}><main className="page-wrap" key={page}>
         {page === "overview" && <RouteChunk loader={overviewPage} lang={lang} pageProps={{ lang, t, state, navigate, branchName, notify }} />}
         {page === "catalogue" && hasCapability(actor, "catalogue.manage") && <RouteChunk loader={cataloguePage} lang={lang} pageProps={{ lang }} />}
-        {page === "quotes" && actor.role !== "technician" && <RouteChunk loader={quotesPage} lang={lang} pageProps={{ lang }} />}
+        {page === "quotes" && (hasCapability(actor, "quotes.view") || hasCapability(actor, "quotes.manage")) && <RouteChunk loader={quotesPage} lang={lang} pageProps={{ lang }} />}
         {page === "finance" && hasCapability(actor, "finance.view") && <RouteChunk loader={financePage} lang={lang} pageProps={{ lang, branches: state.branches }} />}
         {page === "settings" && actor.role === "owner" && <RouteChunk loader={settingsPage} lang={lang} pageProps={{ lang, t, state, notify, branchName }} />}
         {page === "bookings" && <RouteChunk loader={bookingsPage} lang={lang} pageProps={{ lang, t, state, branchName, customerName, serviceName, vehicleFor, notify, confirmModal: setModal }} />}
@@ -238,8 +269,8 @@ function ReadyWorkspace({
     </div>
 
     <nav className="mobile-nav" aria-label={t("Quick navigation", "التنقل السريع")} data-count={mobileNavItems.length + Number(overflowItems.length > 0)}>
-      {mobileNavItems.map(({ id, path, icon: Icon, en, ar }) => <Link key={id} className={`mobile-nav-item ${menuPage === id ? "active" : ""}`} href={path} aria-current={menuPage === id ? "page" : undefined}>
-        <Icon size={18} /><span>{t(en, ar)}</span>
+      {mobileNavItems.map(({ id, path, icon: Icon, en, ar, shortEn, shortAr }) => <Link key={id} className={`mobile-nav-item ${menuPage === id ? "active" : ""}`} href={path} aria-current={menuPage === id ? "page" : undefined}>
+        <Icon size={18} /><span>{lang === "ar" ? shortAr ?? ar : shortEn ?? en}</span>
       </Link>)}
       {overflowItems.length > 0 && <button
         className={`mobile-nav-item mobile-nav-more ${overflowItems.some((item) => item.id === menuPage) ? "active" : ""}`}

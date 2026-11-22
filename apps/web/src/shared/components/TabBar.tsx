@@ -1,4 +1,4 @@
-import { useId, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 export interface TabDef { id: string; label: string; count?: number; hidden?: boolean }
 
@@ -37,7 +37,24 @@ export function TabBar({ tabs, value, onChange, ariaLabel, idPrefix }: TabBarPro
     onChange(visible[next].id);
     event.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')[next]?.focus();
   };
-  return <div className="tabbar" role="tablist" aria-label={ariaLabel} onKeyDown={onKey}>
+  const listRef = useRef<HTMLDivElement>(null);
+  const [fade, setFade] = useState({ start: false, end: false });
+  const measure = () => {
+    const el = listRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    const pos = Math.abs(el.scrollLeft); // scrollLeft is negative in RTL
+    setFade((prev) => { const next = { start: max > 1 && pos > 1, end: max > 1 && pos < max - 1 }; return prev.start === next.start && prev.end === next.end ? prev : next; });
+  };
+  useEffect(() => {
+    const el = listRef.current;
+    el?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView?.({ block: "nearest", inline: "center" });
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [value, visible.length]);
+  return <div className="tabbar-wrap" data-fade-start={fade.start ? "true" : "false"} data-fade-end={fade.end ? "true" : "false"}>
+    <div className="tabbar" role="tablist" aria-label={ariaLabel} onKeyDown={onKey} ref={listRef} onScroll={measure}>
     {visible.map((tab) => <button
       key={tab.id}
       type="button"
@@ -49,6 +66,7 @@ export function TabBar({ tabs, value, onChange, ariaLabel, idPrefix }: TabBarPro
       tabIndex={tab.id === value ? 0 : -1}
       onClick={() => onChange(tab.id)}
     >{tab.label}{tab.count !== undefined && <span className="tab-count">{tab.count}</span>}</button>)}
+    </div>
   </div>;
 }
 

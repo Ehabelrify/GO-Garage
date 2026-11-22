@@ -2,15 +2,16 @@
 export type WebCapability =
   | "bookings.manage" | "customers.read" | "whatsapp.use" | "transport.coordinate"
   | "warranty.view" | "warranty.issue" | "warranty.review" | "warranty.void" | "warranty.policies"
-  | "catalogue.manage" | "finance.view" | "special-requests.review" | "settings.manage" | "staff.manage";
+  | "catalogue.manage" | "finance.view" | "special-requests.review" | "settings.manage" | "staff.manage"
+  | "quotes.view" | "quotes.manage";
 
 type ActorLike = { role: string; isDemo?: boolean; capabilities?: string[]; permissions?: Partial<Record<string, boolean>> } | null | undefined;
 
 /** Mirrors authz.ts role defaults. Used only when the server list is absent (older payloads, tests). */
 export const roleDefaults: Record<string, readonly WebCapability[]> = {
-  owner: ["bookings.manage", "customers.read", "whatsapp.use", "transport.coordinate", "warranty.view", "warranty.issue", "warranty.review", "warranty.void", "warranty.policies", "catalogue.manage", "finance.view", "special-requests.review", "settings.manage", "staff.manage"],
-  "branch-manager": ["bookings.manage", "customers.read", "whatsapp.use", "transport.coordinate", "warranty.view", "warranty.issue", "warranty.review", "finance.view"],
-  receptionist: ["bookings.manage", "customers.read", "whatsapp.use", "transport.coordinate", "warranty.view"],
+  owner: ["bookings.manage", "customers.read", "whatsapp.use", "transport.coordinate", "warranty.view", "warranty.issue", "warranty.review", "warranty.void", "warranty.policies", "catalogue.manage", "finance.view", "special-requests.review", "settings.manage", "staff.manage", "quotes.view", "quotes.manage"],
+  "branch-manager": ["bookings.manage", "customers.read", "whatsapp.use", "transport.coordinate", "warranty.view", "warranty.issue", "warranty.review", "finance.view", "quotes.view"],
+  receptionist: ["bookings.manage", "customers.read", "whatsapp.use", "transport.coordinate", "warranty.view", "quotes.view"],
   technician: [],
 };
 const ownerOnly: readonly WebCapability[] = ["settings.manage", "staff.manage"];

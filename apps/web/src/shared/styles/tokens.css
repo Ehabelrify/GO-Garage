@@ -10,7 +10,7 @@
   scrollbar-color: #8da9a0 #eef2f1;
 
   --ink: #172c34;
-  --muted: #65777b;
+  --muted: #52646a;
   --line: #d8e1df;
   --line-soft: #e6ecea;
   --paper: #fbfcfa;
@@ -33,16 +33,37 @@
   --focus-ring: 3px solid rgba(23, 109, 104, .28);
 
   /* Status tones: text on soft background. Always paired with a text label. */
-  --tone-neutral-fg: #526467;
+  --tone-neutral-fg: #44575a;
   --tone-neutral-bg: #edf1f0;
   --tone-info-fg: #315f7a;
   --tone-info-bg: #e9f1f5;
   --tone-success-fg: #276d4e;
   --tone-success-bg: #e6f2eb;
-  --tone-warning-fg: #8c5d13;
+  --tone-warning-fg: #7a4f0e;
   --tone-warning-bg: #f8efd9;
   --tone-danger-fg: #9c443b;
   --tone-danger-bg: #f8eae8;
+
+  /* Type scale (UI_PATTERNS.md). Phone/tablet overrides below. */
+  --fs-display: 28px;
+  --fs-kpi: 24px;
+  --fs-h2: 18px;
+  --fs-h3: 15px;
+  --fs-body: 14px;
+  --fs-label: 12px;
+  --fs-caption: 12px;
+  --fs-nav: 11px; /* only the mobile nav label; nothing else may go below 12px */
+  --lh-display: 1.15;
+  --lh-kpi: 1.1;
+  --lh-heading: 1.3;
+  --lh-body: 1.5;
+  --lh-ar: 1.65;
+  --control-h: 40px;
+  --control-h-sm: 32px;
+  --control-h-lg: 48px;
+  --fg-placeholder: #6a7a7e;
+  --nav-fg: #e6efed;
+  --banner-fg: #5f4310;
 
   /* Stacking order */
   --z-sidebar: 10;
@@ -53,3 +74,11 @@
   --z-dialog: 50;
   --z-toast: 60;
 }
+
+@media (max-width: 1023px) {
+  :root { --fs-display: 26px; --fs-kpi: 22px; }
+}
+@media (max-width: 760px) {
+  :root { --fs-display: 22px; --fs-kpi: 20px; --fs-h2: 17px; --control-h: 44px; }
+}
+:root:lang(ar), [dir="rtl"] { --lh-body: var(--lh-ar); }

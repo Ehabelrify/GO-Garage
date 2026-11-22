@@ -1,5 +1,5 @@
-import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
+import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown } from "lucide-react";
 import type { Locale } from "@garage/domain";
 import { EmptyState, Skeleton } from "./EmptyState";
 
@@ -38,15 +38,31 @@ export interface DataTableProps<Row> {
   /** Rendered when rows is empty and not loading/error. Pass <EmptyState .../> (no-data or no-results variant). */
   empty?: ReactNode;
   initialSort?: SortState;
-  /** Below 760px render stacked cards instead of a horizontally scrolling table. Default true. */
+  /** Below about 1000px render compact cards instead of a horizontally scrolling table. Default true. */
   cards?: boolean;
+  /** Classic paging (default on). Pass false to render every row. */
+  paging?: boolean;
+  /** Initial rows per page (default 25). */
+  pageSize?: number;
+  /** Selectable page sizes (default 25, 50, 100). */
+  pageSizes?: number[];
   /** Max height of the scrolling area; header stays sticky. */
   maxHeight?: string;
 }
 
+export const DEFAULT_PAGE_SIZES = [25, 50, 100];
+
+/** Pure paging maths (1-based range for display). Exported for tests. */
+export function pageWindow(total: number, page: number, size: number): { page: number; pages: number; start: number; end: number } {
+  const pages = Math.max(1, Math.ceil(total / size));
+  const safe = Math.min(Math.max(0, page), pages - 1);
+  const start = total === 0 ? 0 : safe * size + 1;
+  return { page: safe, pages, start, end: Math.min(total, (safe + 1) * size) };
+}
+
 const text = {
-  en: { retry: "Retry", loading: "Loading", errorTitle: "Could not load this list", sortBy: "Sort by", asc: "ascending", desc: "descending" },
-  ar: { retry: "إعادة المحاولة", loading: "جارٍ التحميل", errorTitle: "تعذر تحميل القائمة", sortBy: "ترتيب حسب", asc: "تصاعدي", desc: "تنازلي" },
+  en: { retry: "Retry", loading: "Loading", errorTitle: "Could not load this list", sortBy: "Sort by", asc: "ascending", desc: "descending", showing: (a: number, b: number, n: number) => `Showing ${a}-${b} of ${n}`, perPage: "Rows per page", prev: "Previous page", next: "Next page", pageOf: (p: number, n: number) => `Page ${p} of ${n}` },
+  ar: { retry: "إعادة المحاولة", loading: "جارٍ التحميل", errorTitle: "تعذر تحميل القائمة", sortBy: "ترتيب حسب", asc: "تصاعدي", desc: "تنازلي", showing: (a: number, b: number, n: number) => `عرض ${a}-${b} من ${n}`, perPage: "صفوف في الصفحة", prev: "الصفحة السابقة", next: "الصفحة التالية", pageOf: (p: number, n: number) => `صفحة ${p} من ${n}` },
 };
 
 /** Pure sorter (stable, locale-aware, nulls last). Exported for tests and for pages that sort server-side. */
@@ -73,7 +89,7 @@ export function nextSort(current: SortState, key: string): SortState {
 }
 
 export function DataTable<Row>({
-  columns, rows, rowKey, lang, caption, onRowClick, selectedKey, loading, error, onRetry, empty, initialSort = null, cards = true, maxHeight,
+  columns, rows, rowKey, lang, caption, onRowClick, selectedKey, loading, error, onRetry, empty, initialSort = null, cards = true, maxHeight, paging = true, pageSize = 25, pageSizes = DEFAULT_PAGE_SIZES,
 }: DataTableProps<Row>) {
   const copy = text[lang];
   const [sort, setSort] = useState<SortState>(initialSort);
@@ -81,6 +97,12 @@ export function DataTable<Row>({
     () => sort ? sortRows(rows, columns.find((column) => column.key === sort.key), sort.direction, lang) : rows,
     [rows, columns, sort, lang],
   );
+  const [size, setSize] = useState(pageSize);
+  const [pageIndex, setPageIndex] = useState(0);
+  useEffect(() => { setPageIndex(0); }, [rows.length, sort, size]);
+  const window_ = pageWindow(sorted.length, pageIndex, size);
+  const visible = paging ? sorted.slice(window_.start - 1 < 0 ? 0 : window_.start - 1, window_.end) : sorted;
+  const showPager = paging && sorted.length > Math.min(...pageSizes, size);
   const primaryKey = (columns.find((column) => column.primary) ?? columns[0])?.key;
 
   if (error) {
@@ -119,7 +141,7 @@ export function DataTable<Row>({
           })}
         </tr></thead>
         <tbody>
-          {sorted.map((row) => {
+          {visible.map((row) => {
             const key = rowKey(row);
             return <tr
               key={key}
@@ -139,14 +161,16 @@ export function DataTable<Row>({
       </table>
     </div>
     {cards && <div className="data-cards" role="list" aria-label={caption}>
-      {sorted.map((row) => {
+      {visible.map((row) => {
         const key = rowKey(row);
+        const meta = columns.filter((column) => column.key !== primaryKey && !column.hideOnCard);
         const body = <>
           {columns.filter((column) => column.key === primaryKey).map((column) => <div className="data-card-title" key={column.key}>{column.render(row)}</div>)}
-          {columns.filter((column) => column.key !== primaryKey && !column.hideOnCard).map((column) => <div className="data-card-row" key={column.key}>
-            <span className="data-card-label">{column.header}</span>
-            <span className={`data-card-value${column.mono ? " mono" : ""}`}>{column.render(row)}</span>
-          </div>)}
+          {meta.length > 0 && <div className="data-card-meta">
+            {meta.map((column) => <span key={column.key} className={column.mono ? "mono" : undefined}>
+              <span className="data-card-label">{column.header}</span><span className="data-card-value">{column.render(row)}</span>
+            </span>)}
+          </div>}
         </>;
         // A card may contain interactive children (RecordRef chips are buttons), so the card itself must not be a
         // <button>: nested buttons are invalid HTML and break keyboard and screen-reader use. Mirror the table row instead.
@@ -163,5 +187,19 @@ export function DataTable<Row>({
           : <div role="listitem" className="data-card" key={key}>{body}</div>;
       })}
     </div>}
+    {showPager && <nav className="table-pager" aria-label={copy.perPage}>
+      <span className="table-pager-range" role="status" aria-live="polite">{copy.showing(window_.start, window_.end, sorted.length)}</span>
+      <div className="table-pager-controls">
+        <label className="table-pager-size">
+          <span>{copy.perPage}</span>
+          <select className="select" value={size} onChange={(event) => setSize(Number(event.target.value))}>
+            {[...new Set([...pageSizes, size])].sort((a, b) => a - b).map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+        </label>
+        <button type="button" className="btn btn-sm" aria-label={copy.prev} disabled={window_.page === 0} onClick={() => setPageIndex(window_.page - 1)}><ChevronLeft size={16} className="pager-icon" aria-hidden="true" /></button>
+        <span className="table-pager-page">{copy.pageOf(window_.page + 1, window_.pages)}</span>
+        <button type="button" className="btn btn-sm" aria-label={copy.next} disabled={window_.page >= window_.pages - 1} onClick={() => setPageIndex(window_.page + 1)}><ChevronRight size={16} className="pager-icon" aria-hidden="true" /></button>
+      </div>
+    </nav>}
   </div>;
 }

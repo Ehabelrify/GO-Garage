@@ -1,4 +1,5 @@
 import type { Locale } from "@garage/domain";
+import { AlertTriangle, CheckCircle2, Circle, Info, XCircle, type LucideIcon } from "lucide-react";
 import { stageNames } from "../labels";
 
 export type StatusTone = "neutral" | "info" | "success" | "warning" | "danger";
@@ -140,7 +141,10 @@ export function resolveStatus(status: string, lang: Locale, domain?: StatusDomai
   return { label: humanise(status), tone: "neutral" };
 }
 
+const toneIcons: Record<StatusTone, LucideIcon> = { neutral: Circle, info: Info, success: CheckCircle2, warning: AlertTriangle, danger: XCircle };
+
 export function StatusBadge({ status, lang, domain, label }: { status: string; lang: Locale; domain?: StatusDomain; label?: string }) {
   const resolved = resolveStatus(status, lang, domain);
-  return <span className={`status ${status}`} data-tone={resolved.tone}>{label ?? resolved.label}</span>;
+  const Icon = toneIcons[resolved.tone];
+  return <span className={`status ${status}`} data-tone={resolved.tone}><Icon size={12} aria-hidden="true" />{label ?? resolved.label}</span>;
 }

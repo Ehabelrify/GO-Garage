@@ -5,6 +5,7 @@ export type EmptyVariant = "no-data" | "no-results" | "error";
 
 export interface EmptyStateProps {
   title: string;
+  /** One sentence: why it is empty. */
   text?: string;
   variant?: EmptyVariant;
   icon?: LucideIcon;
@@ -17,7 +18,7 @@ const icons: Record<EmptyVariant, LucideIcon> = { "no-data": Inbox, "no-results"
 export function EmptyState({ title, text, variant = "no-data", icon, action }: EmptyStateProps) {
   const Icon = icon ?? icons[variant];
   return <div className={`empty-state ${variant === "error" ? "error" : ""}`} role={variant === "error" ? "alert" : undefined}>
-    <Icon size={22} aria-hidden="true" />
+    <span className="empty-state-icon"><Icon size={22} aria-hidden="true" /></span>
     <strong>{title}</strong>
     {text && <p>{text}</p>}
     {action && <div className="empty-state-actions">{action}</div>}

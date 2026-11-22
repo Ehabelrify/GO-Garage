@@ -1,11 +1,11 @@
 /* Remaining unmigrated rules (audit cleanup 21 Nov 2026: unused rules removed after grep). Prefer shared components. */
-.impact { margin-block-start:14px; padding:10px 12px; background:#f3f6f4; border-inline-start:2px solid #89aaa2; color:#526669; font-size:12px; line-height:1.5; }
-.vehicle-selection { display:block; margin-block-start:5px; color:var(--muted); font-size:12px; line-height:1.45; overflow-wrap:anywhere; unicode-bidi:plaintext; }
+.impact { margin-block-start:14px; padding:10px 12px; background:#f3f6f4; border-inline-start:2px solid #89aaa2; color:#526669; font-size: var(--fs-caption); line-height:1.5; }
+.vehicle-selection { display:block; margin-block-start:5px; color:var(--muted); font-size: var(--fs-caption); line-height:1.45; overflow-wrap:anywhere; unicode-bidi:plaintext; }
 /* Public landing and branded Clerk pages */
-.landing-kicker { display:inline-flex; align-items:center; gap:8px; color:#2a705b; font-size:12px; font-weight:700; letter-spacing:.03em; }
+.landing-kicker { display:inline-flex; align-items:center; gap:8px; color:#2a705b; font-size: var(--fs-caption); font-weight:700; letter-spacing:.03em; }
 
 /* Final sizes (formerly an append-only override block) */
-.stat-head { font-size:13px; }
+.stat-head { font-size: var(--fs-body); }
 @media (max-width: 760px) {
   .form-actions .form-hint { width:100%; }
 }

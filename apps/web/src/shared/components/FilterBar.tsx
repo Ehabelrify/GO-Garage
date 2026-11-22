@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Search } from "lucide-react";
+import type { CSSProperties } from "react";
 import type { Locale } from "@garage/domain";
 
 export interface FilterOption { value: string; label: string }
@@ -38,20 +39,23 @@ const text = {
 export function FilterBar({ lang, search, filters = [], onClear, resultCount, children }: FilterBarProps) {
   const copy = text[lang];
   const active = activeFilterCount(search, filters);
-  return <div className="filter-bar" role="search">
+  const shown = filters.slice(0, 3);
+  return <div className="filter-bar" role="search" style={{ "--filter-count": shown.length } as CSSProperties}>
     {search && <label className="search-wrap">
       <span className="sr-only">{search.label ?? search.placeholder}</span>
       <Search size={15} aria-hidden="true" />
       <input className="search-input" type="search" value={search.value} placeholder={search.placeholder} onChange={(event) => search.onChange(event.target.value)} />
     </label>}
-    {filters.slice(0, 3).map((filter) => <label key={filter.key}>
+    {shown.map((filter) => <label key={filter.key}>
       <span className="sr-only">{filter.label}</span>
-      <select className="filter-select" value={filter.value} onChange={(event) => filter.onChange(event.target.value)}>
+      <select className="select filter-select" value={filter.value} onChange={(event) => filter.onChange(event.target.value)}>
         {filter.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
     </label>)}
-    {children}
-    {active > 0 && onClear && <button type="button" className="btn btn-quiet btn-sm" onClick={onClear}>{copy.clear}</button>}
-    {resultCount !== undefined && <span className="filter-bar-count" role="status" aria-live="polite">{copy.results(resultCount)}</span>}
+    {children && <div className="filter-bar-extra">{children}</div>}
+    {((active > 0 && onClear) || resultCount !== undefined) && <div className="filter-bar-end">
+      {active > 0 && onClear && <button type="button" className="btn btn-quiet btn-sm" onClick={onClear}>{copy.clear}</button>}
+      {resultCount !== undefined && <span className="filter-bar-count" role="status" aria-live="polite">{copy.results(resultCount)}</span>}
+    </div>}
   </div>;
 }
