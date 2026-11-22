@@ -61,7 +61,9 @@ customerConsentRouter.get("/", async (req, res, next) => {
               (SELECT count(*) FROM customers WHERE id=$2) AS customers`,
       [parsed.data.channelId, parsed.data.customerId],
     );
-    if (!Number(known.rows[0]?.channels) || !Number(known.rows[0]?.customers)) {
+    // The simulation channel may simply not be seeded yet; that is not an unknown channel for a known customer.
+    const channelKnown = Number(known.rows[0]?.channels) > 0 || parsed.data.channelId === "whatsapp-simulation";
+    if (!channelKnown || !Number(known.rows[0]?.customers)) {
       return res.status(404).json({ code: "CONSENT_NOT_FOUND" });
     }
     if (!hasCapability(actor, "whatsapp.use")) return res.status(404).json({ code: "CONSENT_NOT_FOUND" });

@@ -1,3 +1,4 @@
+import { autoSendOnIssue } from "../document-delivery/document-delivery-service";
 import { createHash, randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { buildCoveragePeriod, completeLifetimeDefinition, type Configured, type LifetimeDefinition, type PolicyRef } from "@garage/domain";
@@ -82,6 +83,7 @@ export async function issueCoverageInTransaction(client: PoolClient, context: Ex
   if (accepted) await client.query("UPDATE warranty_invoice_drafts SET accepted_quote_id=$2,accepted_quote_revision=$3,component_id=$4,sale_source='accepted-quote-component' WHERE id=$1", [invoiceId,accepted.ref.quoteId,accepted.ref.revision,input.componentId]);
   await client.query("INSERT INTO warranty_audit_events(id,warranty_id,action,details,actor_user_id) VALUES($1,$2,$3,$4,$5),($6,$2,'invoice-draft-created',$7,$5)", [id("warranty-event"),warrantyId,input.source === "job-delivery" ? "warranty-auto-issued" : "warranty-issued",`Exact policy ${input.policyRef.id} version ${input.policyRef.version}; component ${input.componentId ?? "legacy"}; accepted quote ${accepted?.ref.quoteId ?? "none"}.`,actor.userId,id("warranty-event"),"Unpriced draft created for covered service; no revenue or payment inferred."]);
   await client.query("INSERT INTO warranty_issuance_requests(environment_id,actor_id,idempotency_key,request_hash,warranty_id) VALUES($1,$2,$3,$4,$5)", [context.environmentId,actor.userId,input.idempotencyKey,hash,warrantyId]);
+  await autoSendOnIssue(client, "warranty-card", warrantyId, "issued");
   return { warrantyId, startDate: coverageStartDate, expiresOn: period.expiresOn, coverageKind: period.kind };
 }
 

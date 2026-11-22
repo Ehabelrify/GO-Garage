@@ -31,6 +31,22 @@ describe("GET consents", () => {
     expect(res.status).toBe(200);
     expect(((await res.json()) as { consent: { status: string } }).consent.status).toBe("missing");
   });
+  it("returns 200 missing for a known customer when the simulation channel is not seeded", async () => {
+    vi.mocked(pool.query)
+      .mockResolvedValueOnce({ rows: [{ channels: "0", customers: "1" }] } as never)
+      .mockResolvedValueOnce({ rows: [] } as never);
+    const res = await fetch(`${base}?channelId=whatsapp-simulation&customerId=c1&purpose=service`);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { consent: { status: string; revision: number } }).consent).toEqual({ status: "missing", revision: 0 });
+  });
+  it("still returns 404 for an unseeded channel that is not the simulation channel", async () => {
+    vi.mocked(pool.query).mockResolvedValueOnce({ rows: [{ channels: "0", customers: "1" }] } as never);
+    expect((await fetch(url())).status).toBe(404);
+  });
+  it("returns 404 for an unknown customer on the simulation channel", async () => {
+    vi.mocked(pool.query).mockResolvedValueOnce({ rows: [{ channels: "0", customers: "0" }] } as never);
+    expect((await fetch(`${base}?channelId=whatsapp-simulation&customerId=c1&purpose=service`)).status).toBe(404);
+  });
   it("returns 404 for an unknown customer or channel", async () => {
     vi.mocked(pool.query).mockResolvedValueOnce({ rows: [{ channels: "1", customers: "0" }] } as never);
     const res = await fetch(url());

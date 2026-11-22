@@ -206,7 +206,7 @@ export async function listDeliveries(actor: GarageActor, kind: DocumentKind, doc
 /**
  * Automatic send hook for invoice issue, quote offer or acceptance, and warranty issuance. Runs inside the caller's
  * transaction under a savepoint, so a missing consent or any failure never aborts the business action. Idempotent per
- * document and event. Not wired into any transaction yet (call sites are listed in docs/engineering/DOCUMENT_DELIVERY.md).
+ * document and event. Call sites are listed in docs/engineering/DOCUMENT_DELIVERY.md.
  */
 export async function autoSendOnIssue(client: PoolClient, kind: DocumentKind, documentId: string, event: string, now: Date = new Date()): Promise<{ sent: boolean; reason?: string }> {
   await client.query("SAVEPOINT document_auto_send");

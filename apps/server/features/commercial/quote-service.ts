@@ -1,3 +1,4 @@
+import { autoSendOnIssue } from "../document-delivery/document-delivery-service";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { PoolClient } from "pg";
@@ -117,6 +118,7 @@ export async function createQuoteRevisionInTransaction(client: PoolClient, conte
     await client.query("UPDATE quote_heads SET current_revision=$2 WHERE id=$1",[quoteId,revision]);
     if (revision === 1) await client.query("INSERT INTO quote_followups(quote_id) VALUES($1)",[quoteId]);
     await client.query("INSERT INTO quote_audit(quote_id,revision,action,actor_id) VALUES($1,$2,$3,$4)",[quoteId,revision,input.state === "offered" ? "offered" : "draft-created",actor.userId]);
+    if (input.state === "offered") await autoSendOnIssue(client, "quote", quoteId, `offered-${revision}`);
     return { quoteId, revision };
   }
 }
@@ -156,6 +158,7 @@ export async function acceptQuote(context: ExecutionContext, actor: GarageActor,
     await client.query("UPDATE quote_heads SET accepted_revision=$2 WHERE id=$1",[input.ref.quoteId,input.ref.revision]);
     await client.query("INSERT INTO quote_audit(quote_id,revision,action,actor_id) VALUES($1,$2,'accepted',$3)",[input.ref.quoteId,input.ref.revision,actor.userId]);
     await materializeBenefitsInTransaction(client,context,actor,{quoteRef:input.ref,trigger:"accepted"});
+    await autoSendOnIssue(client, "quote", input.ref.quoteId, "accepted");
     return accepted;
   });
 }

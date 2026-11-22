@@ -25,8 +25,11 @@ Still needed for live: approved Meta message templates (business-initiated messa
 
 ## Automatic send
 
-`autoSendOnIssue(client, kind, documentId, event)` in `document-delivery-service.ts` runs under a savepoint inside the caller's transaction: missing consent or any error never aborts the business action, and the key `auto:<kind>:<id>:<event>` makes it idempotent. It is exported but NOT yet called. Call sites to add (one line each, after the status change commits inside the same transaction):
+`autoSendOnIssue(client, kind, documentId, event)` in `document-delivery-service.ts` runs under a savepoint inside the caller's transaction: missing consent or any error never aborts the business action, and the key `auto:<kind>:<id>:<event>` makes it idempotent. It is wired at these call sites (one guarded call each, inside the existing transaction, after the status change):
 
 - invoice issue: `issueInvoice` in `invoicing/invoice-service.ts`, event `issued`
-- quote offer: `createQuoteRevision` in `commercial/quote-service.ts` when state is `offered`, event `offered-<revision>`; acceptance: `acceptQuote`, event `accepted`
-- warranty issuance: `issuance-service.ts`, event `issued`
+- quote offer: `createQuoteRevisionInTransaction` in `commercial/quote-service.ts` when state is `offered`, event `offered-<revision>`
+- quote acceptance: `acceptQuote` in `commercial/quote-service.ts`, event `accepted`
+- warranty issuance: `issueCoverageInTransaction` in `warranty/issuance-service.ts`, event `issued` (kind `warranty-card`)
+
+A delivery error is swallowed by the savepoint and never fails the business action (tests: `document-delivery/auto-send-hooks.test.ts`).
