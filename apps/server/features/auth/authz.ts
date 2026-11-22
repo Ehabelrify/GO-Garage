@@ -17,6 +17,9 @@ export const capabilities = [
   "warranty.policies",
   "catalogue.manage",
   "finance.view",
+  "invoices.view",
+  "invoices.manage",
+  "invoices.payments",
   "special-requests.review",
   "settings.manage",
   "staff.manage",
@@ -32,8 +35,9 @@ export const roleDefaultCapabilities: Record<GarageRole, readonly Capability[]> 
   "branch-manager": [
     "bookings.manage", "quotes.view", "customers.read", "whatsapp.use", "transport.coordinate",
     "warranty.view", "warranty.issue", "warranty.review", "finance.view",
+    "invoices.view", "invoices.manage", "invoices.payments",
   ],
-  receptionist: ["bookings.manage", "quotes.view", "customers.read", "whatsapp.use", "transport.coordinate", "warranty.view"],
+  receptionist: ["bookings.manage", "quotes.view", "customers.read", "whatsapp.use", "transport.coordinate", "warranty.view", "invoices.view", "invoices.manage"],
   technician: [],
 };
 

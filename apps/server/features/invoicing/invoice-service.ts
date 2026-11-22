@@ -14,9 +14,11 @@ export class InvoiceError extends Error {
 }
 const fail = (status: number, code: string, message: string): never => { throw new InvoiceError(status, code, message); };
 
-const canRead = (actor: GarageActor) => hasCapability(actor, "bookings.manage") || hasCapability(actor, "finance.view");
-const canWrite = (actor: GarageActor) => hasCapability(actor, "bookings.manage");
-const canVoid = (actor: GarageActor) => actor.role === "owner" || (hasCapability(actor, "finance.view") && canWrite(actor));
+// Dedicated capabilities (P2T-012). Edit/issue need view+manage; payments and voiding need view+payments.
+const canRead = (actor: GarageActor) => hasCapability(actor, "invoices.view");
+const canWrite = (actor: GarageActor) => canRead(actor) && hasCapability(actor, "invoices.manage");
+const canPay = (actor: GarageActor) => canRead(actor) && hasCapability(actor, "invoices.payments");
+const canVoid = canPay;
 
 function requireReader(actor: GarageActor) {
   if (!canRead(actor)) fail(403, "ROLE_FORBIDDEN", "Invoices are not available to your role.");
@@ -49,7 +51,7 @@ export async function listInvoices(actor: GarageActor, filter: { status?: string
     if (value) { args.push(value); clauses.push(`${column} = $${args.length}`); }
   }
   const rows = await pool.query<InvoiceRow>(`${SELECT} WHERE ${clauses.join(" AND ")} ORDER BY i.created_at DESC LIMIT 300`, args);
-  return { invoices: rows.rows.map(toInvoice), canWrite: !actor.isDemo && canWrite(actor), canVoid: !actor.isDemo && canVoid(actor) };
+  return { invoices: rows.rows.map(toInvoice), canWrite: !actor.isDemo && canWrite(actor), canPay: !actor.isDemo && canPay(actor), canVoid: !actor.isDemo && canVoid(actor) };
 }
 
 async function loadScoped(actor: GarageActor, id: string, client?: Runner, lock = false): Promise<InvoiceRow> {
@@ -72,7 +74,7 @@ export async function getInvoice(actor: GarageActor, id: string) {
     lines: lines.rows.map(toLine),
     history: events.rows.map((e) => ({ seq: e.seq, action: e.action, fromStatus: e.from_status, toStatus: e.to_status, actorName: e.actor_name, reason: e.reason, occurredAt: e.occurred_at.toISOString() })),
     payments: payments.rows.map((p) => ({ id: p.id, amountMinor: Number(p.amount_minor), currency: p.currency, method: p.method, reference: p.reference, receivedOn: p.received_on, recordedAt: p.created_at.toISOString() })),
-    canWrite: !actor.isDemo && canWrite(actor), canVoid: !actor.isDemo && canVoid(actor),
+    canWrite: !actor.isDemo && canWrite(actor), canPay: !actor.isDemo && canPay(actor), canVoid: !actor.isDemo && canVoid(actor),
   };
 }
 
@@ -344,7 +346,7 @@ async function recordCollectionEvent(client: Runner, actor: GarageActor, row: In
 }
 
 export const recordPayment =(actor: GarageActor, id: string, input: PaymentInput) =>
-  mutate(actor, id, input.expectedRevision, "payment", canWrite, async (client, row) => {
+  mutate(actor, id, input.expectedRevision, "payment", canPay, async (client, row) => {
     const total = Number(row.total_minor);
     const paid = Number(row.paid_minor) + input.amountMinor;
     if (paid > total) return fail(409, "OVERPAYMENT", "The payment is larger than the remaining balance.");

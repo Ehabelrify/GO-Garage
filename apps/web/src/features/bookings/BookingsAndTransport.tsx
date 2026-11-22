@@ -16,7 +16,7 @@ export function BookingsAndTransport(props: BookingsProps) {
   const store = useGarageStore();
   const [tab, setTab] = useUrlState("tab", "bookings");
   const canTransport = hasCapability(store.actor, "transport.coordinate");
-  const canInvoices = hasCapability(store.actor, "bookings.manage") || hasCapability(store.actor, "finance.view");
+  const canInvoices = hasCapability(store.actor, "invoices.view");
   const canFollowups = hasCapability(store.actor, "bookings.manage");
   const active = tab === "transport" && canTransport ? "transport" : tab === "invoices" && canInvoices ? "invoices" : tab === "followups" && canFollowups ? "followups" : "bookings";
   const { t, lang } = props;

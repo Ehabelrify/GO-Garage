@@ -39,12 +39,18 @@ export const capabilityLabels: Record<string, { en: string; ar: string }> = {
   "special-requests.review": { en: "Review special requests", ar: "مراجعة الطلبات الخاصة" },
   "settings.manage": { en: "Manage settings", ar: "إدارة الإعدادات" },
   "staff.manage": { en: "Manage staff", ar: "إدارة الفريق" },
+  "invoices.view": { en: "View invoices", ar: "عرض الفواتير" },
+  "invoices.manage": { en: "Edit and issue invoices", ar: "تعديل الفواتير وإصدارها" },
+  "invoices.payments": { en: "Record payments, void and correct invoices", ar: "تسجيل الدفعات وإلغاء الفواتير وتصحيحها" },
   "quotes.view": { en: "View quotes and offers (read only)", ar: "عرض العروض والتسعيرات (قراءة فقط)" },
   "quotes.manage": { en: "Create and edit quotes and offers", ar: "إنشاء وتعديل العروض والتسعيرات" },
 };
 
 /** Short hint under a capability name where the label alone is not enough. */
 export const capabilityHints: Record<string, { en: string; ar: string }> = {
+  "invoices.view": { en: "Invoice list, details and invoice summaries on customer and vehicle records.", ar: "قائمة الفواتير وتفاصيلها وملخصها في سجلات العملاء والمركبات." },
+  "invoices.manage": { en: "Edit drafts, generate and issue. Needs View invoices.", ar: "تعديل المسودات وإنشاؤها وإصدارها. تتطلب عرض الفواتير." },
+  "invoices.payments": { en: "Money actions: record payments, void, correct. Needs View invoices.", ar: "إجراءات مالية: تسجيل الدفعات والإلغاء والتصحيح. تتطلب عرض الفواتير." },
   "quotes.view": { en: "Can open Quotes & offers but cannot change anything.", ar: "يفتح العروض والتسعيرات دون أي تعديل." },
   "quotes.manage": { en: "Includes creating, offering, reserving and cancelling.", ar: "تشمل الإنشاء والعرض والحجز والإلغاء." },
 };
@@ -55,6 +61,7 @@ const capabilityGroupDefs: CapabilityGroup[] = [
   { id: "front-desk", en: "Front desk", ar: "الاستقبال", capabilities: ["bookings.manage", "customers.read", "whatsapp.use", "transport.coordinate"] },
   { id: "warranty", en: "Warranty", ar: "الضمان", capabilities: ["warranty.view", "warranty.issue", "warranty.review", "warranty.void", "warranty.policies"] },
   { id: "quotes", en: "Quotes & offers", ar: "العروض والتسعيرات", capabilities: ["quotes.view", "quotes.manage"] },
+  { id: "invoices", en: "Invoices", ar: "الفواتير", capabilities: ["invoices.view", "invoices.manage", "invoices.payments"] },
   { id: "business", en: "Business", ar: "الأعمال", capabilities: ["catalogue.manage", "finance.view", "special-requests.review"] },
   { id: "admin", en: "Administration", ar: "الإدارة", capabilities: ["settings.manage", "staff.manage"] },
 ];

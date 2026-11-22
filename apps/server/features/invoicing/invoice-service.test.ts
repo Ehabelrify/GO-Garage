@@ -27,7 +27,23 @@ describe("invoice authorization", () => {
     await expect(service.updateDraft(demo, "i1", draftUpdate)).rejects.toMatchObject({ code: "DEMO_ACTION_DISABLED" });
     expect(query).not.toHaveBeenCalled();
   });
-  it("only the owner (or finance plus manage) voids", async () => {
+  it("dedicated invoice capabilities govern view, edit and payments (P2T-012)", async () => {
+    empty();
+    const noView = actor("branch-manager", { permissions: { "invoices.view": false } });
+    await expect(service.listInvoices(noView, {})).rejects.toMatchObject({ status: 403 });
+    // bookings.manage + finance.view no longer grant invoice access without invoices.view.
+    const techGrantedBookings = actor("technician", { permissions: { "bookings.manage": true, "finance.view": true } });
+    await expect(service.getInvoice(techGrantedBookings, "i1")).rejects.toMatchObject({ status: 403 });
+    const noManage = actor("receptionist", { permissions: { "invoices.manage": false } });
+    await expect(service.issueInvoice(noManage, "i1", 1)).rejects.toMatchObject({ status: 403, code: "ROLE_FORBIDDEN" });
+    // Receptionist default has no payments authority; a grant lets the request reach the invoice lookup.
+    await expect(service.recordPayment(actor("receptionist"), "i1", { expectedRevision: 1 } as never)).rejects.toMatchObject({ status: 403 });
+    await expect(service.recordPayment(actor("receptionist", { permissions: { "invoices.payments": true } }), "i1", { expectedRevision: 1 } as never)).rejects.toMatchObject({ status: 404 });
+    // Payments without view is still denied.
+    const payNoView = actor("technician", { permissions: { "invoices.payments": true } });
+    await expect(service.voidInvoice(payNoView, "i1", 1, "x")).rejects.toMatchObject({ status: 403 });
+  });
+  it("only invoices.payments holders void", async () => {
     empty();
     await expect(service.voidInvoice(actor("receptionist"), "i1", 1, "mistake")).rejects.toMatchObject({ status: 403 });
     await expect(service.voidInvoice(actor("branch-manager"), "i1", 1, "mistake")).rejects.toMatchObject({ status: 404, code: "INVOICE_NOT_FOUND" });

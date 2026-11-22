@@ -163,7 +163,8 @@ const sectionSpecs: SectionSpec[] = [
       FROM warranty_claims x JOIN warranties w ON w.id = x.warranty_id WHERE w.${s}=$1 AND ($2 OR w.branch_id = ANY($3::text[])) ORDER BY x.updated_at DESC LIMIT ${PREVIEW_LIMIT}`,
     map: (r) => ({ id: r.id, warrantyId: r.warranty_id, branchId: r.branch_id, status: r.status, summary: r.summary }) },
   // Warranty invoice drafts (kind "warranty") and generic job invoices (kind "job", migration 0030) in one section.
-  { key: "invoices", capability: "warranty.view",
+  // Needs invoices.view (P2T-012); warranty.view alone no longer exposes invoice number/status/total.
+  { key: "invoices", capability: "invoices.view",
     sql: (s) => `SELECT u.id, u.warranty_id, u.branch_id, u.status, u.kind, u.number, u.total_minor, u.currency, count(*) OVER() AS total FROM (
         SELECT x.id, x.warranty_id, x.branch_id, x.status, 'warranty' AS kind, NULL::text AS number, NULL::text AS total_minor, x.currency, x.updated_at
         FROM warranty_invoice_drafts x JOIN warranties w ON w.id = x.warranty_id WHERE w.${s}=$1 AND ${branchScope}
@@ -178,12 +179,13 @@ const sectionSpecs: SectionSpec[] = [
 /** What the customer bought: read model view over accepted quotes (plus quote-less delivered jobs). Amounts keep their own currency. */
 const purchasesSpec: SectionSpec = {
   key: "purchases", capability: "bookings.manage",
-  sql: (s) => `SELECT x.id, x.branch_id, x.vehicle_id, x.quote_id, x.booking_id, x.job_id, x.warranty_id, x.invoice_id, x.label_en, x.label_ar, x.quantity,
+  sql: (s) => `SELECT x.id, x.branch_id, x.vehicle_id, x.quote_id, x.booking_id, x.job_id, x.warranty_id, x.invoice_id, x.generic_invoice_id, x.generic_invoice_number, x.generic_invoice_status, x.label_en, x.label_ar, x.quantity,
       x.amount_minor::text AS amount_minor, x.currency, x.purchased_on::text AS purchased_on, x.status, count(*) OVER() AS total
     FROM customer_purchases x WHERE x.${s}=$1 AND (x.environment_id IS NULL OR x.environment_id=$4) AND ${branchScope}
       AND (x.quote_id IS NULL OR ${notArchived("quote", "x.quote_id")}) ORDER BY x.purchased_on DESC, x.id LIMIT ${PREVIEW_LIMIT}`,
   map: (r) => ({
     id: r.id, branchId: r.branch_id, vehicleId: r.vehicle_id, quoteId: r.quote_id, bookingId: r.booking_id, jobId: r.job_id, warrantyId: r.warranty_id, invoiceId: r.invoice_id,
+    genericInvoiceId: r.generic_invoice_id ?? null, genericInvoiceNumber: r.generic_invoice_number ?? null, genericInvoiceStatus: r.generic_invoice_status ?? null,
     labelEn: r.label_en, labelAr: r.label_ar, quantity: r.quantity, amount: r.amount_minor == null || !r.currency ? null : { minor: Number(r.amount_minor), currency: r.currency },
     purchasedOn: r.purchased_on, status: r.status,
   }),

@@ -89,7 +89,7 @@ export function InvoiceDrawer({ lang, invoiceId, onClose, onChanged }: Props) {
     {editing && <button type="button" className="btn btn-primary" disabled={busy || !parsed.valid} onClick={() => void save()}><Save size={14} aria-hidden="true" />{busy ? t("Saving…", "جارٍ الحفظ…") : t("Save draft", "حفظ المسودة")}</button>}
     {editing && <button type="button" className="btn" disabled={busy} onClick={() => setEditing(false)}>{t("Cancel", "إلغاء")}</button>}
     {detail?.canWrite && invoice.status === "draft" && !editing && <button type="button" className="btn btn-primary" onClick={() => setConfirm("issue")}>{t("Issue invoice", "إصدار الفاتورة")}</button>}
-    {detail?.canWrite && (invoice.status === "issued" || invoice.status === "partial") && <button type="button" className="btn btn-primary" onClick={() => setConfirm("pay")}>{t("Record payment", "تسجيل دفعة")}</button>}
+    {detail?.canPay && (invoice.status === "issued" || invoice.status === "partial") && <button type="button" className="btn btn-primary" onClick={() => setConfirm("pay")}>{t("Record payment", "تسجيل دفعة")}</button>}
     {detail?.canVoid && (invoice.status === "draft" || invoice.status === "issued") && <button type="button" className="btn btn-danger" onClick={() => { setReason(""); setConfirm("void"); }}>{t("Void", "إلغاء الفاتورة")}</button>}
   </> : undefined;
 

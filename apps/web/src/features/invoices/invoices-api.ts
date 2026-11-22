@@ -12,7 +12,7 @@ export interface InvoiceDetail {
   invoice: Invoice; lines: InvoiceLine[];
   history: Array<{ seq: number; action: string; fromStatus: string | null; toStatus: string; actorName: string | null; reason: string; occurredAt: string }>;
   payments: Array<{ id: string; amountMinor: number; currency: string; method: string; reference: string; receivedOn: string; recordedAt: string }>;
-  canWrite: boolean; canVoid: boolean;
+  canWrite: boolean; canPay: boolean; canVoid: boolean;
 }
 export type DraftLineInput = Pick<InvoiceLine, "kind" | "descriptionEn" | "descriptionAr" | "quantity" | "unitMinor" | "discountMinor" | "taxMinor">;
 export interface DraftInput { expectedRevision: number; currency?: string; taxRatePercent: number | null; notes: string; terms: string; lines: DraftLineInput[] }
@@ -34,7 +34,7 @@ const post = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) })
 
 export const invoicesApi = {
   list: (filter: { customerId?: string; vehicleId?: string; jobId?: string; status?: string } = {}) =>
-    call<{ invoices: Invoice[]; canWrite: boolean; canVoid: boolean }>(`/api/invoices?${new URLSearchParams(Object.entries(filter).filter(([, v]) => v) as [string, string][]).toString()}`),
+    call<{ invoices: Invoice[]; canWrite: boolean; canPay: boolean; canVoid: boolean }>(`/api/invoices?${new URLSearchParams(Object.entries(filter).filter(([, v]) => v) as [string, string][]).toString()}`),
   get: (id: string) => call<InvoiceDetail>(`/api/invoices/${encodeURIComponent(id)}`),
   generate: (by: { jobId?: string; bookingId?: string }) => call<InvoiceDetail>("/api/invoices/generate", post(by)),
   save: (id: string, input: DraftInput) => call<InvoiceDetail>(`/api/invoices/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(input) }),
