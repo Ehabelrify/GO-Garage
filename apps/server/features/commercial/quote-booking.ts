@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import type { AcceptedQuoteSnapshot, BookingOfferContext, QuoteVersionRef, WorkComponent } from "@garage/domain";
 import { pool, withTransaction } from "../../infrastructure/database/db";
@@ -81,7 +81,7 @@ export async function getBookingOfferContext(actor: BookingActor, input: { branc
   } catch { return fallback; }
 }
 
-export async function recordPickupCommitment(_context: ExecutionContext, actor: GarageActor, input: { bookingId: string; promisedAt: string; evidenceRef: string; reason: string; expectedRevision: number }): Promise<{ commitmentId: string }> {
+export async function recordPickupCommitment(_context: ExecutionContext, actor: GarageActor, input: { bookingId: string; promisedAt: string; evidenceRef: string; reason: string; expectedRevision: number; idempotencyKey?: string }): Promise<{ commitmentId: string }> {
   return withTransaction(async client => {
     const booking = await client.query<{branch_id:string;job_id:string}>("SELECT b.branch_id,j.id AS job_id FROM bookings b JOIN jobs j ON j.booking_id=b.id WHERE b.id=$1 FOR UPDATE OF b,j",[input.bookingId]);
     const row=booking.rows[0];
@@ -95,14 +95,33 @@ export async function recordPickupCommitment(_context: ExecutionContext, actor: 
     const zone=timezone.rows[0]?.timezone;
     if (!zone) throw new QuoteError(422,"POLICY_UNCONFIGURED","Branch timezone is required.");
     try { new Intl.DateTimeFormat("en",{timeZone:zone}); } catch { throw new QuoteError(422,"POLICY_UNCONFIGURED","Branch timezone is invalid."); }
+    // Idempotent replay without a key table: the commitment id is derived from actor+key+booking.
+    const replayId=input.idempotencyKey?createHash("sha256").update(`${actor.userId} ${input.bookingId} ${input.idempotencyKey}`).digest("hex").slice(0,32):null;
+    if (replayId) {
+      const done=await client.query<{booking_id:string;promised_at:Date|null;reason:string}>("SELECT booking_id,promised_at,reason FROM pickup_commitments WHERE id=$1",[replayId]);
+      const hit=done.rows[0];
+      if (hit) {
+        const same=hit.booking_id===input.bookingId && hit.reason===input.reason && (hit.promised_at?hit.promised_at.getTime():null)===(input.promisedAt===""?null:Date.parse(input.promisedAt));
+        if (!same) throw new QuoteError(409,"IDEMPOTENCY_CONFLICT","This key belongs to a different pickup commitment request.");
+        return {commitmentId:replayId};
+      }
+    }
     const prior=await client.query<{id:string;revision:number}>("SELECT id,revision FROM pickup_commitments WHERE booking_id=$1 ORDER BY revision DESC LIMIT 1",[input.bookingId]);
     const current=prior.rows[0];
     if ((current?.revision??0)!==input.expectedRevision) throw new QuoteError(409,"STALE_COMMITMENT","Refresh pickup commitment.");
     const cancelled=input.promisedAt==="";
     if (!input.reason?.trim() || (!cancelled && (!/^private:[A-Za-z0-9/_-]+$/.test(input.evidenceRef) || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(input.promisedAt) || !Number.isFinite(Date.parse(input.promisedAt))))) throw new QuoteError(400,"INVALID_COMMITMENT","UTC promise, agreement evidence and reason are required.");
-    const id=randomUUID();
+    const id=replayId??randomUUID();
     await client.query("INSERT INTO pickup_commitments(id,booking_id,job_id,revision,supersedes_id,promised_at,branch_timezone,recorded_by,customer_agreement_evidence_ref,reason,cancellation_reason) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",[id,input.bookingId,row.job_id,input.expectedRevision+1,current?.id??null,cancelled?null:input.promisedAt,zone,actor.userId,cancelled?null:input.evidenceRef,input.reason,cancelled?input.reason:null]);
     return {commitmentId:id};
   });
+}
+
+/** Cancels the latest commitment by writing a cancellation revision (history is immutable). */
+export async function cancelPickupCommitment(context: ExecutionContext, actor: GarageActor, input: { commitmentId: string; reason: string; expectedRevision: number; idempotencyKey?: string }): Promise<{ commitmentId: string }> {
+  const found=await pool.query<{booking_id:string;promised_at:Date|null}>("SELECT booking_id,promised_at FROM pickup_commitments WHERE id=$1",[input.commitmentId]);
+  const row=found.rows[0];
+  if (!row) throw new QuoteError(404,"COMMITMENT_NOT_FOUND","Pickup commitment not found.");
+  return recordPickupCommitment(context,actor,{bookingId:row.booking_id,promisedAt:"",evidenceRef:"",reason:input.reason,expectedRevision:input.expectedRevision,idempotencyKey:input.idempotencyKey});
 }
 export const bookingCommercialContext = commercialContext;

@@ -8,6 +8,7 @@ import type { BranchId, Booking } from "@garage/domain";
 import { canAccessBranch, canAccessJob, canManageBookings, canManageSettings, canManageStaff, capabilities, ownerOnlyCapabilities, roleDefaultCapabilities, sanitizeOverrides, type GarageRole } from "../auth/authz";
 import { requireMembership, actorFor } from "../auth/auth";
 import { loadGarageBootstrap } from "./bootstrap";
+import { recordAuditEvent } from "../audit/audit-writer";
 import { customerPatchSchema, customerVehicleSchema, findDuplicatePlate, normalizePhone, plateField, splitMakeModel } from "./customer-edit";
 import { pool, withTransaction } from "../../infrastructure/database/db";
 import { dateOnlyFromSql } from "../../infrastructure/database/date-only";
@@ -34,6 +35,7 @@ import { qualificationRouter } from "../commercial/qualification-routes";
 import { reservationRouter } from "../commercial/reservation-routes";
 import { benefitRouter } from "../commercial/benefit-routes";
 import { transportRouter } from "../commercial/transport-routes";
+import { pickupCommitmentRouter } from "../commercial/pickup-commitment-routes";
 import { financeRouter } from "../finance/finance-routes";
 import { workQueueRouter } from "./work-queue-routes";
 import { relationsRouter } from "../relations/relations-routes";
@@ -142,6 +144,7 @@ router.use("/promotions", qualificationRouter);
 router.use("/reservations", reservationRouter);
 router.use("/benefits", benefitRouter);
 router.use("/transport", transportRouter);
+router.use("/pickup-commitments", pickupCommitmentRouter);
 router.use("/finance", financeRouter);
 router.use("/work-queues", workQueueRouter);
 router.use("/owner/records", ownerRecordsRouter);
@@ -654,8 +657,8 @@ router.patch("/jobs/:jobId/assignment", async (req, res) => {
   const parsed = z.object({ technicianUserId: z.string().min(1) }).safeParse(req.body);
   if (!parsed.success) return routeError(res, 400, "INVALID_ASSIGNMENT", "Choose a technician.");
   const result = await withTransaction(async (client) => {
-    const job = await client.query<{ id: string; branch_id: string }>(
-      "SELECT id, branch_id FROM jobs WHERE id = $1 FOR UPDATE",
+    const job = await client.query<{ id: string; branch_id: string; assigned_user_id: string | null }>(
+      "SELECT id, branch_id, assigned_user_id FROM jobs WHERE id = $1 FOR UPDATE",
       [req.params.jobId],
     );
     if (!job.rows[0]) return "record" as const;
@@ -671,6 +674,12 @@ router.patch("/jobs/:jobId/assignment", async (req, res) => {
       "UPDATE jobs SET assigned_user_id = $2, updated_at = now() WHERE id = $1",
       [job.rows[0].id, parsed.data.technicianUserId],
     );
+    await recordAuditEvent(client, {
+      jobId: job.rows[0].id,
+      action: "assignment-changed",
+      details: `from ${job.rows[0].assigned_user_id ?? "unassigned"} to ${parsed.data.technicianUserId}`,
+      actorUserId: currentActor.userId,
+    });
     return "ok" as const;
   });
   if (result === "forbidden") return forbidden(res);

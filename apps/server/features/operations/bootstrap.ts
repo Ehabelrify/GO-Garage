@@ -6,13 +6,32 @@ import type {
   WarrantyInvoiceDraftItem, WarrantyPolicy, WarrantyQrPrintEvent, WarrantyRecord,
   WarrantyVerificationField,
 } from "@garage/domain";
-import { allowedBranchIds, canReadCustomers, canViewWarrantyRecords, effectiveCapabilities, type GarageActor } from "../auth/authz";
+import { allowedBranchIds, canReadCustomers, canViewWarrantyRecords, effectiveCapabilities, hasCapability, type GarageActor } from "../auth/authz";
 import { pool } from "../../infrastructure/database/db";
 import { dateOnlyFromSql } from "../../infrastructure/database/date-only";
 import { normalizeWarrantyVerificationFields } from "../warranty/warranty-verification";
 
 function dateValue(value: string | Date) {
   return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+}
+
+/**
+ * Capabilities whose pages read bookings or jobs (bookings, workshop, customers stats, finance job picker, warranty issue,
+ * inbox booking links, quotes). Owners, managers' defaults and technicians (own jobs only) are covered by role or capability.
+ */
+const operationalCapabilities = [
+  "bookings.manage", "customers.read", "whatsapp.use", "transport.coordinate", "warranty.view",
+  "finance.view", "quotes.view", "quotes.manage", "special-requests.review",
+] as const;
+
+export function hasOperationalAccess(actor: GarageActor) {
+  if (actor.role === "owner" || actor.role === "technician") return true;
+  return operationalCapabilities.some((capability) => hasCapability(actor, capability));
+}
+
+/** Warranty policy metadata and verification settings are returned only with warranty.view. */
+export function canReceiveWarrantyMetadata(actor: GarageActor) {
+  return canViewWarrantyRecords(actor);
 }
 
 export async function loadGarageBootstrap(actor: GarageActor) {
@@ -136,17 +155,21 @@ export async function loadGarageBootstrap(actor: GarageActor) {
     jobParams.push(actor.userId);
     jobWhere += " AND j.assigned_user_id = $2";
   }
-  const jobResult = await pool.query<{
-    id: string;
-    booking_id: string;
-    customer_id: string;
-    vehicle_id: string;
-    service_id: string;
-    branch_id: string;
-    stage: Job["stage"];
-    assigned_user_id: string | null;
-    updated_at: Date;
-  }>(`${jobSql} WHERE ${jobWhere} ORDER BY j.updated_at DESC`, jobParams);
+  // P2T-011: bookings, jobs and job history are absent (not just hidden) for actors with no capability that uses them.
+  const operationalAccess = hasOperationalAccess(actor);
+  const jobResult = operationalAccess
+    ? await pool.query<{
+      id: string;
+      booking_id: string;
+      customer_id: string;
+      vehicle_id: string;
+      service_id: string;
+      branch_id: string;
+      stage: Job["stage"];
+      assigned_user_id: string | null;
+      updated_at: Date;
+    }>(`${jobSql} WHERE ${jobWhere} ORDER BY j.updated_at DESC`, jobParams)
+    : { rows: [] as { id: string; booking_id: string; customer_id: string; vehicle_id: string; service_id: string; branch_id: string; stage: Job["stage"]; assigned_user_id: string | null; updated_at: Date }[] };
   const visibleJobIds = jobResult.rows.map((job) => job.id);
   const jobs: Job[] = jobResult.rows.map((job) => ({
     id: job.id,
@@ -160,7 +183,10 @@ export async function loadGarageBootstrap(actor: GarageActor) {
     assignedUserId: job.assigned_user_id,
   }));
 
-  const bookingResult = actor.role === "technician"
+  const emptyBookings = { rows: [] as { id: string; customer_id: string; vehicle_id: string; service_id: string; branch_id: string; dropoff_date: string; dropoff_time: string; expected_pickup: string; status: Booking["status"]; work_summary_en: string | null; work_summary_ar: string | null; accepted_quote_id: string | null; accepted_quote_revision: number | null }[] };
+  const bookingResult = !operationalAccess
+    ? emptyBookings
+    : actor.role === "technician"
     ? visibleJobIds.length
       ? await pool.query<{
         id: string; customer_id: string; vehicle_id: string; service_id: string; branch_id: string;
@@ -296,7 +322,8 @@ export async function loadGarageBootstrap(actor: GarageActor) {
     }));
   }
 
-  const warrantyPolicies: WarrantyPolicy[] = actor.role === "technician"
+  const warrantyMetadata = canReceiveWarrantyMetadata(actor);
+  const warrantyPolicies: WarrantyPolicy[] = !warrantyMetadata
     ? []
     : (await pool.query<{
       policy_id: string; version: number; name: string; eligible_service_ids: string[];
@@ -339,19 +366,22 @@ export async function loadGarageBootstrap(actor: GarageActor) {
       publishedAt: policy.published_at?.toISOString(),
     }));
 
-  const verificationSettingsResult = await pool.query<{
-    enabled: boolean;
-    approved_fields: string[];
-  }>(
-    "SELECT enabled, approved_fields FROM warranty_verification_settings WHERE singleton = true",
-  );
-  if (!verificationSettingsResult.rowCount) {
-    throw new Error("Warranty verification settings are not initialized.");
+  let warrantyVerificationSettings: { enabled: boolean; approvedFields: WarrantyVerificationField[] } = { enabled: false, approvedFields: [] };
+  if (warrantyMetadata) {
+    const verificationSettingsResult = await pool.query<{
+      enabled: boolean;
+      approved_fields: string[];
+    }>(
+      "SELECT enabled, approved_fields FROM warranty_verification_settings WHERE singleton = true",
+    );
+    if (!verificationSettingsResult.rowCount) {
+      throw new Error("Warranty verification settings are not initialized.");
+    }
+    warrantyVerificationSettings = {
+      enabled: verificationSettingsResult.rows[0].enabled,
+      approvedFields: normalizeWarrantyVerificationFields(verificationSettingsResult.rows[0].approved_fields) as WarrantyVerificationField[],
+    };
   }
-  const warrantyVerificationSettings = {
-    enabled: verificationSettingsResult.rows[0].enabled,
-    approvedFields: normalizeWarrantyVerificationFields(verificationSettingsResult.rows[0].approved_fields) as WarrantyVerificationField[],
-  };
 
   let warranties: WarrantyRecord[] = [];
   let warrantyInvoiceDrafts: WarrantyInvoiceDraft[] = [];
