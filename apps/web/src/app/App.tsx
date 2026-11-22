@@ -12,6 +12,7 @@ import { RecordProvider } from "../shared/components/RecordRef";
 import { hasCapability } from "../shared/capabilities";
 import { useFullPrecision } from "../shared/preferences";
 import { buildRecordRegistry } from "./record-registry";
+import { IntakeButton, IntakeHost, canOpenIntake } from "../features/intake/IntakeHost";
 import {
   defaultPageForRole, navigationForRole, overflowNavigationForRole, primaryNavigationForRole,
   resolveWorkspacePage, sectionPagesFor,
@@ -237,6 +238,7 @@ function ReadyWorkspace({
         </div>
         <div className="topbar-search"><GlobalSearch lang={lang} onNavigate={navigate} /></div>
         <div className="topbar-end">
+          {canOpenIntake(actor) && <IntakeButton lang={lang} />}
           <AvatarMenu
             lang={lang}
             name={profileName}
@@ -265,7 +267,7 @@ function ReadyWorkspace({
         {page === "customers" && hasCapability(actor, "customers.read") && <RouteChunk loader={customersPage} lang={lang} pageProps={{ lang, t, state, notify }} />}
         {page === "warranties" && actor.role !== "technician" && <RouteChunk loader={warrantiesPage} lang={lang} pageProps={{ lang, t, state, notify }} />}
         {page === "whatsapp" && hasCapability(actor, "whatsapp.use") && <RouteChunk loader={whatsappPage} lang={lang} pageProps={{ lang, t, state, notify, branchName, role: actor.role }} />}
-      </main></RecordProvider>
+      </main><IntakeHost lang={lang} actor={actor} state={state} notify={notify} /></RecordProvider>
     </div>
 
     <nav className="mobile-nav" aria-label={t("Quick navigation", "التنقل السريع")} data-count={mobileNavItems.length + Number(overflowItems.length > 0)}>

@@ -6,6 +6,10 @@ export type InboxScope = "all" | "mine" | "unassigned" | "unread";
 
 export interface InboxListItem {
   customerLabel: string;
+  /** Server projection fields for conversations that may not be linked to a customer yet. */
+  linked?: boolean;
+  contactLabel?: string;
+  contactPhone?: string;
   preview?: string;
   status: ConversationStatus;
   assignedUserId?: string | null;
@@ -21,7 +25,7 @@ export function filterConversations<T extends InboxListItem>(items: T[], filters
     if (filters.scope === "mine" && (!currentUserId || item.assignedUserId !== currentUserId)) return false;
     if (filters.scope === "unassigned" && item.assignedUserId) return false;
     if (filters.scope === "unread" && item.unreadCount <= 0) return false;
-    if (query && !`${item.customerLabel} ${item.preview ?? ""}`.toLowerCase().includes(query)) return false;
+    if (query && !`${item.customerLabel} ${item.contactLabel ?? ""} ${item.contactPhone ?? ""} ${item.preview ?? ""}`.toLowerCase().includes(query)) return false;
     return true;
   });
 }

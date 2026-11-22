@@ -5,12 +5,14 @@ import type { BranchId, GarageRole, GarageState } from "@garage/domain";
 import type { BranchName, Lang, Translator } from "../../shared/ui";
 import { useGarageStore } from "../../shared/store";
 import {
-  Collapsible, ConfirmDialog, DateText, EmptyState, FilterBar, Notice, PageHeader, RecordRef, Select, Skeleton, StatusBadge,
+  Collapsible, ConfirmDialog, DateText, EmptyState, FilterBar, Notice, PageHeader, Phone, RecordRef, Select, Skeleton, StatusBadge,
 } from "../../shared/components";
 import {
   consentView, eventTitle, filterConversations, groupMessagesByDay, inboxFiltersActive, localStamp, quickReplies, resolveRelatedRecords,
   type ConversationStatus, type InboxFilters, type InboxScope,
 } from "./inbox-model";
+import { NewContactBanner } from "../intake/NewContactBanner";
+import { isNewContact, newContactWord } from "../intake/intake-logic";
 import "./WhatsAppSimulationPage.css";
 
 type MessageKind = "customer" | "reply" | "bot" | "internal-note";
@@ -19,6 +21,10 @@ interface Conversation {
   id: string;
   branchId: BranchId;
   customerLabel: string;
+  /** false = the number is not saved as a customer yet. Absent on older servers (treated as linked). */
+  linked?: boolean;
+  contactLabel?: string;
+  contactPhone?: string;
   status: ConversationStatus;
   assignedUserId?: string | null;
   assignedTo: string | null;
@@ -255,6 +261,10 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
   const filteredConversations = filterConversations(branchConversations, filters, currentUserId);
   const selectedDetail = detail?.conversation.id === selectedId && (branchId==="all"||detail.conversation.branchId === branchId) ? detail : null;
   const selectedConversation = selectedDetail?.conversation ?? branchConversations.find((item) => item.id === selectedId);
+  const contactTitle = (conversation: Conversation) => isNewContact(conversation)
+    ? <>{newContactWord(lang)} (<Phone value={conversation.contactPhone} />)</>
+    : <bdi>{conversation.contactLabel?.trim() || conversation.customerLabel}</bdi>;
+  const avatarText = (conversation: Conversation) => isNewContact(conversation) ? "+" : (conversation.contactLabel?.trim() || conversation.customerLabel).trim().slice(0, 1) || "?";
   const stamp = (value: string) => <DateText value={localStamp(value)} lang={lang} />;
   const statusLabel = (status: ConversationStatus) => status === "open"
     ? msg("Open", "مفتوحة") : status === "pending" ? msg("Pending", "معلّقة") : msg("Resolved", "تم الحل");
@@ -372,12 +382,13 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
         {filteredConversations.length > 0 && <ul className="wa-conversation-list">
           {filteredConversations.map((conversation) => <li key={conversation.id}>
             <button type="button" className={`wa-conversation-item ${selectedId === conversation.id ? "selected" : ""}`} onClick={() => chooseConversation(conversation.id)} aria-current={selectedId === conversation.id ? "true" : undefined}>
-              <span className="wa-avatar" aria-hidden="true">{conversation.customerLabel.trim().slice(0, 1) || "?"}</span>
+              <span className="wa-avatar" aria-hidden="true">{avatarText(conversation)}</span>
               <span className="wa-list-main">
-                <span className="wa-list-top"><strong><bdi>{conversation.customerLabel}</bdi></strong><span className="wa-time">{stamp(conversation.updatedAt)}</span></span>
+                <span className="wa-list-top"><strong>{contactTitle(conversation)}</strong><span className="wa-time">{stamp(conversation.updatedAt)}</span></span>
                 <span className="wa-preview" dir="auto">{conversation.preview}</span>
                 <span className="wa-list-foot">
                   <StatusBadge status={conversation.status} lang={lang} label={statusLabel(conversation.status)} />
+                  {isNewContact(conversation) && <StatusBadge status="new" domain="request" lang={lang} label={newContactWord(lang)} />}
                   <span>{conversation.assignedTo || msg("Unassigned", "غير معيّنة")}</span>
                   {conversation.unreadCount > 0 && <span className="wa-unread" aria-label={`${conversation.unreadCount} ${msg("unread", "غير مقروءة")}`}>{conversation.unreadCount}</span>}
                 </span>
@@ -392,11 +403,13 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
           <header className="wa-chat-head">
             <button type="button" className="btn btn-quiet btn-sm wa-back" onClick={() => setPane("list")} aria-label={msg("Back to conversations", "العودة إلى المحادثات")}><ArrowLeft size={16} aria-hidden="true" /></button>
             <div className="wa-contact-copy">
-              <strong><bdi>{selectedConversation.customerLabel}</bdi></strong>
+              <strong>{contactTitle(selectedConversation)}</strong>
               <small>{inboxBranchName(selectedConversation.branchId)} · {selectedConversation.assignedTo || msg("Unassigned", "غير معيّنة")}</small>
             </div>
             <StatusBadge status={selectedConversation.status} lang={lang} label={statusLabel(selectedConversation.status)} />
           </header>
+          {isNewContact(selectedConversation) && <NewContactBanner lang={lang} conversationId={selectedConversation.id} phone={selectedConversation.contactPhone} canAct={staffAllowed}
+            onLinked={async () => { await refresh(selectedConversation.id); notify(msg("Chat linked to the customer.", "تم ربط المحادثة بالعميل.")); }} />}
           {actionButtons}
           {detailError && <div className="wa-error-inline" role="alert">{detailError} <button type="button" className="btn btn-sm" onClick={() => selectedId && void loadDetail(selectedId)}>{msg("Retry", "إعادة المحاولة")}</button></div>}
           <div className="wa-thread" ref={threadRef} role="log" aria-live="polite" aria-relevant="additions text">
@@ -434,7 +447,7 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
         {selectedConversation ? <>
           <Collapsible title={msg("Customer", "العميل")} defaultOpen>
             <div className="wa-context-stack">
-              {related?.customer ? <RecordRef type="customer" id={related.customer.id} label={related.customer.name} /> : <span><bdi>{selectedConversation.customerLabel}</bdi></span>}
+              {related?.customer ? <RecordRef type="customer" id={related.customer.id} label={related.customer.name} /> : <span>{contactTitle(selectedConversation)}</span>}
               {related?.vehicle && <RecordRef type="vehicle" id={related.vehicle.id} label={related.vehicle.plate} subtitle={related.vehicle.makeModel} />}
               {related && <RecordRef type="booking" id={related.bookingId} label={`${msg("Booking", "حجز")} ${related.bookingLabel}`} />}
               {related?.quote && <RecordRef type="quote" id={related.quote.id} label={`${msg("Quote", "عرض سعر")} v${related.quote.revision}`} />}
