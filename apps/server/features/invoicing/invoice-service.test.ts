@@ -152,7 +152,7 @@ describe("late transport sync (P2T-004)", () => {
       return { rows: [], rowCount: 0 };
     });
   };
-  const wrote = () => query.mock.calls.some((c) => String(c[0]).includes("INSERT INTO invoice_lines"));
+  const wrote = () => query.mock.calls.some((c) => String(c[0]).includes("INSERT INTO invoice_lines") && c[1][1] === "i1");
   it("rebuilds a draft with the transport line and recomputed totals", async () => {
     setup("draft");
     const r = await service.syncInvoiceTransportForBooking({ query } as never, "b1");

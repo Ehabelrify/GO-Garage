@@ -7,7 +7,7 @@ import { commercialContext } from "../commercial/policy-service";
 import { autoSendOnIssue } from "../document-delivery/document-delivery-service";
 import {
   applyTaxRate, canTransition, computeTotals, formatInvoiceNumber, lineProblem, paymentStatus, toInvoice, toLine,
-  type DraftUpdate, type InvoiceRow, type InvoiceStatus, type LineInput, type LineRow, type PaymentInput,
+  type DraftUpdate, type InvoiceRow, type InvoiceStatus, type LineInput, type LineRow, type PaymentInput, type RefundInput, type ReverseInput,
 } from "./invoice-logic";
 
 export class InvoiceError extends Error {
@@ -32,7 +32,7 @@ function requireWriter(actor: GarageActor, allowed: (a: GarageActor) => boolean 
 const SELECT = `SELECT i.id, i.branch_id, i.customer_id, i.vehicle_id, i.booking_id, i.job_id, i.quote_id, i.warranty_id, i.source, i.number, i.status, i.currency,
   i.tax_rate_percent::text AS tax_rate_percent, i.subtotal_minor::text AS subtotal_minor, i.discount_minor::text AS discount_minor, i.tax_minor::text AS tax_minor,
   i.total_minor::text AS total_minor, i.paid_minor::text AS paid_minor, i.issue_date::text AS issue_date, i.notes, i.terms, i.revision, i.created_at, i.updated_at,
-  i.issued_at, i.void_reason, c.name AS customer_name, v.plate
+  i.issued_at, i.void_reason, i.kind, i.parent_invoice_id, c.name AS customer_name, v.plate
   FROM invoices i JOIN customers c ON c.id = i.customer_id JOIN vehicles v ON v.id = i.vehicle_id`;
 /** $1 owner flag, $2 branch ids, $3 environment. Branch scope plus not-archived customer. */
 const SCOPE = `i.environment_id = $3 AND ($1 OR i.branch_id = ANY($2::text[]))
@@ -68,13 +68,18 @@ export async function getInvoice(actor: GarageActor, id: string) {
   const events = await pool.query<{ seq: number; action: string; from_status: string | null; to_status: string; reason: string; occurred_at: Date; actor_name: string | null }>(
     `SELECT e.seq, e.action, e.from_status, e.to_status, e.reason, e.occurred_at, s.full_name AS actor_name
      FROM invoice_events e LEFT JOIN staff_memberships s ON s.clerk_user_id = e.actor_id WHERE e.invoice_id = $1 ORDER BY e.seq`, [id]);
-  const payments = await pool.query<{ id: string; amount_minor: string; currency: string; method: string; reference: string; received_on: string; created_at: Date }>(
-    `SELECT id, amount_minor::text AS amount_minor, currency, method, reference, received_on::text AS received_on, created_at FROM invoice_payment_references WHERE invoice_id = $1 ORDER BY created_at`, [id]);
+  const payments = await pool.query<{ id: string; amount_minor: string; currency: string; method: string; reference: string; received_on: string; created_at: Date; reversed?: boolean }>(
+    `SELECT p.id, p.amount_minor::text AS amount_minor, p.currency, p.method, p.reference, p.received_on::text AS received_on, p.created_at,
+       EXISTS (SELECT 1 FROM invoice_payment_reversals r WHERE r.payment_id = p.id) AS reversed
+     FROM invoice_payment_references p WHERE p.invoice_id = $1 ORDER BY p.created_at`, [id]);
+  const refunds = await pool.query<{ id: string; amount_minor: string; currency: string; reason: string; created_at: Date }>(
+    "SELECT id, amount_minor::text AS amount_minor, currency, reason, created_at FROM invoice_refunds WHERE invoice_id = $1 ORDER BY created_at", [id]);
   return {
     invoice: toInvoice(row),
     lines: lines.rows.map(toLine),
     history: events.rows.map((e) => ({ seq: e.seq, action: e.action, fromStatus: e.from_status, toStatus: e.to_status, actorName: e.actor_name, reason: e.reason, occurredAt: e.occurred_at.toISOString() })),
-    payments: payments.rows.map((p) => ({ id: p.id, amountMinor: Number(p.amount_minor), currency: p.currency, method: p.method, reference: p.reference, receivedOn: p.received_on, recordedAt: p.created_at.toISOString() })),
+    payments: payments.rows.map((p) => ({ id: p.id, amountMinor: Number(p.amount_minor), currency: p.currency, method: p.method, reference: p.reference, receivedOn: p.received_on, recordedAt: p.created_at.toISOString(), reversed: Boolean(p.reversed) })),
+    refunds: (refunds?.rows ?? []).map((r) => ({ id: r.id, amountMinor: Number(r.amount_minor), currency: r.currency, reason: r.reason, recordedAt: r.created_at.toISOString() })),
     canWrite: !actor.isDemo && canWrite(actor), canPay: !actor.isDemo && canPay(actor), canVoid: !actor.isDemo && canVoid(actor),
   };
 }
@@ -184,21 +189,66 @@ async function buildTransportLines(client: Runner, bookingId: string, currency: 
 
 const sameLine = (a: LineInput, b: LineInput) => a.descriptionEn === b.descriptionEn && a.unitMinor === b.unitMinor && a.quantity === b.quantity;
 
+interface ParentRow {
+  status: InvoiceStatus; currency: string; branch_id: string; customer_id: string; vehicle_id: string; booking_id: string | null; job_id: string | null;
+  quote_id: string | null; warranty_id: string | null; tax_rate_percent: string | null;
+}
+const asInput = (l: ReturnType<typeof toLine>): LineInput => ({ kind: l.kind, descriptionEn: l.descriptionEn, descriptionAr: l.descriptionAr, quantity: l.quantity, unitMinor: l.unitMinor, discountMinor: l.discountMinor, taxMinor: l.taxMinor });
+
+/**
+ * P2T-004: an issued/partial/paid invoice is never rewritten. Transport fees that are on neither the original nor an already
+ * issued adjustment go on a separate DRAFT 'adjustment' invoice linked by parent_invoice_id (created once, then refreshed while it is a draft).
+ */
+async function syncTransportAdjustment(client: Runner, parentId: string, parent: ParentRow, wanted: LineInput[], have: ReturnType<typeof toLine>[], actorId: string | null) {
+  const children = (await client.query<{ id: string; status: InvoiceStatus }>(
+    "SELECT id, status FROM invoices WHERE parent_invoice_id = $1 AND kind = 'adjustment' AND status <> 'void' ORDER BY created_at", [parentId])).rows;
+  const covered: LineInput[] = have.map(asInput);
+  let draft: { id: string; status: InvoiceStatus } | undefined;
+  for (const child of children) {
+    if (child.status === "draft") { draft = child; continue; }
+    covered.push(...(await client.query<LineRow>(LINES, [child.id])).rows.map(toLine).filter((l) => l.kind === "transport").map(asInput));
+  }
+  const missing = [...wanted];
+  for (const c of covered) { const at = missing.findIndex((m) => sameLine(m, c)); if (at >= 0) missing.splice(at, 1); }
+  if (!missing.length) return { transportAdjustmentRequired: false, transportSynced: false };
+  const rate = parent.tax_rate_percent === null ? null : Number(parent.tax_rate_percent);
+  const lines = applyTaxRate(missing, rate);
+  if (draft) {
+    await writeLines(client, draft.id, lines);
+    const totals = await writeTotals(client, draft.id, lines);
+    await client.query("UPDATE invoices SET revision = revision + 1, updated_at = now() WHERE id = $1", [draft.id]);
+    await appendEvent(client, draft.id, "edited", "draft", "draft", actorId, "Transport fees refreshed on the adjustment", { currency: parent.currency, lineCount: lines.length, ...totals });
+    return { transportAdjustmentRequired: true, transportSynced: false, adjustmentInvoiceId: draft.id };
+  }
+  const id = `inv-${randomUUID()}`;
+  await client.query(
+    `INSERT INTO invoices (id, environment_id, branch_id, customer_id, vehicle_id, booking_id, job_id, quote_id, warranty_id, source, idempotency_key, currency, tax_rate_percent, notes, created_by, kind, parent_invoice_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'auto',$10,$11,$12,$13,$14,'adjustment',$15)`,
+    [id, commercialContext.environmentId, parent.branch_id, parent.customer_id, parent.vehicle_id, parent.booking_id, parent.job_id, parent.quote_id, parent.warranty_id,
+      `adjust:${parentId}:${children.length + 1}`, parent.currency, rate, "Supplementary invoice for transport fees completed after the original was issued.", actorId, parentId]);
+  await writeLines(client, id, lines);
+  const totals = await writeTotals(client, id, lines);
+  await appendEvent(client, id, "generated", null, "draft", actorId, "Adjustment for transport completed after issue", { parentInvoiceId: parentId, currency: parent.currency, ...totals });
+  await appendEvent(client, parentId, "adjustment-created", parent.status, parent.status, actorId, "Transport fee added on a supplementary invoice", { adjustmentInvoiceId: id });
+  return { transportAdjustmentRequired: true, transportSynced: false, adjustmentInvoiceId: id };
+}
+
 /**
  * Brings the transport lines of an existing invoice in line with completed transport requests (P2T-004).
  * A DRAFT is rebuilt deterministically (non-transport lines untouched, tax rate re-applied, totals recomputed).
  * An ISSUED/paid/void invoice is never rewritten; `transportAdjustmentRequired` tells the caller a fee is not on it.
  */
-async function syncTransportLines(client: Runner, invoiceId: string, bookingId: string, actorId: string | null): Promise<{ transportAdjustmentRequired: boolean; transportSynced: boolean }> {
-  const inv = (await client.query<{ status: InvoiceStatus; currency: string; tax_rate_percent: string | null }>(
-    "SELECT status, currency, tax_rate_percent::text AS tax_rate_percent FROM invoices WHERE id = $1 FOR UPDATE", [invoiceId])).rows[0];
+async function syncTransportLines(client: Runner, invoiceId: string, bookingId: string, actorId: string | null): Promise<{ transportAdjustmentRequired: boolean; transportSynced: boolean; adjustmentInvoiceId?: string }> {
+  const inv = (await client.query<ParentRow>(
+    "SELECT status, currency, branch_id, customer_id, vehicle_id, booking_id, job_id, quote_id, warranty_id, tax_rate_percent::text AS tax_rate_percent FROM invoices WHERE id = $1 FOR UPDATE", [invoiceId])).rows[0];
   if (!inv) return { transportAdjustmentRequired: false, transportSynced: false };
   const wanted = (await buildTransportLines(client, bookingId, inv.currency)).lines;
   const current = (await client.query<LineRow>(LINES, [invoiceId])).rows.map(toLine);
   const have = current.filter((l) => l.kind === "transport");
   const differs = wanted.length !== have.length || wanted.some((w, i) => !sameLine(w, have[i]));
   if (!differs) return { transportAdjustmentRequired: false, transportSynced: false };
-  if (inv.status !== "draft") return { transportAdjustmentRequired: true, transportSynced: false };
+  if (inv.status === "void") return { transportAdjustmentRequired: true, transportSynced: false };
+  if (inv.status !== "draft") return syncTransportAdjustment(client, invoiceId, inv, wanted, have, actorId);
   const kept: LineInput[] = current.filter((l) => l.kind !== "transport")
     .map(({ kind, descriptionEn, descriptionAr, quantity, unitMinor, discountMinor, taxMinor }) => ({ kind, descriptionEn, descriptionAr, quantity, unitMinor, discountMinor, taxMinor }));
   const rate = inv.tax_rate_percent === null ? null : Number(inv.tax_rate_percent);
@@ -211,7 +261,7 @@ async function syncTransportLines(client: Runner, invoiceId: string, bookingId: 
 }
 
 /** For the transport-completion path: refresh the job's invoice after a transport completes. Call inside the completing transaction. */
-export async function syncInvoiceTransportForBooking(client: PoolClient, bookingId: string): Promise<{ invoiceId: string; transportAdjustmentRequired: boolean; transportSynced: boolean } | null> {
+export async function syncInvoiceTransportForBooking(client: PoolClient, bookingId: string): Promise<{ invoiceId: string; transportAdjustmentRequired: boolean; transportSynced: boolean; adjustmentInvoiceId?: string } | null> {
   const found = await client.query<{ id: string }>(
     "SELECT i.id FROM invoices i JOIN jobs j ON j.id = i.job_id WHERE j.booking_id = $1 AND i.environment_id = $2 AND i.idempotency_key = 'job:' || j.id", [bookingId, commercialContext.environmentId]);
   if (!found.rows[0]) return null;
@@ -327,17 +377,22 @@ export const issueInvoice = (actor: GarageActor, id: string, expectedRevision: n
  * Needs an approved, attested finance definition for collections in the invoice currency; without one the
  * payment is refused and nothing is written (the transaction rolls back).
  */
-async function recordCollectionEvent(client: Runner, actor: GarageActor, row: InvoiceRow, paymentId: string, input: PaymentInput) {
+async function financeDefinitionFor(client: Runner, currency: string, sourceKind: "collection" | "refund", verb: string) {
   const defs = await client.query<{ policy_id: string; version: number; value: { currency: string; minorUnitExponent: number; reportingTimezone: string; sourceKinds: string[] } }>(
     `SELECT v.policy_id, v.version, v.value FROM commercial_policy_active a JOIN commercial_policy_versions v USING (policy_id, version)
      JOIN finance_definition_attestations t ON t.environment_id = $1 AND t.definition_id = v.policy_id AND t.definition_version = v.version
        AND t.currency = v.value->>'currency' AND t.minor_unit_exponent = (v.value->>'minorUnitExponent')::int
      WHERE v.family = 'finance-definition' AND v.state = 'approved' AND v.approved_by IS NOT NULL AND v.evidence_ref IS NOT NULL
        AND v.value->>'metric' = 'collections' AND v.value->>'currency' = $2 ORDER BY v.version DESC`,
-    [commercialContext.environmentId, row.currency]);
-  const def = defs.rows.find((d) => Array.isArray(d.value.sourceKinds) && d.value.sourceKinds.includes("collection")
+    [commercialContext.environmentId, currency]);
+  const def = defs.rows.find((d) => Array.isArray(d.value.sourceKinds) && d.value.sourceKinds.includes(sourceKind)
     && Number.isInteger(d.value.minorUnitExponent) && typeof d.value.reportingTimezone === "string" && d.value.reportingTimezone.trim());
-  if (!def) return fail(422, "FINANCE_DEFINITION_REQUIRED", `An approved, attested finance definition for ${row.currency} collections is required before payments can be recorded.`);
+  if (!def) return fail(422, "FINANCE_DEFINITION_REQUIRED", `An approved, attested finance definition for ${currency} ${sourceKind}s is required before ${verb}.`);
+  return def;
+}
+
+async function recordCollectionEvent(client: Runner, actor: GarageActor, row: InvoiceRow, paymentId: string, input: PaymentInput) {
+  const def = await financeDefinitionFor(client, row.currency, "collection", "payments can be recorded");
   await client.query(
     `INSERT INTO operational_money_events (id, environment_id, kind, amount_minor, currency, minor_unit_exponent, effective_at, branch_id, customer_id, job_id, quote_id,
        source_method, source_reference, definition_id, definition_version, reason, evidence_ref, recorded_by)
@@ -371,3 +426,88 @@ export const voidInvoice = (actor: GarageActor, id: string, expectedRevision: nu
     await client.query("UPDATE invoices SET status='void', voided_by=$2, voided_at=now(), void_reason=$3 WHERE id=$1", [id, actor.userId, reason]);
     await appendEvent(client, id, "voided", row.status, "void", actor.userId, reason);
   });
+
+/* ------------------------- reversal and refund (P2T-012) ------------------------- */
+
+/** Runs a payment correction in one transaction with the invoice row locked; the idempotency key (not a revision) guards retries. */
+async function correct(actor: GarageActor, id: string, run: (client: PoolClient, row: InvoiceRow) => Promise<void>): Promise<void> {
+  requireWriter(actor, canPay);
+  await withTransaction(async (client) => run(client, await loadScoped(actor, id, client, true)));
+}
+
+/**
+ * Voids a recorded payment: appends an invoice_payment_reversals row, writes the same append-only
+ * operational_money_event_reversals row `reverseMoneyEvent` writes for the payment's collection event (inside this transaction),
+ * lowers paid and moves the status back (paid to partial/issued). Idempotent on (invoice, idempotencyKey).
+ */
+export async function reversePayment(actor: GarageActor, id: string, paymentId: string, input: ReverseInput) {
+  await correct(actor, id, async (client, row) => {
+    const prior = await client.query<{ payment_id: string }>("SELECT payment_id FROM invoice_payment_reversals WHERE invoice_id = $1 AND idempotency_key = $2", [id, input.idempotencyKey]);
+    if (prior.rows[0]) {
+      if (prior.rows[0].payment_id !== paymentId) return fail(409, "IDEMPOTENCY_CONFLICT", "This key belongs to a different reversal.");
+      return;
+    }
+    if (!canTransition("reverse", row.status)) return fail(409, "INVALID_STATE", `A ${row.status} invoice cannot take this action.`);
+    const payment = (await client.query<{ id: string; amount_minor: string; reference: string }>(
+      "SELECT id, amount_minor::text AS amount_minor, reference FROM invoice_payment_references WHERE id = $1 AND invoice_id = $2", [paymentId, id])).rows[0];
+    if (!payment) return fail(404, "PAYMENT_NOT_FOUND", "Payment not found on this invoice.");
+    if ((await client.query("SELECT 1 FROM invoice_payment_reversals WHERE payment_id = $1", [paymentId])).rowCount) return fail(409, "ALREADY_REVERSED", "This payment was already reversed.");
+    const amount = Number(payment.amount_minor);
+    const paid = Number(row.paid_minor) - amount;
+    if (paid < 0) return fail(409, "OVER_REVERSAL", "Part of this payment was refunded; the paid amount cannot go below zero.");
+    const reversalId = `invrev-${randomUUID()}`;
+    const evidence = input.evidenceRef ?? `private:invoice-payment-reversal/${reversalId}`;
+    const event = (await client.query<{ id: string }>(
+      "SELECT id FROM operational_money_events WHERE environment_id = $1 AND kind = 'collection' AND source_method = 'invoice-payment' AND source_reference = $2",
+      [commercialContext.environmentId, `${id}:${payment.reference}`])).rows[0];
+    let moneyReversalId: string | null = null;
+    if (event) {
+      const existing = (await client.query<{ id: string }>("SELECT id FROM operational_money_event_reversals WHERE event_id = $1", [event.id])).rows[0];
+      if (existing) moneyReversalId = existing.id;
+      else {
+        moneyReversalId = randomUUID();
+        await client.query("INSERT INTO operational_money_event_reversals (id, event_id, reason, evidence_ref, reversed_by) VALUES ($1,$2,$3,$4,$5)",
+          [moneyReversalId, event.id, input.reason, evidence, actor.userId]);
+      }
+    }
+    await client.query(
+      `INSERT INTO invoice_payment_reversals (id, invoice_id, payment_id, amount_minor, reason, evidence_ref, money_event_reversal_id, idempotency_key, reversed_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [reversalId, id, paymentId, amount, input.reason, evidence, moneyReversalId, input.idempotencyKey, actor.userId]);
+    const next = paymentStatus(Number(row.total_minor), paid);
+    await client.query("UPDATE invoices SET paid_minor = $2, status = $3, revision = revision + 1, updated_at = now() WHERE id = $1", [id, paid, next]);
+    await appendEvent(client, id, "payment-reversed", row.status, next, actor.userId, input.reason, { paymentId, amountMinor: amount, currency: row.currency });
+  });
+  return getInvoice(actor, id);
+}
+
+/** Records a refund against a paid/partial invoice with a finance 'refund' event in the same transaction. Idempotent on (invoice, idempotencyKey). */
+export async function recordRefund(actor: GarageActor, id: string, input: RefundInput) {
+  await correct(actor, id, async (client, row) => {
+    const prior = await client.query<{ amount_minor: string }>("SELECT amount_minor::text AS amount_minor FROM invoice_refunds WHERE invoice_id = $1 AND idempotency_key = $2", [id, input.idempotencyKey]);
+    if (prior.rows[0]) {
+      if (Number(prior.rows[0].amount_minor) !== input.amountMinor) return fail(409, "IDEMPOTENCY_CONFLICT", "This key belongs to a different refund.");
+      return;
+    }
+    if (!canTransition("refund", row.status)) return fail(409, "INVALID_STATE", `A ${row.status} invoice has nothing to refund.`);
+    const paid = Number(row.paid_minor);
+    if (input.amountMinor > paid) return fail(409, "OVER_REFUND", "The refund is larger than the amount paid.");
+    const def = await financeDefinitionFor(client, row.currency, "refund", "refunds can be recorded");
+    const refundId = `invref-${randomUUID()}`;
+    const eventId = `mev-${randomUUID()}`;
+    const evidence = input.evidenceRef ?? `private:invoice-refund/${refundId}`;
+    await client.query(
+      `INSERT INTO operational_money_events (id, environment_id, kind, amount_minor, currency, minor_unit_exponent, effective_at, branch_id, customer_id, job_id, quote_id,
+         source_method, source_reference, definition_id, definition_version, reason, evidence_ref, recorded_by)
+       VALUES ($1,$2,'refund',$3,$4,$5,now(),$6,$7,$8,$9,'invoice-refund',$10,$11,$12,$13,$14,$15)`,
+      [eventId, commercialContext.environmentId, input.amountMinor, row.currency, def.value.minorUnitExponent, row.branch_id, row.customer_id, row.job_id, row.quote_id,
+        `${id}:refund:${input.idempotencyKey}`, def.policy_id, def.version, input.reason, evidence, actor.userId]);
+    await client.query(
+      `INSERT INTO invoice_refunds (id, invoice_id, amount_minor, currency, reason, evidence_ref, money_event_id, idempotency_key, refunded_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [refundId, id, input.amountMinor, row.currency, input.reason, evidence, eventId, input.idempotencyKey, actor.userId]);
+    const next = paymentStatus(Number(row.total_minor), paid - input.amountMinor);
+    await client.query("UPDATE invoices SET paid_minor = $2, status = $3, revision = revision + 1, updated_at = now() WHERE id = $1", [id, paid - input.amountMinor, next]);
+    await appendEvent(client, id, "refunded", row.status, next, actor.userId, input.reason, { refundId, amountMinor: input.amountMinor, currency: row.currency });
+  });
+  return getInvoice(actor, id);
+}

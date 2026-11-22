@@ -72,6 +72,8 @@ const transitions: Record<string, readonly InvoiceStatus[]> = {
   edit: ["draft"],
   payment: ["issued", "partial"],
   void: ["draft", "issued"],
+  reverse: ["issued", "partial", "paid"],
+  refund: ["partial", "paid"],
 };
 export const canTransition = (action: keyof typeof transitions, from: string) => (transitions[action] as readonly string[]).includes(from);
 
@@ -113,6 +115,16 @@ export const paymentSchema = z.object({
   receivedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 }).strict();
 
+const evidenceRef = z.string().trim().regex(/^private:[A-Za-z0-9/_-]+$/, "Evidence must be a protected reference").max(200).optional();
+const idempotencyKey = z.string().trim().min(1).max(120);
+export const reverseSchema = z.object({ reason: z.string().trim().min(3).max(500), evidenceRef, idempotencyKey }).strict();
+export const refundSchema = z.object({
+  amountMinor: z.number().int().positive().max(1_000_000_000_000),
+  reason: z.string().trim().min(3).max(500), evidenceRef, idempotencyKey,
+}).strict();
+export type ReverseInput = z.infer<typeof reverseSchema>;
+export type RefundInput = z.infer<typeof refundSchema>;
+
 export type DraftUpdate = z.infer<typeof draftUpdateSchema>;
 export type PaymentInput = z.infer<typeof paymentSchema>;
 
@@ -121,7 +133,7 @@ export interface InvoiceRow {
   source: string; number: string | null; status: InvoiceStatus; currency: string; tax_rate_percent: string | null;
   subtotal_minor: string | null; discount_minor: string; tax_minor: string | null; total_minor: string | null; paid_minor: string;
   issue_date: string | null; notes: string; terms: string; revision: number; created_at: Date; updated_at: Date; issued_at: Date | null; void_reason: string | null;
-  customer_name?: string; plate?: string;
+  customer_name?: string; plate?: string; kind?: string; parent_invoice_id?: string | null;
 }
 export interface LineRow {
   id: string; position: number; kind: LineKind; description_en: string; description_ar: string; quantity: string;
@@ -150,6 +162,6 @@ export function toInvoice(row: InvoiceRow) {
     paidMinor: paid, balanceMinor: total === null ? null : total - paid,
     issueDate: row.issue_date, notes: row.notes, terms: row.terms, revision: row.revision,
     createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(), issuedAt: row.issued_at ? row.issued_at.toISOString() : null,
-    voidReason: row.void_reason,
+    voidReason: row.void_reason, kind: row.kind ?? "standard", parentInvoiceId: row.parent_invoice_id ?? null,
   };
 }

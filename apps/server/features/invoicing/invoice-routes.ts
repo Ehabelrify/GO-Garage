@@ -1,8 +1,8 @@
 import { Router, type NextFunction, type Response } from "express";
 import { z } from "zod";
 import { actorFor } from "../auth/auth";
-import { draftUpdateSchema, generateSchema, invoiceStatuses, issueSchema, paymentSchema, voidSchema } from "./invoice-logic";
-import { generateInvoice, getInvoice, InvoiceError, issueInvoice, listInvoices, recordPayment, updateDraft, voidInvoice } from "./invoice-service";
+import { draftUpdateSchema, generateSchema, invoiceStatuses, issueSchema, paymentSchema, refundSchema, reverseSchema, voidSchema } from "./invoice-logic";
+import { generateInvoice, getInvoice, InvoiceError, issueInvoice, listInvoices, recordPayment, recordRefund, reversePayment, updateDraft, voidInvoice } from "./invoice-service";
 
 /** Invoices API. Mounted at /api/invoices after requireMembership. */
 export const invoiceRouter = Router();
@@ -39,6 +39,12 @@ invoiceRouter.post("/:id/issue", async (req, res, next) => {
 invoiceRouter.post("/:id/payments", async (req, res, next) => {
   try { res.json(await recordPayment(actorFor(req)!, idParam(req.params.id), paymentSchema.parse(req.body))); } catch (e) { respond(res, next, e); }
 });
-invoiceRouter.post("/:id/void", async (req, res, next) => {
+invoiceRouter.post("/:id/payments/:paymentId/reverse", async (req, res, next) => {
+  try { res.json(await reversePayment(actorFor(req)!, idParam(req.params.id), idParam(req.params.paymentId), reverseSchema.parse(req.body))); } catch (e) { respond(res, next, e); }
+});
+invoiceRouter.post("/:id/refunds", async (req, res, next) => {
+  try { res.json(await recordRefund(actorFor(req)!, idParam(req.params.id), refundSchema.parse(req.body))); } catch (e) { respond(res, next, e); }
+});
+invoiceRouter.post("/:id/void",async (req, res, next) => {
   try { const body = voidSchema.parse(req.body); res.json(await voidInvoice(actorFor(req)!, idParam(req.params.id), body.expectedRevision, body.reason)); } catch (e) { respond(res, next, e); }
 });
