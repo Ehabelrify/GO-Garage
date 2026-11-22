@@ -117,6 +117,8 @@ const groups: Group[] = [
     ["POST", "/:id/issue", { caps: ["invoices.view", "invoices.manage"], body: rev }],
     ["POST", "/:id/payments", { caps: ["invoices.view", "invoices.payments"], body: { ...rev, amountMinor: 100, method: "cash", reference: "r1", receivedOn: "2026-01-01" } }],
     ["POST", "/:id/void", { caps: ["invoices.view", "invoices.payments"], body: { ...rev, reason: "mistake" } }],
+    ["POST", "/:id/payments/:paymentId/reverse", { caps: ["invoices.view", "invoices.payments"], body: { reason: "wrong amount", idempotencyKey: "key-12345678" } }],
+    ["POST", "/:id/refunds", { caps: ["invoices.view", "invoices.payments"], body: { amountMinor: 100, reason: "goodwill", evidenceRef: "private:refund/1", idempotencyKey: "key-12345678" } }],
   ] },
   { name: "finance", router: finance.financeRouter, prefix: "/finance", allow: [], entries: [
     ["GET", "/events", { caps: ["finance.view"] }],
@@ -134,6 +136,7 @@ const groups: Group[] = [
     ["GET", "/history", { caps: ["invoices.view"], query: "documentKind=invoice&documentId=d1" }],
   ] },
   { name: "pickup-commitments", router: pickup.pickupCommitmentRouter, prefix: "/pickup-commitments", allow: [], entries: [
+    ["GET", "/", { roles: ["owner", "branch-manager"], query: "bookingId=bk1" }],
     ["POST", "/", { roles: ["owner", "branch-manager"], headers: pickHeaders, body: { bookingId: "bk1", promisedAt: "2026-02-01T10:00:00.000Z", evidenceRef: "private:x/y", reason: "agreed", expectedRevision: 0 } }],
     ["POST", "/:id/cancel", { roles: ["owner", "branch-manager"], headers: pickHeaders, body: { reason: "changed", expectedRevision: 1 } }],
   ] },

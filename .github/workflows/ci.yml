@@ -67,3 +67,11 @@ jobs:
           apps/server/features/commercial/commercial-migration-rehearsal.integration.test.ts
           apps/server/features/warranty/warranty-ledger.integration.test.ts
           apps/server/features/whatsapp/whatsapp.integration.test.ts
+          apps/server/features/invoicing/invoice-payment.integration.test.ts
+          apps/server/features/invoicing/customer-purchases-view.integration.test.ts
+          apps/server/features/operations/booking-create.integration.test.ts
+          apps/server/features/operations/bootstrap.integration.test.ts
+          apps/server/features/auth/reclaim-invitation.integration.test.ts
+          apps/server/features/reminders/reminders.integration.test.ts
+          apps/server/features/audit/staff-customer-audit.integration.test.ts
+          apps/server/features/document-delivery/document-delivery.integration.test.ts
