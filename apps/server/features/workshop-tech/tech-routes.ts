@@ -129,7 +129,13 @@ techRouter.get("/issues/open", async (req, res) => {
 });
 
 techRouter.get("/:id/extras", async (req, res) => {
-  const access = await accessJob(pool, actor(req), req.params.id);
+  // P1-074/P1-075: a fresh job shows its checklist on first read; the same idempotent helper the Ready gate uses creates the rows.
+  const a = actor(req);
+  const access = await withTransaction(async (client) => {
+    const found = await accessJob(client, a, req.params.id, true);
+    if (found.ok) await ensureChecklist(client, found.job);
+    return found;
+  });
   if (!access.ok) return err(res, access.status, access.code, access.message);
   const [notes, photos, issues] = await Promise.all([readNotes(pool, access.job.id), readPhotos(pool, access.job.id), readIssues(pool, access.job.id)]);
   const checklist = await readChecklist(pool, access.job.id);

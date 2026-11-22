@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "vitest run",
     "db:migrate": "tsx apps/server/migrate.ts",
+    "db:migrate:production": "tsx apps/server/infrastructure/database/migrate-production.ts",
     "db:seed:dev": "tsx apps/server/seed-dev.ts",
     "db:purge:demo": "tsx apps/server/purge-demo.ts"
   },

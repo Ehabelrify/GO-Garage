@@ -47,12 +47,30 @@ const limiter = (limit: number, code: string) =>
     },
   });
 
-// CSP is disabled: Clerk (frontend API, proxy, telemetry, images) and Vite HMR in dev
+// CSP (P2T-018): report-only in production (enforced when GARAGE_CSP_ENFORCE=true); off in dev unless GARAGE_CSP_FORCE=true. See docs/engineering/CSP.md.
+const cspEnforce = process.env.GARAGE_CSP_ENFORCE === "true";
+const cspActive = isProduction || cspEnforce || process.env.GARAGE_CSP_FORCE === "true";
+const cspDirectives = {
+  defaultSrc: ["'self'"],
+  scriptSrc: ["'self'", "https://*.clerk.accounts.dev", "https://*.clerk.com"],
+  styleSrc: ["'self'", "'unsafe-inline'"],
+  imgSrc: ["'self'", "data:", "https:"],
+  fontSrc: ["'self'", "data:"],
+  connectSrc: ["'self'", "https://*.clerk.accounts.dev", "https://*.clerk.com"],
+  frameSrc: ["'self'", "https://*.clerk.accounts.dev", "https://*.clerk.com"],
+  workerSrc: ["'self'", "blob:"],
+  objectSrc: ["'none'"],
+  baseUri: ["'self'"],
+  formAction: ["'self'"],
+  frameAncestors: ["'self'"],
+  reportUri: ["/api/csp-report"],
+};
+// Earlier note: CSP was disabled: Clerk (frontend API, proxy, telemetry, images) and Vite HMR in dev
 // need broad, deployment-specific allowances, and an incorrect policy would break sign-in.
 // All other helmet protections stay on. Revisit with a tuned CSP once Clerk domains are pinned.
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: cspActive ? { useDefaults: false, reportOnly: !cspEnforce, directives: cspDirectives } : false,
     hsts: isProduction,
     crossOriginEmbedderPolicy: false,
     crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" }, // Clerk OAuth popups
@@ -73,6 +91,14 @@ app.use(
 );
 
 app.use("/api", limiter(API_GENERAL_LIMIT, "RATE_LIMITED"));
+// CSP violation sink (P2T-018): one log line per report, never the full payload.
+app.post("/api/csp-report", express.json({ type: ["application/csp-report", "application/reports+json", "application/json"], limit: "16kb" }), (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const report = (Array.isArray(body) ? (body[0] as { body?: Record<string, unknown> } | undefined)?.body : (body["csp-report"] as Record<string, unknown> | undefined)) ?? {};
+  const clean = (value: unknown) => String(value ?? "").replace(/\s+/g, " ").slice(0, 120);
+  console.warn(`CSP violation: ${clean(report["violated-directive"] ?? report.effectiveDirective)} blocked=${clean(report["blocked-uri"] ?? report.blockedURL)} page=${clean(report["document-uri"] ?? report.documentURL)}`);
+  res.status(204).end();
+});
 app.use("/api/public/warranty-verification", limiter(PUBLIC_VERIFY_LIMIT, "RATE_LIMITED"));
 app.use("/api/provider/whatsapp", limiter(PROVIDER_WEBHOOK_LIMIT, "RATE_LIMITED"));
 app.post("/api/demo/session", limiter(DEMO_SESSION_LIMIT, "RATE_LIMITED"));

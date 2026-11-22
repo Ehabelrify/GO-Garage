@@ -21,6 +21,11 @@ export function assertOwnerControl(actor: GarageActor) {
   if (!hasCapability(actor, "settings.manage")) fail(403, "OWNER_REQUIRED", "Only the Owner can archive or delete records.");
 }
 
+/** P1-050: a confirmed booking whose job already ended (delivered, cancelled, no-show) is not open work. */
+export const OPEN_BOOKINGS_SQL = "SELECT count(*) AS n FROM bookings b WHERE b.customer_id=$1 AND (b.status='pending' OR (b.status='confirmed' AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.booking_id=b.id AND j.stage IN ('delivered','cancelled','no-show'))))";
+/** P1-050: a lifetime warranty whose terminated_on has been reached is no longer active (same Cairo-date rule as the relations view). */
+export const ACTIVE_WARRANTIES_SQL = "SELECT count(*) AS n FROM warranties WHERE customer_id=$1 AND status='active' AND ((coverage_kind='lifetime' AND (terminated_on IS NULL OR terminated_on > (now() AT TIME ZONE 'Africa/Cairo')::date)) OR (coverage_kind IS DISTINCT FROM 'lifetime' AND expires_on >= CURRENT_DATE))";
+
 type Dependents = { label: string; count: number }[];
 type Q = Pick<PoolClient, "query">;
 const count = async (q: Q, sql: string, params: unknown[]) => Number((await q.query<{ n: string }>(sql, params)).rows[0]?.n ?? 0);
@@ -32,9 +37,9 @@ async function archiveBlockers(q: Q, kind: ArchivableKind, id: string): Promise<
   switch (kind) {
     case "customer": {
       if (!await count(q, "SELECT count(*) AS n FROM customers WHERE id=$1", [id])) fail(404, "RECORD_NOT_FOUND", "Record not found.");
-      add("open bookings", await count(q, "SELECT count(*) AS n FROM bookings WHERE customer_id=$1 AND status IN ('pending','confirmed')", [id]));
+      add("open bookings", await count(q, OPEN_BOOKINGS_SQL, [id]));
       add("in-progress jobs", await count(q, "SELECT count(*) AS n FROM jobs j JOIN bookings b ON b.id=j.booking_id WHERE b.customer_id=$1 AND j.stage NOT IN ('delivered','cancelled','no-show')", [id]));
-      add("active warranties", await count(q, "SELECT count(*) AS n FROM warranties WHERE customer_id=$1 AND status='active' AND (coverage_kind='lifetime' OR expires_on >= CURRENT_DATE)", [id]));
+      add("active warranties", await count(q, ACTIVE_WARRANTIES_SQL, [id]));
       add("open warranty claims", await count(q, "SELECT count(*) AS n FROM warranty_claims c JOIN warranties w ON w.id=c.warranty_id WHERE w.customer_id=$1 AND c.status IN ('open','under-review')", [id]));
       add("active reservations", await count(q, "SELECT count(*) AS n FROM promotion_reservations WHERE beneficiary_id=$1 AND status IN ('reserved','scheduled')", [id]));
       add("active benefits", await count(q, "SELECT count(*) AS n FROM benefit_entitlements WHERE customer_id=$1 AND status='active'", [id]));

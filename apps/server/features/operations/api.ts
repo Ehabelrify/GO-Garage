@@ -13,6 +13,7 @@ import { customerPatchSchema, customerVehicleSchema, findDuplicatePlate, normali
 import { pool, withTransaction } from "../../infrastructure/database/db";
 import { dateOnlyFromSql } from "../../infrastructure/database/date-only";
 import { createBookingInTransaction, getSettingValue } from "./booking-create";
+import { parseCancellationReason } from "./cancellation-reason";
 import { reserveConfirmedBooking, rescheduleConfirmedBooking, cancelConfirmedBooking, type BookingReservationResult } from "./booking-service";
 import { demandFromBookedComponents, demandFromWork, listAvailableSlotsForDemand, type OccupancyDemand } from "./availability-service";
 import { acceptedQuoteInTransaction } from "../commercial/quote-booking";
@@ -557,8 +558,12 @@ router.patch("/bookings/:bookingId/cancel", async (req, res) => {
 router.patch("/jobs/:jobId/stage", async (req, res) => {
   const currentActor = actor(req);
   if (!["owner", "branch-manager", "technician"].includes(currentActor.role)) return forbidden(res);
-  const parsed = z.object({ nextStage: z.string().min(1), overrideReason: z.unknown().optional() }).safeParse(req.body);
+  const parsed = z.object({ nextStage: z.string().min(1), overrideReason: z.unknown().optional(), reason: z.unknown().optional() }).safeParse(req.body);
   if (!parsed.success) return routeError(res, 400, "INVALID_STAGE", "Choose a valid workshop stage.");
+  // P2T-009: a supplied cancellation reason must be real text (min 3 chars). The web stage call does not send one yet, so an absent field is still accepted.
+  const reasonCheck = parseCancellationReason(parsed.data.nextStage, parsed.data.reason);
+  if (!reasonCheck.ok) return routeError(res, 400, "CANCELLATION_REASON_REQUIRED", "Enter a reason of at least 3 characters.");
+  const cancellationReason = reasonCheck.reason;
   if(["cancelled","no-show"].includes(parsed.data.nextStage)){
     const linked=await pool.query("SELECT 1 FROM promotion_reservations r JOIN jobs j ON j.booking_id=r.booking_id WHERE j.id=$1 AND r.status IN ('scheduled','redeemed')",[req.params.jobId]);
     if(linked.rowCount)return routeError(res,409,"RESERVATION_CANCELLATION_REQUIRED","Use the linked reservation correction flow for this installation.");
@@ -625,6 +630,7 @@ router.patch("/jobs/:jobId/stage", async (req, res) => {
         if (available.rows[0]) issueTargets.push({ componentId: null, policyRef: { id: available.rows[0].policy_id, version: available.rows[0].version } });
       }
     }
+    if (cancellationReason) eventNote = `Reason: ${cancellationReason}`;
     await client.query("UPDATE jobs SET stage = $2, updated_at = now() WHERE id = $1", [job.id, parsed.data.nextStage]);
     if (parsed.data.nextStage === "cancelled" || parsed.data.nextStage === "no-show") {
       const bookingStatus = parsed.data.nextStage === "no-show" ? "no-show" : "cancelled";

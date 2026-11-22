@@ -185,3 +185,22 @@ describe("photo upload", () => {
     } finally { storageConfigured.value = false; }
   });
 });
+
+describe("extras on a fresh job (P1-074/P1-075)", () => {
+  it("creates the checklist rows lazily and returns them", async () => {
+    current.actor = actor("technician");
+    query.mockImplementation(async (sql: string) => {
+      sqlLog.push(sql);
+      if (/FROM jobs j JOIN bookings b/.test(sql)) return { rows: [jobRow], rowCount: 1 };
+      if (/FROM job_checklist_items WHERE job_id = \$1 LIMIT 1/.test(sql)) return { rows: [], rowCount: 0 };
+      if (/FROM job_work_components/.test(sql)) return { rows: [], rowCount: 0 };
+      if (/FROM job_checklist_templates/.test(sql)) return { rows: [{ id: "t1", service_id: "tint", phase: "prep", label_en: "Prep", label_ar: "p", mandatory: true }], rowCount: 1 };
+      if (/FROM job_checklist_items/.test(sql)) return { rows: checklistRows, rowCount: checklistRows.length };
+      return { rows: [], rowCount: 1 };
+    });
+    const res = await call("GET", "/jobs/j1/extras");
+    expect(res.status).toBe(200);
+    expect(sqlLog.some((s) => s.includes("INSERT INTO job_checklist_items"))).toBe(true);
+    expect((res.body.checklist as unknown[]).length).toBe(2);
+  });
+});
