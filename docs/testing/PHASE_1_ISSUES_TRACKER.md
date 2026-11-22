@@ -1,6 +1,8 @@
 # Garage OS — Phase 1 Issues Tracker
 
-**Created / last updated:** 15 November 2026 / 21 November 2026
+> The next code-based validation cycle is tracked separately in the [Phase 2 Testing Tracker](PHASE_2_TESTING_TRACKER.md). Keep this file as the Phase 1 implementation and retest history.
+
+**Created / last updated:** 15 November 2026 / 22 November 2026
 **Purpose:** Single working tracker for Phase 1 defects, investigation, implementation handoff, and retesting.  
 **Initial intake:** 25 entries: 7 code-review findings, 15 UI-test findings, and 3 engineering follow-ups.  
 **Current intake:** 62 entries (+ P1-061, P1-062 recorded 22 November 2026; 44 below plus 6 hardening/UI entries P1-045–P1-050, 5 Wave 2.5 entries P1-051–P1-055 and 2 Wave 2.6 quote entries P1-056–P1-057 2 Wave 2.6 invoice entries P1-058–P1-059 and the Wave 2.7 plate entry P1-060 recorded 21 November 2026): the original 25, 6 user-feedback/discovery follow-ups, 6 cross-industry research improvements, and 7 approved business/product additions recorded on 16 November 2026.
@@ -1740,3 +1742,4 @@ The user approved all recommendations and valuable additions derived from the Go
 | 2026-11-22 | Recorded P1-072 (owner activity log, CSV export, migration 0036 indexes) and P1-073 (Daily summary and Activity log tabs, summary endpoint) | Mocked-pool and unit tests only; no database, no browser |
 | 2026-11-22 | Recorded P1-077 (saved views, bulk actions, CSV export on lists) and P1-078 (keyboard shortcuts and help dialog), web only, no migration | Unit tests only; no database, no browser |
 | 2026-11-22 | Recorded P1-079 (GO Stores brand shell: self-hosted fonts, brand tokens, graphite shell, logo placements, contrast test) | Unit tests only; no browser |
+| 2026-11-22 | Linked and independently hardened the separate Phase 2 code-based testing tracker containing P2T-001–P2T-028, inherited Phase 1 regression attachments, and eleven end-to-end workflow suites; Phase 1 intake and statuses were not changed | Two source-review passes only; Phase 2 runtime and database tests not performed |
