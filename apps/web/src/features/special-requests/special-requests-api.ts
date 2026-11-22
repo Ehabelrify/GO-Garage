@@ -1,4 +1,5 @@
 import { parseHistory, parseRequest, type HistoryEvent, type SpecialRequest } from "./special-requests-logic";
+import { invalidateForMutation } from "../../shared/invalidation";
 
 export class RequestApiError extends Error {
   constructor(public status: number, public code: string) { super(code); }
@@ -13,6 +14,7 @@ async function call(url: string, init?: RequestInit): Promise<unknown> {
   }
   const body = await response.json().catch(() => null) as { code?: string } | null;
   if (!response.ok) throw new RequestApiError(response.status, body?.code ?? "REQUEST_FAILED");
+  invalidateForMutation(url, init?.method);
   return body;
 }
 const post = (url: string, payload: unknown) => call(url, { method: "POST", body: JSON.stringify(payload) });

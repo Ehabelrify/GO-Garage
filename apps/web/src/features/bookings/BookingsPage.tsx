@@ -165,7 +165,7 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
     if (pending.kind === "cancel") result = await store.cancelBooking(pending.bookingId, combineCancelReason(cancelCategory as CancelCategory, cancelReason));
     else {
       const job = booking ? noShowJob(booking, state.jobs, role) : null;
-      result = job ? await store.transitionJob(job.id, "no-show") : { ok: false as const, error: "REQUEST_FAILED" };
+      result = job ? await store.transitionJob(job.id, "no-show", combineCancelReason(cancelCategory as CancelCategory, cancelReason)) : { ok: false as const, error: "REQUEST_FAILED" };
     }
     setActing(false);
     setPending(null);
@@ -396,7 +396,7 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
       lang={lang}
       danger
       busy={acting}
-      confirmDisabled={pending?.kind === "cancel" && !cancelReasonReady(cancelCategory, cancelReason)}
+      confirmDisabled={pending !== null && !cancelReasonReady(cancelCategory, cancelReason)}
       disabledReason={t("Choose a reason category and enter the reason to continue.", "اختر فئة السبب واكتب السبب للمتابعة.")}
       title={pending?.kind === "no-show" ? t("Mark as no-show?", "تسجيل أنه لم يحضر؟") : t("Cancel this booking?", "إلغاء هذا الحجز؟")}
       body={`${pendingWho}. ${pending?.kind === "no-show" ? t("The job is closed. No message is sent.", "يُغلق أمر الشغل. لا تُرسل رسالة.") : t("The workshop job is cancelled too. No message is sent.", "يُلغى أمر الشغل أيضاً. لا تُرسل رسالة.")}`}
@@ -405,11 +405,11 @@ export function BookingsPage({ lang, t, state, branchName, customerName, service
       onConfirm={() => void runPending()}
       onCancel={() => { setPending(null); setCancelReason(""); setCancelCategory(""); }}
     >
-      {pending?.kind === "cancel" && <Field label={t("Reason category", "فئة السبب")} required>
+      {pending !== null && <Field label={t("Reason category", "فئة السبب")} required>
         <Select className="field-select" label={t("Reason category", "فئة السبب")} value={cancelCategory} onChange={(event) => setCancelCategory(event.target.value as CancelCategory | "")}
           options={[{ value: "", label: t("Choose…", "اختر…") }, ...cancelCategories.map((c) => ({ value: c.value, label: t(c.en, c.ar) }))]} />
       </Field>}
-      {pending?.kind === "cancel" && <Field label={t("Cancellation reason", "سبب الإلغاء")} required>
+      {pending !== null && <Field label={pending.kind === "no-show" ? t("No-show reason", "سبب عدم الحضور") : t("Cancellation reason", "سبب الإلغاء")} required>
         <textarea className="field-input" rows={3} maxLength={300} value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} />
       </Field>}
     </ConfirmDialog>

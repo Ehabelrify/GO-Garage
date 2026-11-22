@@ -14,6 +14,7 @@ import {
 import { NewContactBanner } from "../intake/NewContactBanner";
 import { isNewContact, newContactWord } from "../intake/intake-logic";
 import "./WhatsAppSimulationPage.css";
+import { invalidateForMutation } from "../../shared/invalidation";
 
 type MessageKind = "customer" | "reply" | "bot" | "internal-note";
 type InboxBranchId = BranchId | "all";
@@ -74,6 +75,7 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   });
   const body = await response.json().catch(() => ({})) as T & ApiErrorBody;
   if (!response.ok) throw Object.assign(new Error(body.message || `Request failed (${response.status})`), { status: response.status });
+  invalidateForMutation(url, init.method);
   return body;
 }
 

@@ -1,4 +1,5 @@
 import type { DeliveryEntry, SendChannel, SendDocumentKind } from "./send-to-customer-logic";
+import { invalidateForMutation } from "../invalidation";
 
 export class DeliveryApiError extends Error { constructor(public status: number, public code: string) { super(code); } }
 
@@ -9,6 +10,7 @@ async function call<T>(url: string, init: RequestInit = {}): Promise<T> {
   } catch { throw new DeliveryApiError(0, "NETWORK"); }
   const body = await response.json().catch(() => ({})) as { code?: string } & T;
   if (!response.ok) throw new DeliveryApiError(response.status, body.code ?? "REQUEST_FAILED");
+  invalidateForMutation(url, init.method);
   return body;
 }
 

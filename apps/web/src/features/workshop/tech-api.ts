@@ -1,4 +1,5 @@
 export type IssueKind = "damage-found" | "part-missing" | "customer-request" | "delay";
+import { invalidateForMutation } from "../../shared/invalidation";
 export type PhotoKind = "before" | "after" | "damage";
 
 export interface TechNote { id: string; authorName: string; body: string; createdAt: string }
@@ -27,6 +28,7 @@ async function call<T>(url: string, init: RequestInit = {}): Promise<ApiOutcome<
   try {
     const response = await fetch(url, { ...init, headers, credentials: "same-origin" });
     const raw = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (response.ok) invalidateForMutation(url, init.method);
     return response.ok
       ? { ok: true, status: response.status, data: raw as T, raw }
       : { ok: false, status: response.status, code: typeof raw.code === "string" ? raw.code : "REQUEST_FAILED", raw };

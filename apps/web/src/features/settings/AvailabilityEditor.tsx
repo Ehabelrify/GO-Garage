@@ -6,6 +6,7 @@ import {
   availabilityComplete, availabilityFromApi, availabilityPayload, type AvailabilityForm,
 } from "./availability-form";
 import "./settings.css";
+import { invalidateForMutation } from "../../shared/invalidation";
 
 type Load = "loading" | "error" | "ready";
 
@@ -68,6 +69,7 @@ export function AvailabilityEditor({ branches, lang, notify }: { branches: { id:
       });
       const data = await response.json().catch(() => ({})) as { code?: string; version?: number };
       if (!response.ok) throw new Error(data.code ?? "SAVE_FAILED");
+      invalidateForMutation(`/api/availability/config/${branchId}`, "PUT");
       patch({ version: data.version ?? form.version, reason: "" });
       setUnconfigured(false);
       notify?.(t("Hours and capacity saved.", "اتحفظت المواعيد والسعة."));

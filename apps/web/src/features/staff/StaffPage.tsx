@@ -11,6 +11,7 @@ import {
   type CapabilityInfo, type StaffInvitation, type StaffMember,
 } from "./staff-logic";
 import "../settings/settings.css";
+import { invalidateForMutation } from "../../shared/invalidation";
 
 interface StaffPageProps {
   lang: Lang;
@@ -39,6 +40,7 @@ async function staffRequest<T>(url: string, init?: RequestInit): Promise<T> {
   });
   const body = await response.json().catch(() => ({})) as { code?: string; message?: string };
   if (!response.ok) throw new Error(body.code ?? body.message ?? "REQUEST_FAILED");
+  invalidateForMutation(url, init?.method);
   return body as T;
 }
 

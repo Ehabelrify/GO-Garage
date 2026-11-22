@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { parseCancellationReason } from "./cancellation-reason";
 
 describe("parseCancellationReason", () => {
-  it("accepts absent reasons and other stages", () => {
-    expect(parseCancellationReason("cancelled", undefined)).toEqual({ ok: true, reason: null });
+  it("requires a reason for cancel and no-show, ignores other stages", () => {
+    expect(parseCancellationReason("cancelled", undefined)).toEqual({ ok: false });
+    expect(parseCancellationReason("no-show", undefined)).toEqual({ ok: false });
     expect(parseCancellationReason("ready", "x")).toEqual({ ok: true, reason: null });
   });
   it("rejects short or non-string reasons for cancel and no-show", () => {

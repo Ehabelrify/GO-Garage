@@ -3,6 +3,7 @@ import type { Configured, Locale } from "@garage/domain";
 import { Collapsible, ConfirmDialog, DataTable, EmptyState, Field, FormSection, RequiredNote, Skeleton, StatusBadge } from "../../shared/components";
 import { fmtDateTime } from "./settings-format";
 import "./settings.css";
+import { invalidateForMutation } from "../../shared/invalidation";
 
 type Review = {
   activeVersion: number | null;
@@ -164,6 +165,7 @@ export function CommercialPolicyEditor({ lang, policyId = "quote-acceptance:defa
     try {
       const response = await fetch(`/api/commercial-policies/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const result = await response.json().catch(() => ({})) as { code?: string };
+      if (response.ok) invalidateForMutation(`/api/commercial-policies/${path}`, "POST");
       if (!response.ok) {
         const copy: Record<string, string> = {
           INVALID_POLICY_VALUE: t("Check the required fields and values.", "راجع الحقول المطلوبة والقيم."),

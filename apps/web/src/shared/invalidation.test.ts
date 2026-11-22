@@ -69,4 +69,14 @@ describe("invalidation bus", () => {
     expect(topicsForMutation("/api/invoices", "GET")).toEqual([]);
     expect(topicsForMutation("/api/unknown", "POST")).toEqual([]);
   });
+
+  it("covers document delivery, pickup promises, reminders, special requests and staff writes", () => {
+    expect(topicsForMutation("/api/document-delivery/send", "POST")).toEqual(expect.arrayContaining(["invoices", "quotes"]));
+    expect(topicsForMutation("/api/pickup-commitments", "POST")).toContain("bookings");
+    expect(topicsForMutation("/api/pickup-commitments?bookingId=b1", "GET")).toEqual([]);
+    expect(topicsForMutation("/api/reminders/r1/send", "POST")).toContain("bookings");
+    expect(topicsForMutation("/api/special-requests/x/approve", "POST")).toContain("quotes");
+    expect(topicsForMutation("/api/staff/u1/permissions", "PUT")).toContain("permissions");
+    expect(topicsForMutation("/api/availability/config/b1", "PUT")).toContain("bookings");
+  });
 });

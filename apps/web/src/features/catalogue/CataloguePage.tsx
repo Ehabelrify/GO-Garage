@@ -14,6 +14,7 @@ import { PackageForm } from "./PackageForm";
 import { PriceEditor, PriceHistory } from "./PriceEditor";
 import { aggregationOptions, canPublish, isExampleData, priceDiff, priceFormFrom, taxRuleOptions, validatePriceForm, type PriceFormState } from "./price-logic";
 import "./catalogue.css";
+import { invalidateForMutation } from "../../shared/invalidation";
 
 type Lang = "ar" | "en";
 type Action = { kind: "publish" | "retire" | "archive"; entity: "package" | "grade"; id: string; version: number; revision: number; name: string };
@@ -118,6 +119,7 @@ export function CataloguePage({ lang }: { lang: Lang }) {
         const copy = errorCopy[result.code ?? ""];
         throw new Error(copy ? t(copy[0], copy[1]) : result.message ?? t("The change could not be saved.", "تعذر حفظ التغيير."));
       }
+      invalidateForMutation(url, "POST");
       await read();
       setMessage({ text: t("Saved.", "تم الحفظ."), tone: "info" });
       return true;

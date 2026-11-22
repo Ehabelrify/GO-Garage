@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Locale } from "@garage/domain";
 import { DetailDrawer, Field } from "../../shared/components";
-import { pickupApi } from "./pickup-api";
-import { PickupApiError, cancelReady, pickupErrorCopy, promiseProblem, toIso, withRevisionProbe } from "./pickup-logic";
+import { pickupApi, readPickupHead } from "./pickup-api";
+import { PickupApiError, cancelReady, pickupErrorCopy, promiseProblem, toIso, withCurrentRevision } from "./pickup-logic";
 
 export type PromiseTarget = { mode: "record"; bookingId: string; subtitle?: string } | { mode: "cancel"; commitmentId: string; subtitle?: string };
 
@@ -30,9 +30,9 @@ export function PickupPromiseDrawer({ lang, target, onClose, onDone }: Props) {
     const key = crypto.randomUUID();
     try {
       if (target.mode === "record") {
-        await withRevisionProbe((expectedRevision) => pickupApi.record({ bookingId: target.bookingId, promisedAt: toIso(promised), evidenceRef: evidence.trim(), reason: reason.trim(), expectedRevision }, key));
+        await withCurrentRevision(() => readPickupHead({ bookingId: target.bookingId }).then((head) => head.revision), (expectedRevision) => pickupApi.record({ bookingId: target.bookingId, promisedAt: toIso(promised), evidenceRef: evidence.trim(), reason: reason.trim(), expectedRevision }, key));
       } else {
-        await withRevisionProbe((expectedRevision) => pickupApi.cancel(target.commitmentId, { reason: reason.trim(), expectedRevision }, key), 1);
+        await withCurrentRevision(() => readPickupHead({ commitmentId: target.commitmentId }).then((head) => head.revision), (expectedRevision) => pickupApi.cancel(target.commitmentId, { reason: reason.trim(), expectedRevision }, key));
       }
       onDone(cancelling ? t("Pickup promise cancelled.", "تم إلغاء وعد التسليم.") : t("Pickup promise saved.", "تم حفظ وعد التسليم."));
     } catch (failure) {

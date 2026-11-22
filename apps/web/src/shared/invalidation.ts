@@ -80,6 +80,13 @@ const MUTATION_ROUTES: Array<[RegExp, InvalidationTopic[]]> = [
   [/^\/api\/transport/, ["transport", "bookings", "jobs", "invoices"]],
   [/^\/api\/finance/, ["finance", "invoices"]],
   [/^\/api\/warranties/, ["warranties", "invoices", "jobs"]],
+  [/^\/api\/document-delivery/, ["invoices", "quotes", "warranties"]],
+  [/^\/api\/pickup-commitments/, ["bookings", "jobs"]],
+  [/^\/api\/reminders/, ["bookings", "customers"]],
+  [/^\/api\/special-requests/, ["bookings", "quotes", "jobs"]],
+  [/^\/api\/availability/, ["bookings", "reservations"]],
+  [/^\/api\/commercial-policies/, ["quotes", "finance", "bookings", "reservations", "benefits"]],
+  [/^\/api\/whatsapp/, ["bookings", "customers", "quotes"]],
   [/^\/api\/(settings|staff|users|roles|permissions|auth)/, ["permissions", "bookings", "jobs", "customers", "invoices", "quotes", "finance", "transport", "reservations", "benefits", "warranties"]],
 ];
 

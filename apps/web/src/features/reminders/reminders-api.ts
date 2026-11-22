@@ -1,4 +1,5 @@
 export type ReminderKind = "booking_day_before" | "booking_morning_of" | "ready_for_pickup" | "warranty_expiry" | "quote_followup" | "post_service_checkin";
+import { invalidateForMutation } from "../../shared/invalidation";
 export type ReminderStatus = "due" | "upcoming" | "snoozed" | "sent-simulated" | "skipped" | "cancelled";
 
 export interface ReminderItem {
@@ -28,6 +29,7 @@ async function call<T>(url: string, init: RequestInit = {}): Promise<T> {
   }
   const body = await response.json().catch(() => ({})) as { code?: string } & T;
   if (!response.ok) throw new ReminderApiError(response.status, body.code ?? "REQUEST_FAILED");
+  invalidateForMutation(url, init.method);
   return body;
 }
 const post = (body: unknown = {}) => ({ method: "POST", body: JSON.stringify(body) });

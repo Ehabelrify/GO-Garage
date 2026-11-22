@@ -1,4 +1,5 @@
 import { normaliseCatalogue, type CatalogueItem, type CatalogueKind, type IntakePayload, type IntakeResult } from "./intake-logic";
+import { invalidateForMutation } from "../../shared/invalidation";
 
 export class IntakeError extends Error {
   constructor(public status: number, public code: string, public body: Record<string, unknown> = {}) { super(code); }
@@ -22,6 +23,7 @@ async function call<T>(url: string, init: RequestInit = {}, signal?: AbortSignal
     const code = typeof body?.code === "string" ? body.code : response.status === 404 || response.status === 405 ? "NOT_AVAILABLE" : "REQUEST_FAILED";
     throw new IntakeError(response.status, code, body ?? {});
   }
+  invalidateForMutation(url, init.method);
   return body as T;
 }
 

@@ -14,7 +14,7 @@ import { pool, withTransaction } from "../../infrastructure/database/db";
 import { dateOnlyFromSql } from "../../infrastructure/database/date-only";
 import { createBookingInTransaction, getSettingValue } from "./booking-create";
 import { parseCancellationReason } from "./cancellation-reason";
-import { reserveConfirmedBooking, rescheduleConfirmedBooking, cancelConfirmedBooking, type BookingReservationResult } from "./booking-service";
+import { reserveConfirmedBooking, rescheduleConfirmedBooking, cancelConfirmedBooking, cancelBookingDownstream, cancellationNote, type BookingReservationResult } from "./booking-service";
 import { demandFromBookedComponents, demandFromWork, listAvailableSlotsForDemand, type OccupancyDemand } from "./availability-service";
 import { acceptedQuoteInTransaction } from "../commercial/quote-booking";
 import {
@@ -333,10 +333,13 @@ router.post("/customers/:id/vehicles", async (req, res) => {
   const duplicate = await findDuplicatePlate(pool, parsed.data.plate, { customerId: req.params.id, branchIds: customerBranches.rows.map((row) => row.branch_id) });
   if (duplicate) return duplicatePlateError(res, duplicate);
   const vehicleId = makeId("vehicle");
-  await pool.query(
-    "INSERT INTO vehicles (id, customer_id, make, model, year, plate) VALUES ($1, $2, $3, $4, $5, $6)",
-    [vehicleId, req.params.id, make, model, year, formatPlateDisplay(parsed.data.plate)],
-  );
+  await withTransaction(async (client) => {
+    await client.query(
+      "INSERT INTO vehicles (id, customer_id, make, model, year, plate) VALUES ($1, $2, $3, $4, $5, $6)",
+      [vehicleId, req.params.id, make, model, year, formatPlateDisplay(parsed.data.plate)],
+    );
+    await recordStaffCustomerAudit(client, { entityKind: "customer", entityId: req.params.id, action: "vehicle-added", summary: `Vehicle ${vehicleId} added (fields: make, model, year, plate)`, actorUserId: currentActor.userId });
+  });
   res.status(201).json({ ok: true, vehicleId });
 });
 
@@ -513,13 +516,14 @@ router.patch("/bookings/:bookingId/cancel", async (req, res) => {
   const suppliedReason = z.string().trim().min(1).max(300).safeParse(req.body?.reason);
   if (!canManageBookings(currentActor)) return forbidden(res);
   if (rejectDemoActor(res, currentActor, "Bookings cannot be cancelled in a temporary demo session.")) return;
+  const notifyCustomer = req.body?.notifyCustomer === true;
   const commercialLink=await pool.query("SELECT 1 FROM promotion_reservations WHERE booking_id=$1 AND status IN ('scheduled','redeemed')",[req.params.bookingId]);
   if(commercialLink.rowCount)return routeError(res,409,"RESERVATION_CANCELLATION_REQUIRED","Cancel the linked reservation through its authorized correction flow.");
   const confirmed=await pool.query<{status:string}>("SELECT status FROM bookings WHERE id=$1",[req.params.bookingId]);
   if(confirmed.rows[0]?.status==="confirmed"||(confirmed.rows[0]?.status==="cancelled"&&req.get("Idempotency-Key"))){
     const parsed=z.object({reason:z.string().trim().min(1)}).safeParse(req.body);
     if(!parsed.success)return routeError(res,400,"INVALID_CANCELLATION","A cancellation reason is required.");
-    const result=await withTransaction(client=>cancelConfirmedBooking(client,{kind:"staff",userId:currentActor.userId},{bookingId:req.params.bookingId,idempotencyKey:req.get("Idempotency-Key")||`cancel:${req.params.bookingId}`,reason:parsed.data.reason}));
+    const result=await withTransaction(client=>cancelConfirmedBooking(client,{kind:"staff",userId:currentActor.userId},{bookingId:req.params.bookingId,idempotencyKey:req.get("Idempotency-Key")||`cancel:${req.params.bookingId}`,reason:parsed.data.reason,notifyCustomer}));
     if(result.status==="forbidden")return forbidden(res);
     if(result.status==="invalid")return routeError(res,409,result.code,"The booking cannot be cancelled.");
     return res.json({ok:true,status:result.status});
@@ -544,9 +548,10 @@ router.patch("/bookings/:bookingId/cancel", async (req, res) => {
       await client.query(
         `INSERT INTO job_events (id, job_id, from_stage, to_stage, actor_user_id, note)
          VALUES ($1, $2, $3, 'cancelled', $4, $5)`,
-        [makeId("event"), activeJob.rows[0].id, activeJob.rows[0].stage, currentActor.userId, suppliedReason.success ? `Booking cancelled: ${suppliedReason.data}` : "Booking cancelled"],
+        [makeId("event"), activeJob.rows[0].id, activeJob.rows[0].stage, currentActor.userId, suppliedReason.success ? `Booking cancelled: ${cancellationNote(suppliedReason.data, notifyCustomer)}` : `Booking cancelled [customer notification: ${notifyCustomer ? "requested" : "not requested"}]`],
       );
     }
+    await cancelBookingDownstream(client, record.id, currentActor.userId, suppliedReason.success ? suppliedReason.data : "Booking cancelled");
     return "ok" as const;
   });
   if (result === "forbidden") return forbidden(res);
@@ -560,7 +565,7 @@ router.patch("/jobs/:jobId/stage", async (req, res) => {
   if (!["owner", "branch-manager", "technician"].includes(currentActor.role)) return forbidden(res);
   const parsed = z.object({ nextStage: z.string().min(1), overrideReason: z.unknown().optional(), reason: z.unknown().optional() }).safeParse(req.body);
   if (!parsed.success) return routeError(res, 400, "INVALID_STAGE", "Choose a valid workshop stage.");
-  // P2T-009: a supplied cancellation reason must be real text (min 3 chars). The web stage call does not send one yet, so an absent field is still accepted.
+  // P2T-009: cancelled and no-show require a real reason (min 3 chars).
   const reasonCheck = parseCancellationReason(parsed.data.nextStage, parsed.data.reason);
   if (!reasonCheck.ok) return routeError(res, 400, "CANCELLATION_REASON_REQUIRED", "Enter a reason of at least 3 characters.");
   const cancellationReason = reasonCheck.reason;
@@ -635,6 +640,8 @@ router.patch("/jobs/:jobId/stage", async (req, res) => {
     if (parsed.data.nextStage === "cancelled" || parsed.data.nextStage === "no-show") {
       const bookingStatus = parsed.data.nextStage === "no-show" ? "no-show" : "cancelled";
       await client.query("UPDATE bookings SET status = $2, updated_at = now() WHERE id = (SELECT booking_id FROM jobs WHERE id = $1)", [job.id, bookingStatus]);
+      const cancelledBooking = await client.query<{ booking_id: string }>("SELECT booking_id FROM jobs WHERE id = $1", [job.id]);
+      if (cancelledBooking.rows[0]) await cancelBookingDownstream(client, cancelledBooking.rows[0].booking_id, currentActor.userId, cancellationReason ?? `Job ${bookingStatus}`);
     }
     await client.query(
       `INSERT INTO job_events (id, job_id, from_stage, to_stage, actor_user_id, note)

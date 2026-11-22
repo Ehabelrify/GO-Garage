@@ -1,7 +1,6 @@
 import type { Locale } from "@garage/domain";
 
 export const EVIDENCE_PATTERN = /^private:[A-Za-z0-9/_-]+$/;
-export const MAX_REVISION_PROBES = 12;
 
 export class PickupApiError extends Error { constructor(public status: number, public code: string) { super(code); } }
 
@@ -36,17 +35,13 @@ export const cancelReady = (reason: string) => reason.trim().length > 0;
 export function toIso(local: string): string { return new Date(local).toISOString(); }
 
 /**
- * The server exposes no revision read, so the screen tries revisions upward until the write is accepted.
- * A rejected probe writes nothing. STALE_COMMITMENT on every probe means the history is longer than the cap.
+ * The screen reads the current revision first and writes with it. If a concurrent change makes that
+ * stale, it re-reads once and retries a single time; a second STALE_COMMITMENT is surfaced.
  */
-export async function withRevisionProbe<T>(attempt: (expectedRevision: number) => Promise<T>, start = 0, max = MAX_REVISION_PROBES): Promise<T> {
-  let last: unknown = new PickupApiError(409, "STALE_COMMITMENT");
-  for (let revision = start; revision < start + max; revision++) {
-    try { return await attempt(revision); }
-    catch (failure) {
-      last = failure;
-      if (!(failure instanceof PickupApiError) || failure.code !== "STALE_COMMITMENT") throw failure;
-    }
+export async function withCurrentRevision<T>(readRevision: () => Promise<number>, attempt: (expectedRevision: number) => Promise<T>): Promise<T> {
+  try { return await attempt(await readRevision()); }
+  catch (failure) {
+    if (!(failure instanceof PickupApiError) || failure.code !== "STALE_COMMITMENT") throw failure;
+    return attempt(await readRevision());
   }
-  throw last;
 }

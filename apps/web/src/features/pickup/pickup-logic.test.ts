@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PickupApiError, cancelReady, pickupErrorCopy, promiseProblem, toIso, withRevisionProbe } from "./pickup-logic";
+import { PickupApiError, cancelReady, pickupErrorCopy, promiseProblem, toIso, withCurrentRevision } from "./pickup-logic";
 
 const now = new Date("2026-11-22T10:00:00");
 const good = { promisedLocal: "2026-11-25T14:00", evidenceRef: "private:agreements/2026_11-abc", reason: "Customer agreed by phone" };
@@ -21,11 +21,14 @@ describe("pickup promise logic", () => {
     expect(pickupErrorCopy("ROLE_FORBIDDEN", "en")).toMatch(/branch manager/);
     expect(pickupErrorCopy("nope", "en")).toMatch(/could not be saved/);
   });
-  it("probes revisions only on stale conflicts", async () => {
+  it("reads the revision first and retries once on stale", async () => {
     const seen: number[] = [];
-    const ok = await withRevisionProbe(async (r) => { seen.push(r); if (r < 2) throw new PickupApiError(409, "STALE_COMMITMENT"); return "done"; });
-    expect(ok).toBe("done"); expect(seen).toEqual([0, 1, 2]);
-    await expect(withRevisionProbe(async () => { throw new PickupApiError(403, "ROLE_FORBIDDEN"); })).rejects.toMatchObject({ code: "ROLE_FORBIDDEN" });
-    await expect(withRevisionProbe(async () => { throw new PickupApiError(409, "STALE_COMMITMENT"); }, 0, 3)).rejects.toMatchObject({ code: "STALE_COMMITMENT" });
+    let head = 3;
+    const ok = await withCurrentRevision(async () => head, async (r) => { seen.push(r); if (r === 3) { head = 4; throw new PickupApiError(409, "STALE_COMMITMENT"); } return "done"; });
+    expect(ok).toBe("done"); expect(seen).toEqual([3, 4]);
+    await expect(withCurrentRevision(async () => 1, async () => { throw new PickupApiError(403, "ROLE_FORBIDDEN"); })).rejects.toMatchObject({ code: "ROLE_FORBIDDEN" });
+    const twice: number[] = [];
+    await expect(withCurrentRevision(async () => 1, async (r) => { twice.push(r); throw new PickupApiError(409, "STALE_COMMITMENT"); })).rejects.toMatchObject({ code: "STALE_COMMITMENT" });
+    expect(twice).toEqual([1, 1]);
   });
 });

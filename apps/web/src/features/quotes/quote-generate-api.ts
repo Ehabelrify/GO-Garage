@@ -1,4 +1,5 @@
 import type { QuoteVersionRef } from "@garage/domain";
+import { invalidateForMutation } from "../../shared/invalidation";
 
 export type QuoteSourceRef = { kind: "special-request"; requestId: string } | { kind: "booking"; bookingId: string };
 export interface QuoteSourceOption { key: string; kind: "special-request" | "booking"; id: string; date: string; vehicleId: string; serviceId: string | null; title: string | null; status: string; quoteId: string | null }
@@ -13,6 +14,7 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
   }
   const body = await response.json().catch(() => null) as { code?: string } | null;
   if (!response.ok) throw Object.assign(new Error(body?.code ?? "REQUEST_FAILED"), { code: body?.code ?? "REQUEST_FAILED", status: response.status });
+  invalidateForMutation(url, init?.method);
   return body as T;
 }
 

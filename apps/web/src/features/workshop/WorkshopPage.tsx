@@ -5,13 +5,14 @@ import type { GarageRole, Job, JobStage } from "@garage/domain";
 import { unknownWriteOutcomeCopy, useGarageStore } from "../../shared/store";
 import { dateLabel, stageNames, type RecordPageProps } from "../../shared/ui";
 import {
-  Collapsible, ConfirmDialog, DataTable, DateText, DetailDrawer, EmptyState, FilterBar, Notice, PageHeader, Plate, RecordRef,
+  Collapsible, ConfirmDialog, DataTable, DateText, DetailDrawer, EmptyState, Field, FilterBar, Notice, PageHeader, Plate, RecordRef,
   Select, Skeleton, StatusBadge, TabBar, useUrlState, type Column,
 } from "../../shared/components";
 import {
   actionLabelFor, actionsFor, boardCount, boardStages, capColumn, columnTracks, compareJobs, groupByStage, isOverdue,
   matchesJob, technicianCounts, terminalStages, type TechniciansState,
 } from "./workshop-logic";
+import { cancelCategories, cancelReasonReady, combineCancelReason, type CancelCategory } from "../bookings/cancel-reason";
 import { JobExtras } from "./JobExtras";
 import { asChecklistBlock, techApi, type ChecklistBlock, type OpenIssue } from "./tech-api";
 import "./WorkshopPage.css";
@@ -38,6 +39,8 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
   const [saving, setSaving] = useState("");
   const [confirm, setConfirm] = useState<{ job: Job; target: JobStage } | null>(null);
   const [moving, setMoving] = useState(false);
+  const [closeCategory, setCloseCategory] = useState<CancelCategory | "">("");
+  const [closeReason, setCloseReason] = useState("");
   const [openIssues, setOpenIssues] = useState<OpenIssue[]>([]);
   const [gate, setGate] = useState<{ job: Job; block: ChecklistBlock } | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
@@ -114,9 +117,10 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
       else notify(attempt.code === "INVALID_TRANSITION" ? t("That stage change is not allowed.", "هذا التغيير في المرحلة غير مسموح.") : t("The stage could not be changed. Check your access.", "تعذر تغيير المرحلة. تحقق من صلاحياتك."));
       return;
     }
-    const result = await store.transitionJob(job.id, target);
+    const closing = target === "cancelled" || target === "no-show";
+    const result = await store.transitionJob(job.id, target, closing ? combineCancelReason(closeCategory as CancelCategory, closeReason) : undefined);
     setMoving(false);
-    setConfirm(null);
+    setConfirm(null); setCloseCategory(""); setCloseReason("");
     notify(result.ok
       ? t("Workshop stage updated.", "تم تحديث مرحلة الشغل.")
       : unknownWriteOutcomeCopy(result.error, lang) ?? (result.error === "INVALID_TRANSITION"
@@ -333,6 +337,16 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
       title={confirm ? (confirm.target === "cancelled" ? t("Cancel this job?", "إلغاء أمر الشغل؟") : t("Mark as no-show?", "تسجيل عدم الحضور؟")) : ""}
       body={confirm ? `${vehicleLabel(confirm.job)} · ${customerName(confirm.job.customerId)}` : undefined}
       confirmLabel={confirm ? actionLabel(confirm.target) : undefined}
-      onCancel={() => setConfirm(null)} onConfirm={() => { if (confirm) void doMove(confirm.job, confirm.target); }} />
+      confirmDisabled={!cancelReasonReady(closeCategory, closeReason)}
+      disabledReason={t("Choose a reason category and enter the reason to continue.", "اختر فئة السبب واكتب السبب للمتابعة.")}
+      onCancel={() => { setConfirm(null); setCloseCategory(""); setCloseReason(""); }} onConfirm={() => { if (confirm) void doMove(confirm.job, confirm.target); }}>
+      <Field label={t("Reason category", "فئة السبب")} required>
+        <Select className="field-select" label={t("Reason category", "فئة السبب")} value={closeCategory} onChange={(event) => setCloseCategory(event.target.value as CancelCategory | "")}
+          options={[{ value: "", label: t("Choose…", "اختر…") }, ...cancelCategories.map((c) => ({ value: c.value, label: t(c.en, c.ar) }))]} />
+      </Field>
+      <Field label={confirm?.target === "no-show" ? t("No-show reason", "سبب عدم الحضور") : t("Cancellation reason", "سبب الإلغاء")} required>
+        <textarea className="field-input" rows={3} maxLength={300} value={closeReason} onChange={(event) => setCloseReason(event.target.value)} />
+      </Field>
+    </ConfirmDialog>
   </>;
 }

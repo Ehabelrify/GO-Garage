@@ -204,7 +204,7 @@ interface GarageStore {
   createBookingRequest: (input: CreateBookingInput) => Promise<StoreMutationWith<{ bookingId: string; status: string }>>;
   confirmBooking: (bookingId: string) => Promise<StoreMutationResult>;
   cancelBooking: (bookingId: string, reason: string) => Promise<StoreMutationResult>;
-  transitionJob: (jobId: string, nextStage: JobStage) => Promise<StoreMutationResult>;
+  transitionJob: (jobId: string, nextStage: JobStage, reason?: string) => Promise<StoreMutationResult>;
   assignJob: (jobId: string, technicianUserId: string) => Promise<StoreMutationResult>;
   createWarrantyPolicy: (input: WarrantyPolicyInput) => Promise<StoreMutationResult>;
   updateWarrantyPolicy: (policyId: string, version: number, input: Omit<WarrantyPolicyInput, "policyId">) => Promise<StoreMutationResult>;
@@ -374,11 +374,11 @@ export function GarageStoreProvider({ children }: PropsWithChildren) {
     }
   }, [completeMutation]);
 
-  const transitionJob = useCallback(async (jobId: string, nextStage: JobStage) => {
+  const transitionJob = useCallback(async (jobId: string, nextStage: JobStage, reason?: string) => {
     try {
       await requestJson(`/api/jobs/${encodeURIComponent(jobId)}/stage`, {
         method: "PATCH",
-        body: JSON.stringify({ nextStage }),
+        body: JSON.stringify(reason?.trim() ? { nextStage, reason: reason.trim() } : { nextStage }),
       });
       return await completeMutation({});
     } catch (error) {
