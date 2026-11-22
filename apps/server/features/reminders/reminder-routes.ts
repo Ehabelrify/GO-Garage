@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Response } from "express";
 import { z } from "zod";
 import { actorFor } from "../auth/auth";
 import { listReminders, listRules, previewTemplate, ReminderError, runReminders, sendReminder, skipReminder, snoozeReminder, updateRule } from "./reminder-service";
+import { getReminderSchedulerStatus } from "./reminder-scheduler";
 
 /** Reminders and follow-ups API (simulated outbox only). Mounted at /api/reminders after requireMembership. */
 export const remindersRouter = Router();
@@ -26,7 +27,7 @@ const previewSchema = z.object({ kind: z.string().max(60), template: z.string().
 const snoozeSchema = z.object({ days: z.number().int() }).strict();
 
 remindersRouter.get("/", async (req, res, next) => {
-  try { res.json(await listReminders(actorFor(req)!, { kind: queryText(req.query.kind), customerId: queryText(req.query.customerId) })); } catch (e) { respond(res, next, e); }
+  try { res.json({ ...(await listReminders(actorFor(req)!, { kind: queryText(req.query.kind), customerId: queryText(req.query.customerId) })), scheduler: getReminderSchedulerStatus() }); } catch (e) { respond(res, next, e); }
 });
 remindersRouter.get("/rules", async (req, res, next) => {
   try { res.json(await listRules(actorFor(req)!)); } catch (e) { respond(res, next, e); }

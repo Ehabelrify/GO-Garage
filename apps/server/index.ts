@@ -11,6 +11,7 @@ import { createApiRouter } from "./features/operations/api";
 import { pool } from "./infrastructure/database/db";
 import { checkReadiness } from "./infrastructure/health/readiness";
 import { assertDatasetBoundary } from "./infrastructure/database/dataset-boundary";
+import { startReminderScheduler } from "./features/reminders/reminder-scheduler";
 
 const app = express();
 const port = Number(process.env.PORT ?? 5000);
@@ -115,6 +116,7 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
 });
 
 await assertDatasetBoundary(pool);
+startReminderScheduler();
 const server = app.listen(port, "0.0.0.0", () => {
   console.info(`Garage OS server listening on port ${port}.`);
 });
