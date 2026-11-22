@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { actorFor } from "../auth/auth";
 import { commercialContext } from "./policy-service";
-import { CatalogueError, classifyVehicle, getEligiblePackages, getVehicleSelection, listAvailablePackages, listGradeVersions, listPackageVersions, listPackagePriceHistory, listVehicleCategories, publishGradeVersion, publishPackageVersion, retireGradeVersion, retirePackageVersion, saveGradeDraft, savePackageDraft, savePriceDraft, saveVehicleCategory } from "./catalogue-service";
+import { CatalogueError, classifyVehicle, getEligiblePackages, getVehicleSelection, listAvailablePackages, listIntakeItems, listGradeVersions, listPackageVersions, listPackagePriceHistory, listVehicleCategories, publishGradeVersion, publishPackageVersion, retireGradeVersion, retirePackageVersion, saveGradeDraft, savePackageDraft, savePriceDraft, saveVehicleCategory } from "./catalogue-service";
 
 export const catalogueRouter = Router();
 function respondError(res: import("express").Response, next: import("express").NextFunction, error: unknown) {
@@ -12,6 +12,12 @@ function respondError(res: import("express").Response, next: import("express").N
 }
 catalogueRouter.get("/versions", async (req, res, next) => { try { res.json(await listPackageVersions(actorFor(req)!)); } catch (e) { respondError(res,next,e); } });
 catalogueRouter.get("/available-packages", async (req, res, next) => { try { res.json(await listAvailablePackages(actorFor(req)!)); } catch (e) { respondError(res,next,e); } });
+const intakeQuery = z.object({ q: z.string().max(100).optional(), kind: z.enum(["service", "package", "product"]).optional(), vehicleId: z.string().min(1).max(120).optional(), branchId: z.string().min(1).max(120).optional() }).strict();
+catalogueRouter.get("/intake-items", async (req, res, next) => {
+  const parsed = intakeQuery.safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ code: "INVALID_INTAKE_QUERY", message: "Check the catalogue filters." });
+  try { res.json(await listIntakeItems(actorFor(req)!, parsed.data)); } catch (e) { respondError(res, next, e); }
+});
 catalogueRouter.get("/vehicle-selection/:vehicleId", async (req, res, next) => { try { res.json(await getVehicleSelection(actorFor(req)!, req.params.vehicleId)); } catch (e) { respondError(res,next,e); } });
 catalogueRouter.get("/grades", async (req, res, next) => { try { res.json(await listGradeVersions(actorFor(req)!)); } catch (e) { respondError(res,next,e); } });
 catalogueRouter.get("/categories", async (req, res, next) => { try { res.json(await listVehicleCategories(actorFor(req)!)); } catch (e) { respondError(res,next,e); } });

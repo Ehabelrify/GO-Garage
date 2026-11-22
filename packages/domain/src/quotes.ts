@@ -13,6 +13,8 @@ export type QuoteDraftInput = {
   acceptancePolicy: PolicyRef | null; validThrough: string | null;
   warrantyBindings: WarrantyBinding[]; benefitBindings: PolicyRef[];
   state: "draft" | "offered";
+  /** Free-text notes from quick intake (optional). */
+  notes?: string | null;
 };
 export type QuoteRevision = { ref: QuoteVersionRef; state: "draft" | "offered" | "accepted" | "superseded" | "cancelled"; input: QuoteDraftInput; total: Money | null; digest: string; validThrough: string | null };
 export type QuoteFollowup = { requestedAt: string; responsibleUserId: string | null; status: "requested" | "preparing" | "answered" | "cancelled"; answeredAt: string | null; promisedResponseAt: string | null };

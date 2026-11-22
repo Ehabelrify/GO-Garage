@@ -8,7 +8,15 @@ export function validateMoney(value: unknown): Money {
   return { minor: minor as number, currency: currency.trim() };
 }
 export type VehicleSelection = { vehicleId: string; model: string; categoryId: string | null };
-export type ScopeItem = { id: string; serviceId: string; gradeVersion: PolicyRef | null; areas: string[]; roof: "included" | "excluded" | "not-applicable"; addOnIds: string[]; exclusions: string[]; quantity: number };
+/** Placeholder service id carried by the scope item of a catalogue product (a product is not a workshop service and never needs bay time). */
+export const PRODUCT_SERVICE_ID = "product";
+export type ScopeItem = {
+  id: string; serviceId: string; gradeVersion: PolicyRef | null; areas: string[]; roof: "included" | "excluded" | "not-applicable"; addOnIds: string[]; exclusions: string[]; quantity: number;
+  /** Set only on a product line: the stable catalogue product id (stock and per-branch availability attach to this id later). */
+  productId?: string | null;
+  /** Display name of a product line, so quotes and invoices need no extra lookup. */
+  label?: BilingualName | null;
+};
 export type WorkComponent = { id: string; serviceId: string; scopeItemIds: string[]; occupancyRule: PolicyRef };
 export type BilingualName = { ar: string; en: string };
 export type GradeVersion = { ref: PolicyRef; revision: number; name: BilingualName; thicknessMicrometres: number | null; provenance: string; approval: ApprovalEvidence | null; state: "draft" | "published" | "retired" };
@@ -30,7 +38,7 @@ export type PackagePriceHistoryEntry = {
   isPriceEdit: boolean;
 };
 export type PackageVersion = {
-  ref: PolicyRef; revision: number; kind: "package" | "standalone";
+  ref: PolicyRef; revision: number; kind: "package" | "standalone" | "product";
   name: BilingualName; vehicleCategoryIds: string[]; vehicleModels: string[];
   branchIds: string[]; effectiveFrom: string | null; effectiveThrough: string | null;
   scope: ScopeItem[]; work: WorkComponent[];
@@ -40,4 +48,21 @@ export type PackageVersion = {
   state: "draft" | "published" | "retired";
   /** Present only on a price-edit draft. */
   priceChange?: PackagePriceChange | null;
+  /** Products only: bilingual category (for example accessories, parts, care products). A product has no work (bay time). */
+  productCategory?: BilingualName | null;
+};
+
+/** Kind label shown by quick intake: stand-alone catalogue services, packages and products share one list. */
+export type IntakeItemKind = "service" | "package" | "product";
+/** One row of GET /api/catalogue/intake-items. Money is in minor units; a missing price is null (never guessed). */
+export type IntakeCatalogueItem = {
+  id: { packageId: string; version: number };
+  kind: IntakeItemKind;
+  name: BilingualName;
+  category?: BilingualName;
+  price: Money | null;
+  tax?: Money | null;
+  requiresVehicle: boolean;
+  /** True when the item needs workshop bay time. Always false for products. */
+  bayWork: boolean;
 };

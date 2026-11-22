@@ -6,7 +6,7 @@ const BOOKINGS = `(SELECT id FROM bookings WHERE customer_id IN ${SEEDED_CUSTOME
 const JOBS = `(SELECT id FROM jobs WHERE booking_id IN ${BOOKINGS})`;
 const WARRANTIES = `(SELECT id FROM warranties WHERE customer_id IN ${SEEDED_CUSTOMERS})`;
 const CLAIMS = `(SELECT id FROM warranty_claims WHERE warranty_id IN ${WARRANTIES})`;
-const CONVERSATIONS = `(SELECT id FROM whatsapp_conversations WHERE customer_id IN ${SEEDED_CUSTOMERS})`;
+const CONVERSATIONS = `(SELECT id FROM whatsapp_conversations WHERE customer_id IN ${SEEDED_CUSTOMERS} OR id LIKE 'seed-wa-new-%')`;
 const QUOTES = `(SELECT id FROM quote_heads WHERE customer_id IN ${SEEDED_CUSTOMERS})`;
 const RESERVATIONS = `(SELECT id FROM promotion_reservations WHERE beneficiary_id IN ${SEEDED_CUSTOMERS})`;
 const ALLOCATIONS = `(SELECT id FROM promotion_allocations WHERE beneficiary_id IN ${SEEDED_CUSTOMERS})`;
@@ -32,13 +32,14 @@ export function buildSteps(options: { keepDemoAccounts: boolean }): Step[] {
     { label: "Invoice lines", table: "invoice_lines", where: `invoice_id IN ${INVOICES}` },
     { label: "Invoices", table: "invoices", where: `id IN ${INVOICES}` },
     { label: "Invoice number counters (only when no invoice remains for that branch and year)", table: "invoice_number_sequences", where: "NOT EXISTS (SELECT 1 FROM invoices i WHERE i.branch_id = invoice_number_sequences.branch_id AND extract(year FROM i.issue_date)::int = invoice_number_sequences.year)" },
+    { label: "Quick intake requests", table: "intake_requests", where: `customer_id IN ${SEEDED_CUSTOMERS}`, optional: true },
     { label: "Special request history", table: "special_request_events", where: `request_id IN ${REQUESTS}` },
     { label: "Special requests", table: "special_requests", where: `id IN ${REQUESTS}` },
     { label: "WhatsApp outbox", table: "messaging_outbox", where: `conversation_id IN ${CONVERSATIONS}` },
     { label: "WhatsApp booking drafts", table: "whatsapp_booking_drafts", where: `conversation_id IN ${CONVERSATIONS}` },
     { label: "WhatsApp conversation events", table: "whatsapp_conversation_events", where: `conversation_id IN ${CONVERSATIONS}` },
     { label: "WhatsApp messages", table: "whatsapp_messages", where: `conversation_id IN ${CONVERSATIONS}` },
-    { label: "WhatsApp conversations", table: "whatsapp_conversations", where: `customer_id IN ${SEEDED_CUSTOMERS}` },
+    { label: "WhatsApp conversations", table: "whatsapp_conversations", where: `customer_id IN ${SEEDED_CUSTOMERS} OR id LIKE 'seed-wa-new-%'` },
     { label: "Messaging contact links", table: "messaging_contact_links", where: `customer_id IN ${SEEDED_CUSTOMERS}` },
     { label: "Consent events", table: "messaging_customer_consent_events", where: `customer_id IN ${SEEDED_CUSTOMERS}` },
     { label: "Consents", table: "messaging_customer_consents", where: `customer_id IN ${SEEDED_CUSTOMERS}` },

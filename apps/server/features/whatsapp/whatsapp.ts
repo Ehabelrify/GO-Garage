@@ -24,6 +24,8 @@ import { listAvailableSlotsForDemand } from "../operations/availability-service"
 import { isWhatsAppProviderDeliveryEnabled, isWhatsAppSimulationWriteEnabled } from "./whatsapp-policy";
 import { canAccessInbox,canActorAccessInboxBranch,loadInboxMembership,setInboxMembership } from "./inbox-access";
 import { customerConsentRouter } from "./consent-routes";
+import { projectContact } from "./contact-projection";
+import { linkConversationToCustomer, LinkError } from "./unlinked-contact";
 
 const router = Router();
 router.use("/consents", customerConsentRouter);
@@ -175,11 +177,11 @@ function recordEvent(
 
 async function getConversationRecord(actor: GarageActor, conversationId: string) {
   const result = await pool.query<{
-    id: string; branch_id: string; customer_label: string; customer_id: string; vehicle_id: string;
+    id: string; branch_id: string; customer_label: string; customer_id: string | null; vehicle_id: string | null; contact_label: string | null; contact_phone: string | null;
     verification_code: string; status: string; assigned_user_id: string | null; unread_count: number;
     related_booking_id: string | null; updated_at: Date; assigned_name: string | null;version:number;mode:"simulation"|"scenario"|"operational";
   }>(
-    `SELECT c.id, c.branch_id, c.customer_label, c.customer_id, c.vehicle_id, c.verification_code,c.mode,c.version,
+    `SELECT c.id, c.branch_id, c.customer_label, c.customer_id, c.vehicle_id, c.contact_label, c.contact_phone, c.verification_code,c.mode,c.version,
             c.status, c.assigned_user_id, c.unread_count, c.related_booking_id, c.updated_at,
             m.full_name AS assigned_name
      FROM whatsapp_conversations c
@@ -328,7 +330,7 @@ router.get("/conversations", async (req, res) => {
     return responseError(res, 403, "BRANCH_FORBIDDEN", "Choose a branch you can access.");
   }
   const result = await pool.query(
-    `SELECT c.id, c.branch_id AS "branchId", c.customer_label AS "customerLabel", c.status,
+    `SELECT c.id, c.branch_id AS "branchId", c.customer_label AS "customerLabel", c.customer_id, c.contact_label, c.contact_phone, c.status,
             c.assigned_user_id AS "assignedUserId", COALESCE(m.full_name, '') AS "assignedTo",
             c.unread_count AS "unreadCount", c.updated_at AS "updatedAt",c.version,
             last.body AS preview, (c.mode <> 'operational') AS simulation
@@ -341,7 +343,11 @@ router.get("/conversations", async (req, res) => {
      ORDER BY c.updated_at DESC`,
     [branchId,conversationMode()],
   );
-  res.json({ conversations: result.rows });
+  res.json({
+    conversations: result.rows.map(({ customer_id, contact_label, contact_phone, customerLabel, ...row }) => ({
+      ...row, ...projectContact({ customer_label: customerLabel, customer_id, contact_label, contact_phone }, { hidePhone: actor.isDemo && !row.simulation }),
+    })),
+  });
 });
 
 router.post("/conversations", async (req, res) => {
@@ -393,13 +399,13 @@ router.get("/conversations/:conversationId", async (req, res) => {
     pool.query(
       `SELECT m.id, CASE WHEN m.kind = 'staff' THEN 'reply' ELSE m.kind END AS kind,
               m.body AS text, m.created_at AS "createdAt",
-              COALESCE(s.full_name, CASE WHEN m.kind = 'customer' THEN c.customer_label ELSE 'Simulated bot' END) AS "authorLabel"
+              COALESCE(s.full_name, CASE WHEN m.kind = 'customer' THEN (CASE WHEN c.customer_id IS NULL THEN (CASE WHEN c.contact_phone IS NOT NULL AND NOT ($3 AND c.mode='operational') THEN 'New contact (' || c.contact_phone || ')' ELSE COALESCE(c.contact_label, c.customer_label) END) ELSE c.customer_label END) ELSE 'Simulated bot' END) AS "authorLabel"
        FROM whatsapp_messages m
        JOIN whatsapp_conversations c ON c.id = m.conversation_id
        LEFT JOIN staff_memberships s ON s.clerk_user_id = m.author_user_id
        WHERE m.conversation_id = $1 AND m.mode = $2
        ORDER BY m.created_at`,
-      [conversation.id,conversation.mode],
+      [conversation.id,conversation.mode,actor.isDemo===true],
     ),
     pool.query(
       `SELECT e.id, e.event_type AS "eventType", e.details, e.created_at AS "createdAt",
@@ -414,7 +420,7 @@ router.get("/conversations/:conversationId", async (req, res) => {
     conversation: {
       id: conversation.id,
       branchId: conversation.branch_id,
-      customerLabel: conversation.customer_label,
+      ...projectContact(conversation, { hidePhone: actor.isDemo && conversation.mode === "operational" }),
       status: conversation.status,
       assignedUserId: conversation.assigned_user_id,
       assignedTo: conversation.assigned_name ?? "",
@@ -428,6 +434,25 @@ router.get("/conversations/:conversationId", async (req, res) => {
     messages: messages.rows,
     events: events.rows,
   });
+});
+
+router.post("/conversations/:conversationId/link", async (req, res, next) => {
+  const actor = currentActor(req, res);
+  if (!actor) return;
+  if (actor.isDemo) return responseError(res, 403, "DEMO_ACTION_DISABLED", "Linking is unavailable in a temporary demo session.");
+  if (!hasCapability(actor, "bookings.manage")) return responseError(res, 403, "ROLE_FORBIDDEN", "This action is not available to your role.");
+  const parsed = z.object({ customerId: z.string().trim().min(1).max(120), vehicleId: z.string().trim().min(1).max(120).optional() }).strict().safeParse(req.body);
+  if (!parsed.success) return responseError(res, 400, "INVALID_LINK", "Choose a customer to link.");
+  const conversation = await getConversationRecord(actor, req.params.conversationId);
+  if (conversation === false) return responseError(res, 403, "BRANCH_FORBIDDEN", "This conversation is outside your branch access.");
+  if (!conversation) return responseError(res, 404, "CONVERSATION_NOT_FOUND", "Conversation not found.");
+  try {
+    const result = await withTransaction((client) => linkConversationToCustomer(client, actor, { conversationId: conversation.id, customerId: parsed.data.customerId, vehicleId: parsed.data.vehicleId }));
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    if (error instanceof LinkError) return responseError(res, error.status, error.code, error.message);
+    next(error);
+  }
 });
 
 router.post("/conversations/:conversationId/messages", async (req, res) => {
@@ -626,6 +651,8 @@ router.post("/conversations/:conversationId/booking-confirm", async (req, res) =
   const conversation = await getConversationRecord(actor, req.params.conversationId);
   if (conversation === false) return responseError(res, 403, "BRANCH_FORBIDDEN", "This conversation is outside your branch access.");
   if (!conversation) return responseError(res, 404, "CONVERSATION_NOT_FOUND", "Conversation not found.");
+  if (!conversation.customer_id || !conversation.vehicle_id) return responseError(res, 409, "CONTACT_NOT_LINKED", "Link this contact to a customer first.");
+  const linkedCustomerId = conversation.customer_id, linkedVehicleId = conversation.vehicle_id;
   const outcome = await withTransaction(async (client) => {
     const draftResult = await client.query<{
       id: string; service_id: string; dropoff_date: string; dropoff_time: string;
@@ -647,7 +674,7 @@ router.post("/conversations/:conversationId/booking-confirm", async (req, res) =
       if (!completed.rowCount) return { error: "draft" as const };
       const reserved = await reserveConfirmedBooking(client,
         { kind: "customer-confirmation", channelId: "whatsapp-simulation", confirmationId: draft.id },
-        { branchId: conversation.branch_id, customerId: conversation.customer_id, vehicleId: conversation.vehicle_id,
+        { branchId: conversation.branch_id, customerId: linkedCustomerId, vehicleId: linkedVehicleId,
           serviceId: draft.service_id, dropoffDate: dateOnlyFromSql(draft.dropoff_date),
           dropoffTime: draft.dropoff_time.slice(0, 5), idempotencyKey: `${conversation.id}:${draft.id}`,
           confirmationRef: draft.id });
@@ -663,7 +690,7 @@ router.post("/conversations/:conversationId/booking-confirm", async (req, res) =
     }
     const reserved = await reserveConfirmedBooking(client,
       { kind: "customer-confirmation", channelId: "whatsapp-simulation", confirmationId: draft.id },
-      { branchId: conversation.branch_id, customerId: conversation.customer_id, vehicleId: conversation.vehicle_id,
+      { branchId: conversation.branch_id, customerId: linkedCustomerId, vehicleId: linkedVehicleId,
         serviceId: draft.service_id, dropoffDate: dateOnlyFromSql(draft.dropoff_date), dropoffTime: draft.dropoff_time.slice(0, 5),
         idempotencyKey: `${conversation.id}:${draft.id}`, confirmationRef: draft.id });
     if (reserved.status !== "confirmed" && reserved.status !== "replayed") return { error: reserved.status } as const;
@@ -871,6 +898,7 @@ router.post("/conversations/:conversationId/status-lookup", async (req, res) => 
   const conversation = await getConversationRecord(actor, req.params.conversationId);
   if (conversation === false) return responseError(res, 403, "BRANCH_FORBIDDEN", "This conversation is outside your branch access.");
   if (!conversation) return responseError(res, 404, "CONVERSATION_NOT_FOUND", "Conversation not found.");
+  if (!conversation.customer_id) return responseError(res, 409, "CONTACT_NOT_LINKED", "Link this contact to a customer first.");
   const status = await pool.query<{
     id: string;
     status: Booking["status"]; stage: JobStage | null; expected_pickup: string | Date;

@@ -5,6 +5,7 @@ import { withTransaction } from "../../infrastructure/database/db";
 import { isWhatsAppProviderDeliveryEnabled } from "./whatsapp-policy";
 import { confirmJourneyBooking } from "./booking-journey";
 import { parseProviderEventTime } from "./provider-event-time";
+import { ingestUnlinkedInbound } from "./unlinked-contact";
 
 export const providerWebhookRouter = Router();
 const deliveryRank: Record<string, number> = { accepted: 1, "definite-failure": 1, delivered: 2, read: 3 };
@@ -19,6 +20,8 @@ const providerEventSchema = z.object({
   providerMessageId: z.string().optional(),
   occurredAt: z.string().optional(),
   contactHash: z.string().optional(),
+  /** Optional: the sender's number when the provider legitimately supplies it. Stored only in whatsapp_conversations.contact_phone; never logged. */
+  contactPhone: z.string().trim().max(32).optional(),
   text: z.string().optional(),
   confirmationKey: z.string().optional(),
 });
@@ -60,7 +63,12 @@ providerWebhookRouter.post("/events", async (req, res, next) => {
     const inserted=await client.query("INSERT INTO messaging_provider_events(provider,channel_id,provider_event_id,event_kind,provider_message_id,payload_digest,occurred_at) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING",[channel.provider,channelId,eventId,kind,body.providerMessageId??null,createHash("sha256").update(raw).digest("hex"),occurred]);if(!inserted.rowCount)return "duplicate" as const;
     if(kind==="inbound-message"||kind==="booking-confirmation"){
       if(!body.contactHash||(kind==="inbound-message"&&!body.text?.trim())||(kind==="booking-confirmation"&&!body.confirmationKey))throw Object.assign(new Error("Inbound contact and action data are required."),{status:400,code:"INVALID_INBOUND"});
-      const link=(await client.query<{customer_id:string;vehicle_id:string;branch_id:string;name:string}>("SELECT l.customer_id,l.vehicle_id,l.branch_id,c.name FROM messaging_contact_links l JOIN customers c ON c.id=l.customer_id WHERE l.channel_id=$1 AND l.provider_contact_hash=$2",[channelId,body.contactHash])).rows[0];if(!link)throw Object.assign(new Error("Inbound contact is not approved for this channel."),{status:409,code:"CONTACT_UNMAPPED"});
+      const link=(await client.query<{customer_id:string;vehicle_id:string;branch_id:string;name:string}>("SELECT l.customer_id,l.vehicle_id,l.branch_id,c.name FROM messaging_contact_links l JOIN customers c ON c.id=l.customer_id WHERE l.channel_id=$1 AND l.provider_contact_hash=$2",[channelId,body.contactHash])).rows[0];if(!link){
+        // An unsaved number still reaches the inbox as "New contact"; a booking confirmation needs a known customer.
+        if(kind!=="inbound-message")throw Object.assign(new Error("Inbound contact is not approved for this channel."),{status:409,code:"CONTACT_UNMAPPED"});
+        await ingestUnlinkedInbound(client,{channelId,contactHash:body.contactHash,contactPhone:body.contactPhone,text:body.text!,occurred});
+        return "persisted" as const;
+      }
       let conversation=(await client.query<{id:string}>("SELECT id FROM whatsapp_conversations WHERE mode='operational' AND channel_id=$1 AND customer_id=$2 AND branch_id=$3 AND status IN ('open','pending') ORDER BY updated_at DESC LIMIT 1 FOR UPDATE",[channelId,link.customer_id,link.branch_id])).rows[0];
       if(!conversation&&kind==="booking-confirmation")throw Object.assign(new Error("Booking confirmation has no active conversation."),{status:409,code:"CONVERSATION_NOT_FOUND"});
       if(!conversation){conversation={id:`wa-${randomUUID()}`};await client.query("INSERT INTO whatsapp_conversations(id,branch_id,mode,channel_id,customer_label,customer_id,vehicle_id,verification_code,last_inbound_at) VALUES($1,$2,'operational',$3,$4,$5,$6,$7,$8)",[conversation.id,link.branch_id,channelId,link.name,link.customer_id,link.vehicle_id,randomUUID().slice(0,8),occurred]);}

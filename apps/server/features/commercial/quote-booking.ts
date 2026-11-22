@@ -70,10 +70,12 @@ export async function getBookingOfferContext(actor: BookingActor, input: { branc
   try {
     const quote = await withTransaction(client => acceptedQuoteInTransaction(client,input.quoteRef!,input.branchId,input.customerId,input.vehicleId));
     if (!quote.work.length || new Set(quote.work.map(w=>w.id)).size!==quote.work.length) return fallback;
-    const names = await pool.query<{id:string;name_ar:string;name_en:string}>("SELECT id,name_ar,name_en FROM services WHERE id=ANY($1::text[])",[...new Set(quote.scope.map(s=>s.serviceId))]);
+    // Product lines are not workshop services: they have no service row and no bay time.
+    const serviceScope = quote.scope.filter(s=>!s.productId);
+    const names = await pool.query<{id:string;name_ar:string;name_en:string}>("SELECT id,name_ar,name_en FROM services WHERE id=ANY($1::text[])",[...new Set(serviceScope.map(s=>s.serviceId))]);
     const byId = new Map(names.rows.map(r=>[r.id,r]));
-    if (quote.scope.some(s=>!byId.has(s.serviceId))) return fallback;
-    const unique = [...new Set(quote.scope.map(s=>s.serviceId))];
+    if (serviceScope.some(s=>!byId.has(s.serviceId))) return fallback;
+    const unique = [...new Set(serviceScope.map(s=>s.serviceId))];
     return { state:"ready", quoteRef:quote.ref, reservationId:null, vehicle:quote.vehicle, scope:quote.scope, work:quote.work,
       summary:{ ar:unique.map(id=>byId.get(id)!.name_ar).join("، "), en:unique.map(id=>byId.get(id)!.name_en).join(", ") } };
   } catch { return fallback; }

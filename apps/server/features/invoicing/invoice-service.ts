@@ -112,7 +112,7 @@ interface SnapshotLine { scopeItemId: string; quantity: number; unitPrice: { min
 interface Snapshot {
   total: { minor: number; currency: string }; lines: SnapshotLine[];
   packageVersion: { id: string; version: number } | null;
-  scope: Array<{ id: string; serviceId: string; addOnIds?: string[] }>;
+  scope: Array<{ id: string; serviceId: string; addOnIds?: string[]; productId?: string | null; label?: { ar?: string; en?: string } | null }>;
 }
 
 async function loadJobContext(client: Runner, by: { jobId?: string; bookingId?: string }): Promise<JobContext | null> {
@@ -145,12 +145,13 @@ async function buildDraftLines(client: Runner, job: JobContext): Promise<{ lines
     snap.lines.forEach((line, index) => {
       const item = (snap.scope ?? []).find((s) => s.id === line.scopeItemId);
       const service = names.find((n) => n.id === item?.serviceId);
-      const isPackage = index === 0 && Boolean(pkg);
+      const isPackage = index === 0 && Boolean(pkg) && !item?.productId;
       const hasAddOns = Boolean(item?.addOnIds?.length);
+      // A product line carries its own name; it is invoiced as "other" (no workshop service behind it).
       lines.push({
-        kind: isPackage ? "package" : hasAddOns ? "add-on" : "service",
-        descriptionEn: (isPackage ? pkg?.en : service?.name_en) ?? job.serviceEn,
-        descriptionAr: (isPackage ? pkg?.ar : service?.name_ar) ?? job.serviceAr,
+        kind: item?.productId ? "other" : isPackage ? "package" : hasAddOns ? "add-on" : "service",
+        descriptionEn: (item?.productId ? item.label?.en : isPackage ? pkg?.en : service?.name_en) ?? job.serviceEn,
+        descriptionAr: (item?.productId ? item.label?.ar : isPackage ? pkg?.ar : service?.name_ar) ?? job.serviceAr,
         quantity: line.quantity, unitMinor: line.unitPrice.minor, discountMinor: line.discount?.minor ?? 0, taxMinor: line.tax ? line.tax.minor : null,
       });
     });

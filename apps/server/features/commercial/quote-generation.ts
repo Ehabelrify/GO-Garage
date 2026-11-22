@@ -67,7 +67,7 @@ const approvedPrice = (pkg: PackageVersion): Money | null => (pkg.price.state ==
 const approvedTax = (pkg: PackageVersion): Money | null => (pkg.tax.state === "approved" ? pkg.tax.value.amount : null);
 
 /** The whole approved price sits on the first single-quantity scope item (same rule the quote form uses, so validation passes). */
-function packageLines(pkg: PackageVersion, newId: (prefix: string) => string): QuoteLine[] | null {
+export function packageLines(pkg: PackageVersion, newId: (prefix: string) => string): QuoteLine[] | null {
   const price = approvedPrice(pkg);
   const tax = approvedTax(pkg);
   const carrier = pkg.scope.findIndex((item) => item.quantity === 1);
@@ -231,6 +231,14 @@ async function existingRef(context: ExecutionContext, quoteId: string): Promise<
   return head.rows[0] && head.rows[0].current_revision > 0 ? { quoteId, revision: head.rows[0].current_revision } : null;
 }
 
+/** Approved quote-acceptance terms (policy, tax treatment, validity) used to stamp generated drafts; null when not configured. */
+export async function loadAcceptanceTerms(actor: GarageActor): Promise<AssembleInput["terms"]> {
+  const acceptance = await getActiveQuoteAcceptance(actor).catch(() => null);
+  if (!acceptance || acceptance.state !== "approved") return null;
+  const value = acceptance.value as { taxTreatment?: PolicyRef; validityDays?: number };
+  return value.taxTreatment && value.validityDays ? { acceptancePolicy: acceptance.policy, taxTreatment: value.taxTreatment, validityDays: value.validityDays } : null;
+}
+
 /**
  * Builds (or returns the already built) draft quote for a source. Idempotent: the quote id derives from the source key.
  * Generated drafts need quote authority (quotes.manage on the branch) like any other quote write.
@@ -259,10 +267,7 @@ export async function generateQuoteDraft(context: ExecutionContext, actor: Garag
     ? (await pool.query<{ id: string; direction: string; mode: string; fee: Money | null }>("SELECT id,direction,mode,fee FROM transport_requests WHERE booking_id=$1 AND status<>'cancelled' AND fee IS NOT NULL ORDER BY created_at", [resolved.bookingId])).rows
         .filter((row): row is typeof row & { fee: Money } => !!row.fee && typeof row.fee.minor === "number" && row.fee.minor > 0)
     : [];
-  const acceptance = await getActiveQuoteAcceptance(actor).catch(() => null);
-  const terms = acceptance && acceptance.state === "approved"
-    ? (() => { const value = acceptance.value as { taxTreatment?: PolicyRef; validityDays?: number }; return value.taxTreatment && value.validityDays ? { acceptancePolicy: acceptance.policy, taxTreatment: value.taxTreatment, validityDays: value.validityDays } : null; })()
-    : null;
+  const terms = await loadAcceptanceTerms(actor);
   const benefits = await pool.query<{ benefit_id: string }>("SELECT DISTINCT benefit_id FROM benefit_entitlements WHERE customer_id=$1 AND status='active' LIMIT 5", [resolved.customerId]);
 
   const assembled = assembleQuoteDraft({

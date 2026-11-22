@@ -11,19 +11,22 @@ export class QuoteError extends Error { constructor(public status: number, publi
 const id = z.string().trim().min(1);
 const ref = z.object({ id, version: z.number().int().positive() }).strict();
 const money = z.object({ minor: z.number().int().safe().nonnegative(), currency: z.string().regex(/^[A-Z]{3}$/) }).strict();
-const scope = z.object({ id, serviceId: id, gradeVersion: ref.nullable(), areas: z.array(id), roof: z.enum(["included", "excluded", "not-applicable"]), addOnIds: z.array(id), exclusions: z.array(id), quantity: z.number().int().positive() }).strict();
+const scope = z.object({ id, serviceId: id, gradeVersion: ref.nullable(), areas: z.array(id), roof: z.enum(["included", "excluded", "not-applicable"]), addOnIds: z.array(id), exclusions: z.array(id), quantity: z.number().int().positive(), productId: id.nullable().optional(), label: z.object({ ar: id, en: id }).strict().nullable().optional() }).strict();
 const work = z.object({ id, serviceId: id, scopeItemIds: z.array(id).min(1), occupancyRule: ref }).strict();
 const line = z.object({ id, scopeItemId: id, quantity: z.number().int().positive(), unitPrice: money, discount: money, tax: money.nullable() }).strict();
 export const quoteDraftSchema = z.object({
   quoteId: id.optional(), priorRevision: z.object({ quoteId: id, revision: z.number().int().positive() }).strict().optional(),
   branchId: id, customerId: id, vehicle: z.object({ vehicleId: id, model: id, categoryId: id.nullable() }).strict(),
   enquiryRef: id.nullable().optional(), sourceChannelRef: id.nullable().optional(), packageVersion: ref.nullable(),
-  scope: z.array(scope).min(1), work: z.array(work).min(1), lines: z.array(line).min(1),
+  scope: z.array(scope).min(1), work: z.array(work), lines: z.array(line).min(1),
   priceOrigin: z.discriminatedUnion("kind", [z.object({ kind: z.literal("catalogue") }).strict(), z.object({ kind: z.enum(["manual", "inspection"]), actorId: id, reason: id }).strict()]),
   taxTreatment: ref.nullable(), acceptancePolicy: ref.nullable(), validThrough: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
   warrantyBindings: z.array(z.object({ componentId: id, policy: ref, issuanceAuthority: ref }).strict()), benefitBindings: z.array(ref),
-  state: z.enum(["draft", "offered"]),
-}).strict();
+  state: z.enum(["draft", "offered"]), notes: z.string().trim().max(2000).nullable().optional(),
+}).strict().superRefine((value, context) => {
+  // Work (bay time) may only be empty when every quoted item is a catalogue product.
+  if (value.work.length === 0 && value.scope.some((item) => !item.productId)) context.addIssue({ code: "custom", path: ["work"], message: "Work components are required for services and packages." });
+});
 const acceptanceSchema = z.object({ ref: z.object({ quoteId: id, revision: z.number().int().positive() }).strict(), expectedDigest: id, acceptanceEvidenceRef: id, idempotencyKey: id }).strict();
 type AcceptanceTerms = { validityDays: number; acceptanceMethods: Array<"staff-recorded" | "customer-confirmed">; evidenceRequired: boolean; overrideRole: "owner" | "branch-manager" | null; taxTreatment: { id: string; version: number } };
 type VersionRow = { quote_id: string; revision: number; state: QuoteRevision["state"]; snapshot: { input: QuoteDraftInput; total: Money | null; acceptanceTerms: AcceptanceTerms | null }; digest: string; valid_through: string | null };
@@ -58,14 +61,15 @@ async function validateReferences(client: PoolClient, actor: GarageActor, input:
   const scopeIds = new Set(input.scope.map((s) => s.id));
   const componentIds = new Set(input.work.map((w) => w.id));
   if (scopeIds.size !== input.scope.length || componentIds.size !== input.work.length || new Set(input.lines.map((l) => l.id)).size !== input.lines.length || input.lines.some((l) => !scopeIds.has(l.scopeItemId) || l.quantity !== input.scope.find((s) => s.id === l.scopeItemId)?.quantity) || input.work.some((w) => w.scopeItemIds.some((s) => !scopeIds.has(s))) || input.warrantyBindings.some((b) => !componentIds.has(b.componentId))) return fail(400, "INVALID_SCOPE", "Quote lines and components must match unique scope items.");
-  const services = [...new Set([...input.scope.map(s=>s.serviceId),...input.work.map(w=>w.serviceId)])];
+  // Product lines are not workshop services: they have no service row and need no bay time.
+  const services = [...new Set([...input.scope.filter(s=>!s.productId).map(s=>s.serviceId),...input.work.map(w=>w.serviceId)])];
   const foundServices = await client.query<{ id: string }>("SELECT id FROM services WHERE id=ANY($1::text[]) AND active=true",[services]);
   if (foundServices.rowCount !== services.length) return fail(400,"UNKNOWN_SERVICE","Choose active services for the quoted scope.");
   if (input.packageVersion || input.priceOrigin.kind === "catalogue") {
     if (!input.packageVersion) { if (offer) return fail(422, "POLICY_UNCONFIGURED", "Published catalogue version is required."); return {total:null,terms:null}; }
-    const packageRow = await client.query<{ scope: unknown; work: unknown; price: { state: string; value?: Money }; tax: { state: string; value?: { amount: Money | null } }; branch_ids: string[]; vehicle_category_ids: string[]; vehicle_models: string[]; state: string }>("SELECT * FROM catalogue_package_versions WHERE package_id=$1 AND version=$2", [input.packageVersion.id,input.packageVersion.version]);
+    const packageRow = await client.query<{ kind: string; scope: unknown; work: unknown; price: { state: string; value?: Money }; tax: { state: string; value?: { amount: Money | null } }; branch_ids: string[]; vehicle_category_ids: string[]; vehicle_models: string[]; state: string }>("SELECT * FROM catalogue_package_versions WHERE package_id=$1 AND version=$2", [input.packageVersion.id,input.packageVersion.version]);
     const p = packageRow.rows[0];
-    if (!p || p.state !== "published" || !p.branch_ids.includes(input.branchId) || !input.vehicle.categoryId || !p.vehicle_category_ids.includes(input.vehicle.categoryId) || (p.vehicle_models.length && !p.vehicle_models.includes(input.vehicle.model)) || canonical(p.scope) !== canonical(input.scope) || canonical(p.work) !== canonical(input.work)) return fail(409, "CATALOGUE_SCOPE_STALE", "Selected catalogue scope is unavailable or changed.");
+    if (!p || p.state !== "published" || !p.branch_ids.includes(input.branchId) || ((p.kind !== "product" || p.vehicle_category_ids.length > 0) && (!input.vehicle.categoryId || !p.vehicle_category_ids.includes(input.vehicle.categoryId))) || (p.vehicle_models.length && !p.vehicle_models.includes(input.vehicle.model)) || canonical(p.scope) !== canonical(input.scope) || canonical(p.work) !== canonical(input.work)) return fail(409, "CATALOGUE_SCOPE_STALE", "Selected catalogue scope is unavailable or changed.");
     if (offer && input.priceOrigin.kind === "catalogue" && (p.price.state !== "approved" || p.tax.state !== "approved" || !p.price.value || !p.tax.value?.amount)) return fail(422, "POLICY_UNCONFIGURED", "Approved catalogue price and tax are required.");
     if (offer && input.priceOrigin.kind === "catalogue" && p.price.value && p.tax.value?.amount) {
       const base = input.lines.reduce((n,l) => n + l.unitPrice.minor*l.quantity - l.discount.minor, 0);
@@ -92,10 +96,14 @@ async function validateReferences(client: PoolClient, actor: GarageActor, input:
   return { total:totalFor(input.lines),terms:policy };
 }
 export async function createQuoteRevision(context: ExecutionContext, actor: GarageActor, raw: QuoteDraftInput): Promise<QuoteVersionRef> {
+  return withTransaction((client) => createQuoteRevisionInTransaction(client, context, actor, raw));
+}
+/** Same as createQuoteRevision, inside a caller-owned transaction (quick intake creates the customer, vehicle and quote atomically). */
+export async function createQuoteRevisionInTransaction(client: PoolClient, context: ExecutionContext, actor: GarageActor, raw: QuoteDraftInput): Promise<QuoteVersionRef> {
   const input = quoteDraftSchema.parse(raw) as QuoteDraftInput;
   scoped(actor,input.branchId);
   const quoteId = input.quoteId ?? randomUUID();
-  return withTransaction(async (client) => {
+  {
     await client.query("INSERT INTO quote_heads(id,environment_id,branch_id,customer_id,vehicle_id,created_by) SELECT $1,$2,b.id,c.id,v.id,$6 FROM branches b JOIN customer_branches cb ON cb.branch_id=b.id JOIN customers c ON c.id=cb.customer_id JOIN vehicles v ON v.customer_id=c.id WHERE b.id=$3 AND c.id=$4 AND v.id=$5 ON CONFLICT(id) DO NOTHING", [quoteId,context.environmentId,input.branchId,input.customerId,input.vehicle.vehicleId,actor.userId]);
     const head = (await client.query<Head>("SELECT * FROM quote_heads WHERE id=$1 AND environment_id=$2 FOR UPDATE",[quoteId,context.environmentId])).rows[0];
     if (!head) return fail(404,"QUOTE_CONTEXT_NOT_FOUND","Customer, vehicle or branch is unavailable.");
@@ -110,7 +118,7 @@ export async function createQuoteRevision(context: ExecutionContext, actor: Gara
     if (revision === 1) await client.query("INSERT INTO quote_followups(quote_id) VALUES($1)",[quoteId]);
     await client.query("INSERT INTO quote_audit(quote_id,revision,action,actor_id) VALUES($1,$2,$3,$4)",[quoteId,revision,input.state === "offered" ? "offered" : "draft-created",actor.userId]);
     return { quoteId, revision };
-  });
+  }
 }
 export async function readQuoteRevision(context: ExecutionContext, actor: GarageActor, ref: QuoteVersionRef): Promise<QuoteRevision> {
   const result = await pool.query<VersionRow & { branch_id: string; current_revision: number; accepted_revision: number | null }>("SELECT v.*,h.branch_id,h.current_revision,h.accepted_revision FROM quote_versions v JOIN quote_heads h ON h.id=v.quote_id WHERE v.quote_id=$1 AND v.revision=$2 AND h.environment_id=$3",[ref.quoteId,ref.revision,context.environmentId]);

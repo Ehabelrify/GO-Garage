@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { validateMoney, type GradeVersion, type PackagePriceChange, type PackagePriceHistoryEntry, type PackageVersion, type PolicyRef, type VehicleSelection } from "@garage/domain";
+import { PRODUCT_SERVICE_ID, validateMoney, type GradeVersion, type IntakeCatalogueItem, type PackagePriceChange, type PackagePriceHistoryEntry, type PackageVersion, type PolicyRef, type VehicleSelection } from "@garage/domain";
 import { buildPriceChange, priceEditInput, priceEditProblem, pricingPolicyId, pricingPolicyValue } from "./catalogue-price";
+import type { PoolClient } from "pg";
 import { pool, withTransaction } from "../../infrastructure/database/db";
 import { canAccessBranch, hasCapability, type GarageActor } from "../auth/authz";
 import type { ExecutionContext } from "./policy-service";
@@ -10,19 +11,40 @@ const id = z.string().trim().min(1);
 const ref = z.object({ id, version: z.number().int().positive() }).strict();
 const configured = <T extends z.ZodTypeAny>(value: T) => z.discriminatedUnion("state", [z.object({ state: z.literal("unconfigured"), missing: z.array(id).min(1) }).strict(), z.object({ state: z.literal("approved"), value, policy: ref, approval: z.object({ approvedBy: id, approvedAt: id, evidenceRef: id, reason: id }).strict() }).strict()]);
 const money = z.object({ minor: z.number().int().safe().nonnegative(), currency: id }).strict();
-const scopeItem = z.object({ id, serviceId: id, gradeVersion: ref.nullable(), areas: z.array(id), roof: z.enum(["included", "excluded", "not-applicable"]), addOnIds: z.array(id), exclusions: z.array(id), quantity: z.number().int().positive() }).strict();
+const scopeItem = z.object({ id, serviceId: id, gradeVersion: ref.nullable(), areas: z.array(id), roof: z.enum(["included", "excluded", "not-applicable"]), addOnIds: z.array(id), exclusions: z.array(id), quantity: z.number().int().positive(), productId: id.nullable().optional(), label: z.object({ ar: id, en: id }).strict().nullable().optional() }).strict();
 const workComponent = z.object({ id, serviceId: id, scopeItemIds: z.array(id).min(1), occupancyRule: ref }).strict();
-const packageInput = z.object({ ref, revision: z.number().int().positive(), kind: z.enum(["package", "standalone"]), name: z.object({ ar: id, en: id }).strict(), vehicleCategoryIds: z.array(id), vehicleModels: z.array(id), branchIds: z.array(id).min(1), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(), effectiveThrough: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(), scope: z.array(scopeItem).min(1), work: z.array(workComponent).min(1), price: configured(money), tax: configured(z.object({ rule: ref, amount: money.nullable() }).strict()), workAggregation: configured(z.object({ rule: ref, mode: z.enum(["sum", "max"]) }).strict()), provenance: z.string(), approval: z.object({ approvedBy: id, approvedAt: id, evidenceRef: id, reason: id }).strict().nullable(), state: z.enum(["draft", "published", "retired"]), priceChange: z.unknown().optional() }).strict();
+const packageInput = z.object({ ref, revision: z.number().int().positive(), kind: z.enum(["package", "standalone", "product"]), productCategory: z.object({ ar: id, en: id }).strict().nullable().optional(), name: z.object({ ar: id, en: id }).strict(), vehicleCategoryIds: z.array(id), vehicleModels: z.array(id), branchIds: z.array(id).min(1), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(), effectiveThrough: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(), scope: z.array(scopeItem).min(1), work: z.array(workComponent), price: configured(money), tax: configured(z.object({ rule: ref, amount: money.nullable() }).strict()), workAggregation: configured(z.object({ rule: ref, mode: z.enum(["sum", "max"]) }).strict()), provenance: z.string(), approval: z.object({ approvedBy: id, approvedAt: id, evidenceRef: id, reason: id }).strict().nullable(), state: z.enum(["draft", "published", "retired"]), priceChange: z.unknown().optional() }).strict();
 const gradeInput = z.object({ ref, revision: z.number().int().positive(), name: z.object({ ar: id, en: id }).strict(), thicknessMicrometres: z.number().int().positive().nullable(), provenance: z.string(), approval: z.null(), state: z.literal("draft") }).strict();
-type PackageRow = { package_id: string; version: number; revision: number; kind: PackageVersion["kind"]; state: PackageVersion["state"]; name: PackageVersion["name"]; vehicle_category_ids: string[]; vehicle_models: string[]; branch_ids: string[]; effective_from: string | null; effective_through: string | null; scope: PackageVersion["scope"]; work: PackageVersion["work"]; price: PackageVersion["price"]; tax: PackageVersion["tax"]; work_aggregation: PackageVersion["workAggregation"]; provenance: string; approval: PackageVersion["approval"]; price_change?: PackagePriceChange | null };
-const map = (r: PackageRow): PackageVersion => ({ ref: { id: r.package_id, version: r.version }, revision: r.revision, kind: r.kind, state: r.state, name: r.name, vehicleCategoryIds: r.vehicle_category_ids, vehicleModels: r.vehicle_models, branchIds: r.branch_ids, effectiveFrom: r.effective_from && String(r.effective_from).slice(0, 10), effectiveThrough: r.effective_through && String(r.effective_through).slice(0, 10), scope: r.scope, work: r.work, price: r.price, tax: r.tax, workAggregation: r.work_aggregation, provenance: r.provenance, approval: r.approval, ...(r.price_change ? { priceChange: r.price_change } : {}) });
+type PackageRow = { package_id: string; version: number; revision: number; kind: PackageVersion["kind"]; state: PackageVersion["state"]; name: PackageVersion["name"]; vehicle_category_ids: string[]; vehicle_models: string[]; branch_ids: string[]; effective_from: string | null; effective_through: string | null; scope: PackageVersion["scope"]; work: PackageVersion["work"]; price: PackageVersion["price"]; tax: PackageVersion["tax"]; work_aggregation: PackageVersion["workAggregation"]; provenance: string; approval: PackageVersion["approval"]; price_change?: PackagePriceChange | null; product_category?: PackageVersion["productCategory"] };
+const map = (r: PackageRow): PackageVersion => ({ ref: { id: r.package_id, version: r.version }, revision: r.revision, kind: r.kind, state: r.state, name: r.name, vehicleCategoryIds: r.vehicle_category_ids, vehicleModels: r.vehicle_models, branchIds: r.branch_ids, effectiveFrom: r.effective_from && String(r.effective_from).slice(0, 10), effectiveThrough: r.effective_through && String(r.effective_through).slice(0, 10), scope: r.scope, work: r.work, price: r.price, tax: r.tax, workAggregation: r.work_aggregation, provenance: r.provenance, approval: r.approval, ...(r.price_change ? { priceChange: r.price_change } : {}), ...(r.kind === "product" ? { productCategory: r.product_category ?? null } : {}) });
 const owner = (actor: GarageActor) => { if (!hasCapability(actor, "catalogue.manage")) throw new CatalogueError(403, "ROLE_FORBIDDEN", "Catalogue management permission is required."); };
 async function known(table: "branches" | "services" | "catalogue_vehicle_categories", ids: string[]) {
   if (!ids.length) return;
   const found = await pool.query<{ id: string }>(`SELECT id FROM ${table} WHERE id = ANY($1::text[])`, [ids]);
   if (new Set(found.rows.map((r) => r.id)).size !== new Set(ids).size) throw new CatalogueError(400, "UNKNOWN_REFERENCE", `Unknown ${table} reference.`);
 }
+/** A product is a name, bilingual category, price and tax. It has no bay work and one scope item that carries its stable id (the package id). */
+function validateProduct(input: PackageVersion) {
+  const item = input.scope[0];
+  if (input.scope.length !== 1 || input.work.length !== 0 || item.serviceId !== PRODUCT_SERVICE_ID || item.productId !== input.ref.id || item.gradeVersion || item.addOnIds.length || !item.label)
+    throw new CatalogueError(400, "INVALID_PRODUCT", "A product has one item, no workshop work and its own product id.");
+  if (!input.productCategory) throw new CatalogueError(400, "PRODUCT_CATEGORY_REQUIRED", "Choose a product category.");
+}
 async function validate(input: PackageVersion) {
+  if (input.kind === "product") {
+    validateProduct(input);
+    await known("branches", input.branchIds);
+    await known("catalogue_vehicle_categories", input.vehicleCategoryIds);
+    const refs = [...(input.price.state === "approved" ? [input.price.policy] : []), ...(input.tax.state === "approved" ? [input.tax.policy, input.tax.value.rule] : [])];
+    for (const ref of refs) {
+      const policy = await pool.query("SELECT 1 FROM commercial_policy_versions WHERE policy_id=$1 AND version=$2 AND state='approved'", [ref.id, ref.version]);
+      if (!policy.rowCount) throw new CatalogueError(400, "UNKNOWN_POLICY", "Select an approved policy version for price or tax.");
+    }
+    if (input.price.state === "approved") validateMoney(input.price.value);
+    if (input.tax.state === "approved" && input.tax.value.amount) validateMoney(input.tax.value.amount);
+    return;
+  }
+  if (input.work.length === 0) throw new CatalogueError(400, "INVALID_COMPONENT", "Work components are required for services and packages.");
   await known("branches", input.branchIds);
   await known("services", [...input.scope.map((s) => s.serviceId), ...input.work.map((w) => w.serviceId), ...input.scope.flatMap((s) => s.addOnIds)]);
   await known("catalogue_vehicle_categories", input.vehicleCategoryIds);
@@ -128,7 +150,7 @@ export async function getEligiblePackages(_context: ExecutionContext, actor: Gar
   const service = await pool.query("SELECT 1 FROM services WHERE id=$1 AND active=true", [input.serviceIntent]);
   if (!service.rowCount) return { packages: [], missing: [...missing, "unsupported service intent; human enquiry required"] };
   const rows = await pool.query<PackageRow>("SELECT v.* FROM catalogue_package_active a JOIN catalogue_package_versions v ON v.package_id=a.package_id AND v.version=a.version WHERE a.retired=false AND v.state='published' AND NOT EXISTS(SELECT 1 FROM record_archives ra WHERE ra.entity_kind='catalogue-package' AND ra.entity_id=v.package_id) AND $1=ANY(v.branch_ids) AND (v.effective_from IS NULL OR v.effective_from<=CURRENT_DATE) AND (v.effective_through IS NULL OR v.effective_through>=CURRENT_DATE)", [input.branchId]);
-  const candidates = rows.rows.map(map).filter((p) => p.scope.some((s) => s.serviceId === input.serviceIntent) && !!input.vehicle.categoryId && p.vehicleCategoryIds.includes(input.vehicle.categoryId) && (p.vehicleModels.length === 0 || p.vehicleModels.includes(input.vehicle.model)));
+  const candidates = rows.rows.map(map).filter((p) => p.kind !== "product" && p.scope.some((s) => s.serviceId === input.serviceIntent) && !!input.vehicle.categoryId && p.vehicleCategoryIds.includes(input.vehicle.categoryId) && (p.vehicleModels.length === 0 || p.vehicleModels.includes(input.vehicle.model)));
   const gradeRefs = candidates.flatMap((p) => p.scope.map((s) => s.gradeVersion).filter((r): r is PolicyRef => r !== null));
   const gradeStates = gradeRefs.length ? await pool.query<{ grade_id: string; version: number }>("SELECT grade_id,version FROM catalogue_grade_active WHERE retired=false AND grade_id=ANY($1::text[])", [gradeRefs.map((r) => r.id)]) : { rows: [] };
   const activeGrades = new Set(gradeStates.rows.map((r) => `${r.grade_id}:${r.version}`));
@@ -147,7 +169,7 @@ export async function retirePackageVersion(_context: ExecutionContext, actor: Ga
     const current = latest.rows[0];
     if (!current || current.version !== input.expectedVersion || current.revision !== input.expectedRevision || current.state !== "published") throw new CatalogueError(409, "STALE_CATALOGUE", "Published version changed; refresh before retirement.");
     const version = current.version + 1;
-    await client.query("INSERT INTO catalogue_package_versions(package_id,version,revision,kind,state,name,vehicle_category_ids,vehicle_models,branch_ids,effective_from,effective_through,scope,work,price,tax,work_aggregation,provenance,approval,created_by) SELECT package_id,$2,revision+1,kind,'retired',name,vehicle_category_ids,vehicle_models,branch_ids,effective_from,effective_through,scope,work,price,tax,work_aggregation,provenance,approval,$3 FROM catalogue_package_versions WHERE package_id=$1 AND version=$4", [input.packageId,version,actor.userId,current.version]);
+    await client.query("INSERT INTO catalogue_package_versions(package_id,version,revision,kind,state,name,vehicle_category_ids,vehicle_models,branch_ids,effective_from,effective_through,scope,work,price,tax,work_aggregation,provenance,approval,created_by,product_category) SELECT package_id,$2,revision+1,kind,'retired',name,vehicle_category_ids,vehicle_models,branch_ids,effective_from,effective_through,scope,work,price,tax,work_aggregation,provenance,approval,$3,product_category FROM catalogue_package_versions WHERE package_id=$1 AND version=$4", [input.packageId,version,actor.userId,current.version]);
     const pointer = await client.query("UPDATE catalogue_package_active SET version=$2,retired=true WHERE package_id=$1 AND version=$3 AND retired=false", [input.packageId,version,current.version]);
     if (!pointer.rowCount) throw new CatalogueError(409, "STALE_CATALOGUE", "Active package changed; refresh before retirement.");
     await client.query("INSERT INTO catalogue_audit(entity_kind,entity_id,version,action,actor_id,reason) VALUES('package',$1,$2,'retired',$3,$4)", [input.packageId,version,actor.userId,input.reason.trim()]);
@@ -163,7 +185,7 @@ export async function savePackageDraft(_context: ExecutionContext, actor: Garage
     const latest = await client.query<{ version: number; revision: number; state?: string; price_change?: PackagePriceChange | null }>("SELECT version,revision,state,price_change FROM catalogue_package_versions WHERE package_id=$1 ORDER BY version DESC LIMIT 1", [parsed.ref.id]);
     if ((latest.rows[0]?.revision ?? 0) !== input.expectedRevision || parsed.revision !== input.expectedRevision + 1 || parsed.ref.version !== (latest.rows[0]?.version ?? 0) + 1) throw new CatalogueError(409, "STALE_CATALOGUE", "Catalogue changed; refresh before saving.");
     const carriedPriceChange = latest.rows[0]?.state === "draft" && latest.rows[0].price_change ? JSON.stringify(latest.rows[0].price_change) : null;
-    await client.query("INSERT INTO catalogue_package_versions(package_id,version,revision,kind,state,name,vehicle_category_ids,vehicle_models,branch_ids,effective_from,effective_through,scope,work,price,tax,work_aggregation,provenance,approval,created_by,price_change) VALUES($1,$2,$3,$4,'draft',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NULL,$17,$18)", [parsed.ref.id,parsed.ref.version,parsed.revision,parsed.kind,JSON.stringify(parsed.name),parsed.vehicleCategoryIds,parsed.vehicleModels,parsed.branchIds,parsed.effectiveFrom,parsed.effectiveThrough,JSON.stringify(parsed.scope),JSON.stringify(parsed.work),JSON.stringify(parsed.price),JSON.stringify(parsed.tax),JSON.stringify(parsed.workAggregation),parsed.provenance,actor.userId,carriedPriceChange]);
+    await client.query("INSERT INTO catalogue_package_versions(package_id,version,revision,kind,state,name,vehicle_category_ids,vehicle_models,branch_ids,effective_from,effective_through,scope,work,price,tax,work_aggregation,provenance,approval,created_by,price_change,product_category) VALUES($1,$2,$3,$4,'draft',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NULL,$17,$18,$19)", [parsed.ref.id,parsed.ref.version,parsed.revision,parsed.kind,JSON.stringify(parsed.name),parsed.vehicleCategoryIds,parsed.vehicleModels,parsed.branchIds,parsed.effectiveFrom,parsed.effectiveThrough,JSON.stringify(parsed.scope),JSON.stringify(parsed.work),JSON.stringify(parsed.price),JSON.stringify(parsed.tax),JSON.stringify(parsed.workAggregation),parsed.provenance,actor.userId,carriedPriceChange,parsed.kind === "product" ? JSON.stringify(parsed.productCategory) : null]);
     await client.query("INSERT INTO catalogue_audit(entity_kind,entity_id,version,action,actor_id) VALUES('package',$1,$2,'draft-saved',$3)", [parsed.ref.id,parsed.ref.version,actor.userId]);
     return parsed.ref;
   });
@@ -178,7 +200,7 @@ export async function publishPackageVersion(_context: ExecutionContext, actor: G
     if (!draft || draft.revision !== input.expectedRevision || draft.state !== "draft") throw new CatalogueError(409, "STALE_CATALOGUE", "Draft changed; refresh before publishing.");
     const packageValue = map(draft);
     await validate(packageValue);
-    if (!draft.price_change && (packageValue.price.state !== "approved" || packageValue.tax.state !== "approved" || packageValue.workAggregation.state !== "approved")) throw new CatalogueError(400, "CONFIGURATION_MISSING", "Approved price, tax and work aggregation are required for publication.");
+    if (!draft.price_change && (packageValue.price.state !== "approved" || packageValue.tax.state !== "approved" || (packageValue.kind !== "product" && packageValue.workAggregation.state !== "approved"))) throw new CatalogueError(400, "CONFIGURATION_MISSING", "Approved price, tax and work aggregation are required for publication.");
     const approval = { approvedBy: actor.userId, approvedAt: new Date().toISOString(), evidenceRef: input.evidenceRef, reason: input.reason.trim() };
     const version = draft.version + 1;
     const change = draft.price_change ?? null;
@@ -187,12 +209,14 @@ export async function publishPackageVersion(_context: ExecutionContext, actor: G
       const today = new Date().toISOString().slice(0, 10);
       const problem = priceEditProblem(change, today, { effectiveThrough: packageValue.effectiveThrough });
       if (problem) throw new CatalogueError(400, problem.code, problem.message);
-      if (!change.taxRule || !change.aggregation) throw new CatalogueError(400, "CONFIGURATION_MISSING", "An approved tax rule and work-aggregation rule are required for publication.");
-      for (const rule of [change.taxRule, change.aggregation.rule]) {
+      const isProduct = packageValue.kind === "product";
+      if (!change.taxRule || (!isProduct && !change.aggregation)) throw new CatalogueError(400, "CONFIGURATION_MISSING", "An approved tax rule and work-aggregation rule are required for publication.");
+      for (const rule of [change.taxRule, ...(change.aggregation ? [change.aggregation.rule] : [])]) {
         const found = await client.query("SELECT 1 FROM commercial_policy_versions WHERE policy_id=$1 AND version=$2 AND state='approved'", [rule.id, rule.version]);
         if (!found.rowCount) throw new CatalogueError(400, "UNKNOWN_POLICY", "Select an approved policy version for price, tax or work.");
       }
-      const svc = await client.query<{ bay_type: "clean" | "general"; bay_hours: string }>("SELECT bay_type,bay_hours FROM services WHERE id=$1", [packageValue.scope[0].serviceId]);
+      // A product has no workshop service: it carries zero bay hours.
+      const svc = packageValue.kind === "product" ? { rowCount: 1, rows: [{ bay_type: "general" as const, bay_hours: "0" }] } : await client.query<{ bay_type: "clean" | "general"; bay_hours: string }>("SELECT bay_type,bay_hours FROM services WHERE id=$1", [packageValue.scope[0].serviceId]);
       if (!svc.rowCount) throw new CatalogueError(400, "UNKNOWN_REFERENCE", "Unknown services reference.");
       const pricingId = pricingPolicyId(input.packageId, version);
       const pricingValue = pricingPolicyValue(packageValue, change, { bayType: svc.rows[0].bay_type, bayHours: Number(svc.rows[0].bay_hours) });
@@ -202,10 +226,10 @@ export async function publishPackageVersion(_context: ExecutionContext, actor: G
       const pricingRef = { id: pricingId, version: 1 };
       const price = { state: "approved", value: change.price, policy: pricingRef, approval };
       const tax = { state: "approved", value: { rule: change.taxRule, amount: change.tax }, policy: change.taxRule, approval };
-      const aggregation = { state: "approved", value: { rule: change.aggregation.rule, mode: change.aggregation.mode }, policy: change.aggregation.rule, approval };
-      await client.query("INSERT INTO catalogue_package_versions(package_id,version,revision,kind,state,name,vehicle_category_ids,vehicle_models,branch_ids,effective_from,effective_through,scope,work,price,tax,work_aggregation,provenance,approval,created_by) SELECT package_id,$2,revision+1,kind,'published',name,vehicle_category_ids,vehicle_models,branch_ids,$6::date,effective_through,scope,work,$7::jsonb,$8::jsonb,$9::jsonb,provenance,$3,$4 FROM catalogue_package_versions WHERE package_id=$1 AND version=$5", [input.packageId,version,JSON.stringify(approval),actor.userId,draft.version,change.effectiveFrom,JSON.stringify(price),JSON.stringify(tax),JSON.stringify(aggregation)]);
+      const aggregation = change.aggregation ? { state: "approved", value: { rule: change.aggregation.rule, mode: change.aggregation.mode }, policy: change.aggregation.rule, approval } : JSON.parse(JSON.stringify(draft.work_aggregation));
+      await client.query("INSERT INTO catalogue_package_versions(package_id,version,revision,kind,state,name,vehicle_category_ids,vehicle_models,branch_ids,effective_from,effective_through,scope,work,price,tax,work_aggregation,provenance,approval,created_by,product_category) SELECT package_id,$2,revision+1,kind,'published',name,vehicle_category_ids,vehicle_models,branch_ids,$6::date,effective_through,scope,work,$7::jsonb,$8::jsonb,$9::jsonb,provenance,$3,$4,product_category FROM catalogue_package_versions WHERE package_id=$1 AND version=$5", [input.packageId,version,JSON.stringify(approval),actor.userId,draft.version,change.effectiveFrom,JSON.stringify(price),JSON.stringify(tax),JSON.stringify(aggregation)]);
     } else {
-      await client.query("INSERT INTO catalogue_package_versions(package_id,version,revision,kind,state,name,vehicle_category_ids,vehicle_models,branch_ids,effective_from,effective_through,scope,work,price,tax,work_aggregation,provenance,approval,created_by) SELECT package_id,$2,revision+1,kind,'published',name,vehicle_category_ids,vehicle_models,branch_ids,effective_from,effective_through,scope,work,price,tax,work_aggregation,provenance,$3,$4 FROM catalogue_package_versions WHERE package_id=$1 AND version=$5", [input.packageId,version,JSON.stringify(approval),actor.userId,draft.version]);
+      await client.query("INSERT INTO catalogue_package_versions(package_id,version,revision,kind,state,name,vehicle_category_ids,vehicle_models,branch_ids,effective_from,effective_through,scope,work,price,tax,work_aggregation,provenance,approval,created_by,product_category) SELECT package_id,$2,revision+1,kind,'published',name,vehicle_category_ids,vehicle_models,branch_ids,effective_from,effective_through,scope,work,price,tax,work_aggregation,provenance,$3,$4,product_category FROM catalogue_package_versions WHERE package_id=$1 AND version=$5", [input.packageId,version,JSON.stringify(approval),actor.userId,draft.version]);
     }
     await client.query("INSERT INTO catalogue_package_active(package_id,version,retired) VALUES($1,$2,false) ON CONFLICT(package_id) DO UPDATE SET version=EXCLUDED.version,retired=false", [input.packageId,version]);
     await client.query("INSERT INTO catalogue_audit(entity_kind,entity_id,version,action,actor_id,reason) VALUES('package',$1,$2,'published',$3,$4)", [input.packageId,version,actor.userId,input.reason.trim()]);
@@ -226,13 +250,13 @@ export async function savePriceDraft(_context: ExecutionContext, actor: GarageAc
     const problem = priceEditProblem(input, new Date().toISOString().slice(0, 10), { effectiveThrough: pkg.effectiveThrough });
     if (problem) throw new CatalogueError(400, problem.code, problem.message);
     const change = buildPriceChange(input, pkg);
-    if (!change.taxRule || !change.aggregation) throw new CatalogueError(400, "CONFIGURATION_MISSING", "Choose an approved tax rule and work-aggregation rule.");
-    for (const rule of [change.taxRule, change.aggregation.rule]) {
+    if (!change.taxRule || (pkg.kind !== "product" && !change.aggregation)) throw new CatalogueError(400, "CONFIGURATION_MISSING", "Choose an approved tax rule and work-aggregation rule.");
+    for (const rule of [change.taxRule, ...(change.aggregation ? [change.aggregation.rule] : [])]) {
       const found = await client.query("SELECT 1 FROM commercial_policy_versions WHERE policy_id=$1 AND version=$2 AND state='approved'", [rule.id, rule.version]);
       if (!found.rowCount) throw new CatalogueError(400, "UNKNOWN_POLICY", "Select an approved policy version for price, tax or work.");
     }
     const version = current.version + 1;
-    await client.query("INSERT INTO catalogue_package_versions(package_id,version,revision,kind,state,name,vehicle_category_ids,vehicle_models,branch_ids,effective_from,effective_through,scope,work,price,tax,work_aggregation,provenance,approval,created_by,price_change) SELECT package_id,$2,revision+1,kind,'draft',name,vehicle_category_ids,vehicle_models,branch_ids,effective_from,effective_through,scope,work,price,tax,work_aggregation,provenance,NULL,$3,$4 FROM catalogue_package_versions WHERE package_id=$1 AND version=$5", [input.packageId,version,actor.userId,JSON.stringify(change),current.version]);
+    await client.query("INSERT INTO catalogue_package_versions(package_id,version,revision,kind,state,name,vehicle_category_ids,vehicle_models,branch_ids,effective_from,effective_through,scope,work,price,tax,work_aggregation,provenance,approval,created_by,price_change,product_category) SELECT package_id,$2,revision+1,kind,'draft',name,vehicle_category_ids,vehicle_models,branch_ids,effective_from,effective_through,scope,work,price,tax,work_aggregation,provenance,NULL,$3,$4,product_category FROM catalogue_package_versions WHERE package_id=$1 AND version=$5", [input.packageId,version,actor.userId,JSON.stringify(change),current.version]);
     await client.query("INSERT INTO catalogue_audit(entity_kind,entity_id,version,action,actor_id,reason) VALUES('package',$1,$2,'draft-saved',$3,$4)", [input.packageId,version,actor.userId,change.reason]);
     return { id: input.packageId, version };
   });
@@ -286,4 +310,76 @@ export async function getVehicleSelection(actor: GarageActor, vehicleId: string)
   const row = found.rows[0];
   if (!row) throw new CatalogueError(404, "VEHICLE_NOT_FOUND", "Vehicle not found.");
   return { vehicleId: row.id, model: row.model, categoryId: row.category_id };
+}
+
+/* ------------------------------ quick intake catalogue ------------------------------ */
+
+export type IntakeScopeContext = { actor: Pick<GarageActor, "role" | "branchIds">; branchId?: string | null; vehicle?: { model: string; categoryId: string | null } | null };
+
+/** Pure eligibility for the unified intake list. An unclassified vehicle (no category yet) does not hide items; staff review it on the quote. */
+export function intakeEligible(p: PackageVersion, context: IntakeScopeContext): boolean {
+  const branches = context.branchId ? [context.branchId] : context.actor.role === "owner" ? null : context.actor.branchIds;
+  if (branches ? !p.branchIds.some((branchId) => branches.includes(branchId)) : false) return false;
+  if (context.branchId && !p.branchIds.includes(context.branchId)) return false;
+  const vehicle = context.vehicle;
+  if (vehicle) {
+    if (p.vehicleCategoryIds.length && vehicle.categoryId && !p.vehicleCategoryIds.includes(vehicle.categoryId)) return false;
+    if (p.vehicleModels.length && !p.vehicleModels.includes(vehicle.model)) return false;
+  }
+  return true;
+}
+
+export function toIntakeItem(p: PackageVersion): IntakeCatalogueItem {
+  const price = p.price.state === "approved" ? p.price.value : null;
+  const tax = p.tax.state === "approved" ? p.tax.value.amount : null;
+  const isProduct = p.kind === "product";
+  return {
+    id: { packageId: p.ref.id, version: p.ref.version },
+    kind: isProduct ? "product" : p.kind === "package" ? "package" : "service",
+    name: p.name,
+    ...(isProduct && p.productCategory ? { category: p.productCategory } : {}),
+    price, tax,
+    requiresVehicle: !isProduct || p.vehicleCategoryIds.length > 0 || p.vehicleModels.length > 0,
+    bayWork: !isProduct && p.work.length > 0,
+  };
+}
+
+const kindOrder = { service: 0, package: 1, product: 2 } as const;
+
+/** One list for quick intake: stand-alone services, packages and products that are published, effective, not archived and eligible. */
+export async function listIntakeItems(actor: GarageActor, input: { q?: string; kind?: IntakeCatalogueItem["kind"]; vehicleId?: string; branchId?: string }): Promise<IntakeCatalogueItem[]> {
+  if (!hasCapability(actor, "quotes.view") && !hasCapability(actor, "quotes.manage") && !hasCapability(actor, "bookings.manage")) throw new CatalogueError(403, "ROLE_FORBIDDEN", "Quoting or booking permission is required.");
+  if (input.branchId && !canAccessBranch(actor, input.branchId)) throw new CatalogueError(404, "BRANCH_NOT_FOUND", "Branch not found.");
+  let vehicle: { model: string; categoryId: string | null } | null = null;
+  if (input.vehicleId) {
+    const found = await pool.query<{ model: string; category_id: string | null }>(
+      "SELECT v.model, v.category_id FROM vehicles v WHERE v.id=$1 AND ($2 OR EXISTS(SELECT 1 FROM customer_branches cb WHERE cb.customer_id=v.customer_id AND cb.branch_id=ANY($3::text[])))",
+      [input.vehicleId, actor.role === "owner", actor.branchIds]);
+    if (!found.rows[0]) throw new CatalogueError(404, "VEHICLE_NOT_FOUND", "Vehicle not found.");
+    vehicle = { model: found.rows[0].model, categoryId: found.rows[0].category_id };
+  }
+  const rows = await pool.query<PackageRow>("SELECT v.* FROM catalogue_package_active a JOIN catalogue_package_versions v ON v.package_id=a.package_id AND v.version=a.version WHERE a.retired=false AND v.state='published' AND NOT EXISTS(SELECT 1 FROM record_archives ra WHERE ra.entity_kind='catalogue-package' AND ra.entity_id=v.package_id) AND (v.effective_from IS NULL OR v.effective_from<=CURRENT_DATE) AND (v.effective_through IS NULL OR v.effective_through>=CURRENT_DATE) ORDER BY v.package_id");
+  const eligible = rows.rows.map(map).filter((p) => intakeEligible(p, { actor, branchId: input.branchId ?? null, vehicle }));
+  const gradeRefs = eligible.flatMap((p) => p.scope.map((s) => s.gradeVersion).filter((r): r is PolicyRef => r !== null));
+  const activeGrades = new Set<string>();
+  if (gradeRefs.length) {
+    const grades = await pool.query<{ grade_id: string; version: number }>("SELECT grade_id,version FROM catalogue_grade_active WHERE retired=false AND grade_id=ANY($1::text[])", [gradeRefs.map((r) => r.id)]);
+    for (const g of grades.rows) activeGrades.add(`${g.grade_id}:${g.version}`);
+  }
+  const needle = (input.q ?? "").trim().toLowerCase();
+  return eligible
+    .filter((p) => p.scope.every((s) => !s.gradeVersion || activeGrades.has(`${s.gradeVersion.id}:${s.gradeVersion.version}`)))
+    .map(toIntakeItem)
+    .filter((item) => (!input.kind || item.kind === input.kind) && (!needle || [item.name.ar, item.name.en, item.category?.ar, item.category?.en].some((text) => text?.toLowerCase().includes(needle))))
+    .sort((a, b) => kindOrder[a.kind] - kindOrder[b.kind] || a.name.en.localeCompare(b.name.en));
+}
+
+/** Active, published, effective, non-archived versions for the exact (packageId, version) pairs a client chose. Missing or superseded pairs are simply absent. */
+export async function loadIntakePackages(runner: Pick<PoolClient, "query">, refs: Array<{ packageId: string; version: number }>): Promise<PackageVersion[]> {
+  if (!refs.length) return [];
+  const rows = await runner.query<PackageRow>(
+    "SELECT v.* FROM catalogue_package_active a JOIN catalogue_package_versions v ON v.package_id=a.package_id AND v.version=a.version WHERE a.retired=false AND v.state='published' AND v.package_id=ANY($1::text[]) AND NOT EXISTS(SELECT 1 FROM record_archives ra WHERE ra.entity_kind='catalogue-package' AND ra.entity_id=v.package_id) AND (v.effective_from IS NULL OR v.effective_from<=CURRENT_DATE) AND (v.effective_through IS NULL OR v.effective_through>=CURRENT_DATE)",
+    [[...new Set(refs.map((r) => r.packageId))]]);
+  const wanted = new Set(refs.map((r) => `${r.packageId}@${r.version}`));
+  return rows.rows.map(map).filter((p) => wanted.has(`${p.ref.id}@${p.ref.version}`));
 }

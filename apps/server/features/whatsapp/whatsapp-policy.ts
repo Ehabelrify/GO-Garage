@@ -8,3 +8,8 @@ export function isWhatsAppProviderDeliveryEnabled() {
     && process.env.WHATSAPP_PROVIDER_ENABLED === "true"
     && Boolean(process.env.WHATSAPP_WEBHOOK_SECRET);
 }
+
+/** Dataset class the conversations of this environment belong to (operational, scenario or simulation). */
+export function conversationMode(environment = process.env.GARAGE_DATASET_CLASS): "operational" | "scenario" | "simulation" {
+  return environment === "operational" ? "operational" : environment === "scenario" ? "scenario" : "simulation";
+}

@@ -15,7 +15,7 @@ const money = z.object({ minor: z.number().int().safe().nonnegative(), currency:
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const ref = z.object({ id: z.string().trim().min(1), version: z.number().int().positive() }).strict();
 const schemas = {
-  "catalogue-pricing": z.object({ name: label, serviceId: z.string().min(1), vehicleCategoryId: z.string().min(1), gradeId: z.string().min(1), roof: z.enum(["included", "excluded", "not-applicable"]), price: money, tax: money.nullable(), bayType: z.enum(["clean", "general"]), bayHours: z.number().positive(), exclusions: z.array(z.string().min(1)) }).strict(),
+  "catalogue-pricing": z.object({ name: label, serviceId: z.string().min(1), vehicleCategoryId: z.string().min(1), gradeId: z.string().min(1), roof: z.enum(["included", "excluded", "not-applicable"]), price: money, tax: money.nullable(), bayType: z.enum(["clean", "general"]), bayHours: z.number().nonnegative(), exclusions: z.array(z.string().min(1)) }).strict(),
   "quote-acceptance": z.object({ validityDays: z.number().int().positive(), acceptanceMethods: z.array(z.enum(["staff-recorded", "customer-confirmed"])).min(1), evidenceRequired: z.boolean(), overrideRole: z.enum(["owner", "branch-manager"]).nullable(), taxTreatment: ref }).strict(),
   "reservation-deposit": z.object({ validityDays: z.number().int().positive(), deposit: z.object({ required: z.boolean(), amount: money.nullable(), refundRule: label }).strict(), cancellationRule: label, cancellationDisposition: z.enum(["retain","release","review-required"]), priceLock: z.literal(true), redemptionTiming: z.enum(["booking","installation"]), restoreAllowed: z.boolean(), expiryAction: z.enum(["release","review-required"]) }).strict(),
   "benefit-eligibility": z.object({

@@ -15,6 +15,7 @@ import {
   addConsents, addOverheadAndAdjustments, addTransport, addVerificationAudit, finalizeLinks, transportFor,
 } from "./seed-extras";
 import { generateMessaging } from "./seed-messaging";
+import { addIntakeSeed } from "./seed-products";
 import { addSpecialRequests } from "./seed-requests";
 import { addSeedInvoices } from "./seed-invoices";
 
@@ -58,6 +59,7 @@ export function generateDataset(options: GenerateOptions = {}): { ds: Dataset; w
   addPools(world);
   finalizeLinks(world);
   generateMessaging(world);
+  addIntakeSeed(world);
   addSpecialRequests(world);
   addSeedInvoices(world);
   return { ds, world, ctx };

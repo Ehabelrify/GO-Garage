@@ -66,7 +66,7 @@ export function pricingPolicyValue(pkg: PackageVersion, change: PackagePriceChan
   return {
     name: pkg.name,
     serviceId: first.serviceId,
-    vehicleCategoryId: pkg.vehicleCategoryIds[0],
+    vehicleCategoryId: pkg.vehicleCategoryIds[0] ?? "any",
     gradeId: first.gradeVersion?.id ?? "none",
     roof: first.roof,
     price: change.price,
