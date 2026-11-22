@@ -27,6 +27,23 @@ export function QrTab({ scope }: { scope: WarrantyScope }) {
 
   useEffect(() => { setLive(null); setOpenId(null); }, [scope.userId, state.currentBranch]);
 
+  // Opening a warranty that already has an active code re-reads it (the server recomputes it from its secret), so the QR is
+  // visible and printable at any time, including for seeded data. A code made before this existed cannot be recovered: say so.
+  const [recoverFailed, setRecoverFailed] = useState<string | null>(null);
+  useEffect(() => {
+    setRecoverFailed(null);
+    const target = openId ? warranties.find((item) => item.id === openId) : null;
+    if (!target || !target.verificationTokenActive || target.status === "void" || live?.warrantyId === target.id) return;
+    let alive = true;
+    void store.readWarrantyVerificationToken(target.id).then((result) => {
+      if (!alive) return;
+      if (result.ok) { rememberLiveToken(target.id, result.token); setLive({ warrantyId: target.id, token: result.token }); }
+      else setRecoverFailed(result.error);
+    });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId, warranties.find((item) => item.id === openId)?.verificationTokenActive]);
+
   const rows = warranties.filter((record) => {
     const needle = query.trim().toLowerCase();
     return !needle || `${scope.customerName(record.customerId)} ${scope.vehicleOf(record.customerId, record.vehicleId)?.plate ?? ""} ${record.policyName}`.toLowerCase().includes(needle);
@@ -117,9 +134,13 @@ export function QrTab({ scope }: { scope: WarrantyScope }) {
         {record.status === "active" && <SendToCustomer lang={lang} documentKind="warranty-card" documentId={record.id} verificationToken={liveCode?.token} />}
       </>}>
       <p className="form-hint">{liveCode
-        ? t("Shown once. Print the card now.", "تظهر مرة واحدة. اطبع الكارت الآن.")
+        ? t("Print the card now, or open it again any time to reprint the same code.", "اطبع الكارت الآن، أو افتحه في أي وقت لإعادة طباعة نفس الرمز.")
         : record.verificationTokenActive
-          ? t("A code is active. Replace it to print another copy.", "الرمز فعال. استبدله لطباعة نسخة أخرى.")
+          ? recoverFailed === "TOKEN_NOT_RECOVERABLE"
+            ? t("This code was created before codes could be shown again. Replace it to print a new card.", "أُنشئ هذا الرمز قبل إمكانية عرضه مجدداً. استبدله لطباعة كارت جديد.")
+            : recoverFailed
+              ? t("The code could not be loaded. Try again.", "تعذر تحميل الرمز. حاول مجدداً.")
+              : t("Loading the code…", "جارٍ تحميل الرمز…")
           : t("No active code yet.", "لا يوجد رمز فعال بعد.")}</p>
       <div className={`w-verify-print-area${liveCode ? "" : " preview-only"}`}>
         <div className="w-verify-print-card">

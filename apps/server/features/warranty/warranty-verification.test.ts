@@ -3,6 +3,8 @@ import {
   buildPublicWarrantyVerification,
   canEnableWarrantyVerification,
   createWarrantyVerificationToken,
+  deriveWarrantyVerificationToken,
+  warrantyQrSecret,
   hashWarrantyVerificationToken,
   isWarrantyVerificationTokenFormat,
   normalizeWarrantyVerificationFields,
@@ -61,5 +63,23 @@ describe("public warranty response", () => {
       ...sample,
       recordStatus: "void",
     }, ["status"])).toEqual({ verified: true, status: "void" });
+  });
+});
+
+describe("derivable customer QR codes", () => {
+  it("derives the same valid code for the same row and secret, and a different code for another row or secret", () => {
+    const a = deriveWarrantyVerificationToken("tok-1", "secret-a");
+    expect(a).toBe(deriveWarrantyVerificationToken("tok-1", "secret-a"));
+    expect(isWarrantyVerificationTokenFormat(a)).toBe(true);
+    expect(deriveWarrantyVerificationToken("tok-2", "secret-a")).not.toBe(a);
+    expect(deriveWarrantyVerificationToken("tok-1", "secret-b")).not.toBe(a);
+  });
+  it("a replaced code (new row id) is a different code, so the old printed card stops matching", () => {
+    expect(hashWarrantyVerificationToken(deriveWarrantyVerificationToken("old", "s"))).not.toBe(hashWarrantyVerificationToken(deriveWarrantyVerificationToken("new", "s")));
+  });
+  it("needs a configured secret in production and falls back to a development value elsewhere", () => {
+    expect(warrantyQrSecret({ NODE_ENV: "production" } as NodeJS.ProcessEnv)).toBeNull();
+    expect(warrantyQrSecret({ NODE_ENV: "production", WARRANTY_QR_SECRET: "  real  " } as NodeJS.ProcessEnv)).toBe("real");
+    expect(warrantyQrSecret({ NODE_ENV: "development" } as NodeJS.ProcessEnv)).toBeTruthy();
   });
 });

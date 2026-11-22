@@ -27,8 +27,9 @@ import { canAttachEvidenceToClaim, isWarrantyExpired } from "./warranty-rules";
 import {
   buildPublicWarrantyVerification,
   canEnableWarrantyVerification,
-  createWarrantyVerificationToken,
+  deriveWarrantyVerificationToken,
   hashWarrantyVerificationToken,
+  warrantyQrSecret,
   isWarrantyVerificationTokenFormat,
   normalizeWarrantyVerificationFields,
 } from "./warranty-verification";
@@ -266,7 +267,10 @@ warrantyRouter.put("/verification-settings", async (req, res) => {
 
 warrantyRouter.post("/:warrantyId/verification-token", async (req, res) => {
   const currentActor = actor(req);
-  const token = createWarrantyVerificationToken();
+  const qrSecret = warrantyQrSecret();
+  if (!qrSecret) return routeError(res, 503, "QR_SECRET_MISSING", "WARRANTY_QR_SECRET must be configured before QR codes can be created.");
+  const tokenId = makeId("verification-token");
+  const token = deriveWarrantyVerificationToken(tokenId, qrSecret);
   const tokenHash = hashWarrantyVerificationToken(token);
   const result = await withTransaction(async (client) => {
     const settings = await client.query<{ enabled: boolean; approved_fields: string[] }>(
@@ -291,7 +295,6 @@ warrantyRouter.post("/:warrantyId/verification-token", async (req, res) => {
        RETURNING id`,
       [req.params.warrantyId, currentActor.userId],
     );
-    const tokenId = makeId("verification-token");
     await client.query(
       `INSERT INTO warranty_verification_tokens (id, warranty_id, token_hash, created_by)
        VALUES ($1, $2, $3, $4)`,
@@ -331,6 +334,29 @@ warrantyRouter.post("/:warrantyId/verification-token", async (req, res) => {
   if (result === "void") return routeError(res, 409, "WARRANTY_VOID", "A QR code cannot be created for void coverage.");
   if (result === "disabled") return routeError(res, 409, "VERIFICATION_DISABLED", "The Owner must enable public verification and approve its fields first.");
   res.status(201).json({ token });
+});
+
+/** Re-displays the active customer QR code so staff can see or reprint it any time. Recomputed from the server secret and checked against the stored hash. */
+warrantyRouter.get("/:warrantyId/verification-token", async (req, res) => {
+  const currentActor = actor(req);
+  const qrSecret = warrantyQrSecret();
+  if (!qrSecret) return routeError(res, 503, "QR_SECRET_MISSING", "WARRANTY_QR_SECRET must be configured before QR codes can be shown.");
+  const found = await pool.query<{ branch_id: string; status: string; token_id: string | null; token_hash: string | null }>(
+    `SELECT w.branch_id, w.status, t.id AS token_id, t.token_hash
+       FROM warranties w LEFT JOIN warranty_verification_tokens t ON t.warranty_id = w.id AND t.revoked_at IS NULL
+      WHERE w.id = $1`, [req.params.warrantyId]);
+  const row = found.rows[0];
+  if (!row) return routeError(res, 404, "WARRANTY_NOT_FOUND", "Warranty record not found.");
+  if (!canIssueWarranty(currentActor, row.branch_id)) return routeError(res, 403, "ROLE_FORBIDDEN", "You cannot view a QR code outside your assigned branch.");
+  if (row.status === "void") return routeError(res, 409, "WARRANTY_VOID", "A QR code cannot be shown for void coverage.");
+  if (!row.token_id || !row.token_hash) return routeError(res, 404, "VERIFICATION_TOKEN_NOT_FOUND", "No active QR code exists for this warranty.");
+  const token = deriveWarrantyVerificationToken(row.token_id, qrSecret);
+  // A code made before codes were derivable (or with another secret) cannot be recomputed: say so instead of showing a wrong QR.
+  if (hashWarrantyVerificationToken(token) !== row.token_hash) {
+    return routeError(res, 409, "TOKEN_NOT_RECOVERABLE", "This code was created before codes could be re-displayed. Replace it to print a new card.");
+  }
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ token });
 });
 
 warrantyRouter.post("/:warrantyId/verification-token/print", async (req, res) => {

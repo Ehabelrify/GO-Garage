@@ -109,13 +109,13 @@ function addQrTokens(world: World, warranty: WarrantyRec) {
   const at = (minutes: number) => new Date(warranty.issuedAt.getTime() + minutes * 60_000);
   const key = warranty.id.slice(9);
   if (replaced) {
-    const oldToken = qrToken(`${warranty.id}:old`);
+    const oldToken = qrToken(`seed-wvt-${key}-1`);
     ds.add("warranty_verification_tokens", { id: `seed-wvt-${key}-1`, warranty_id: warranty.id, token_hash: qrTokenHash(oldToken), created_by: issuer, created_at: at(20), revoked_at: at(4000), revoked_by: managerOf(warranty.visit.branchId) });
     ds.add("warranty_qr_print_events", { id: `seed-wqp-${key}-1`, warranty_id: warranty.id, token_id: `seed-wvt-${key}-1`, action: "prepared", replaces_token_id: null, actor_user_id: issuer, created_at: at(20) });
     ds.add("warranty_qr_print_events", { id: `seed-wqp-${key}-2`, warranty_id: warranty.id, token_id: `seed-wvt-${key}-1`, action: "revoked", replaces_token_id: null, actor_user_id: managerOf(warranty.visit.branchId), created_at: at(4000) });
   }
-  const token = qrToken(warranty.id);
   const tokenId = `seed-wvt-${key}-${replaced ? 2 : 1}`;
+  const token = qrToken(tokenId);
   ds.add("warranty_verification_tokens", { id: tokenId, warranty_id: warranty.id, token_hash: qrTokenHash(token), created_by: issuer, created_at: at(replaced ? 4010 : 20), revoked_at: null, revoked_by: null });
   ds.add("warranty_qr_print_events", { id: `seed-wqp-${key}-a`, warranty_id: warranty.id, token_id: tokenId, action: replaced ? "replaced" : "prepared", replaces_token_id: replaced ? `seed-wvt-${key}-1` : null, actor_user_id: issuer, created_at: at(replaced ? 4010 : 20) });
   ds.add("warranty_qr_print_events", { id: `seed-wqp-${key}-b`, warranty_id: warranty.id, token_id: tokenId, action: "printed", replaces_token_id: null, actor_user_id: issuer, created_at: at(replaced ? 4020 : 40) });

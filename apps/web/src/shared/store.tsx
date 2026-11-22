@@ -215,6 +215,8 @@ interface GarageStore {
   createWarrantyVerificationToken: (warrantyId: string) => Promise<StoreMutationWith<{ token: string }>>;
   revokeWarrantyVerificationToken: (warrantyId: string) => Promise<StoreMutationResult>;
   recordWarrantyVerificationPrint: (warrantyId: string) => Promise<StoreMutationResult>;
+  /** Re-reads the active customer QR code (the server recomputes it), so a code can be shown and reprinted any time. */
+  readWarrantyVerificationToken: (warrantyId: string) => Promise<{ ok: true; token: string } | { ok: false; error: string }>;
   createWarrantyInvoiceDraft: (warrantyId: string) => Promise<StoreMutationWith<{ invoiceId: string }>>;
   updateWarrantyInvoiceDraft: (warrantyId: string, input: WarrantyInvoiceDraftInput) => Promise<StoreMutationResult>;
   issueWarranty: (input: IssueWarrantyInput) => Promise<StoreMutationResult>;
@@ -475,6 +477,15 @@ export function GarageStoreProvider({ children }: PropsWithChildren) {
     return result;
   }, [completeMutation]);
 
+  const readWarrantyVerificationToken = useCallback(async (warrantyId: string) => {
+    try {
+      const response = await requestJson<{ token: string }>(`/api/warranties/${encodeURIComponent(warrantyId)}/verification-token`);
+      return { ok: true as const, token: response.token };
+    } catch (error) {
+      return { ok: false as const, error: failureCode(error) };
+    }
+  }, []);
+
   const recordWarrantyVerificationPrint = useCallback(async (warrantyId: string) => {
     const result = await requestMutation(
       `/api/warranties/${encodeURIComponent(warrantyId)}/verification-token/print`,
@@ -594,6 +605,7 @@ export function GarageStoreProvider({ children }: PropsWithChildren) {
     createWarrantyVerificationToken,
     revokeWarrantyVerificationToken,
     recordWarrantyVerificationPrint,
+    readWarrantyVerificationToken,
     createWarrantyInvoiceDraft,
     updateWarrantyInvoiceDraft,
     issueWarranty,
@@ -628,6 +640,7 @@ export function GarageStoreProvider({ children }: PropsWithChildren) {
     createWarrantyVerificationToken,
     revokeWarrantyVerificationToken,
     recordWarrantyVerificationPrint,
+    readWarrantyVerificationToken,
     createWarrantyInvoiceDraft,
     updateWarrantyInvoiceDraft,
     issueWarranty,

@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Printer } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import type { WarrantyRecord } from "@garage/domain";
 import { DetailDrawer, Notice, Plate, SendToCustomer } from "../../shared/components";
-import { buildWarrantyCard, cardLabels, liveToken, type CardVariant, type WarrantyCardModel } from "./warranty-card";
+import { buildWarrantyCard, cardLabels, liveToken, rememberLiveToken, type CardVariant, type WarrantyCardModel } from "./warranty-card";
 import { verificationReady } from "./warranty-logic";
 import { usePrintRequest } from "./warranty-print-request";
 import type { WarrantyScope } from "./warranty-scope";
@@ -60,6 +60,20 @@ export function WarrantyCardDrawer({ scope, records, onClose }: { scope: Warrant
   const [printing, requestPrint] = usePrintRequest();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Codes are recomputed by the server on demand, so a card for any warranty with an active code shows its QR without a re-prepare.
+  const [, setRecovered] = useState(0);
+  const recordKey = records.map((record) => `${record.id}:${record.verificationTokenActive ? 1 : 0}`).join("|");
+  useEffect(() => {
+    let alive = true;
+    for (const record of records) {
+      if (!record.verificationTokenActive || record.status === "void" || liveToken(record.id)) continue;
+      void store.readWarrantyVerificationToken(record.id).then((result) => {
+        if (alive && result.ok) { rememberLiveToken(record.id, result.token); setRecovered((n) => n + 1); }
+      });
+    }
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordKey]);
   const enabled = verificationReady(state.warrantyVerificationSettings);
   const models = records.map((record) => {
     const vehicle = scope.vehicleOf(record.customerId, record.vehicleId);

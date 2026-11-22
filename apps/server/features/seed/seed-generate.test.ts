@@ -145,7 +145,7 @@ describe("seed generator", () => {
       if (token.revoked_at === null) { expect(active.has(String(token.warranty_id))).toBe(false); active.set(String(token.warranty_id), token); }
     }
     expect(active.size).toBeGreaterThan(10);
-    for (const [warrantyId, token] of active) expect(token.token_hash).toBe(qrTokenHash(qrToken(warrantyId)));
+    for (const token of active.values()) expect(token.token_hash).toBe(qrTokenHash(qrToken(String(token.id))));
     expect(qrToken("x")).toMatch(/^[A-Za-z0-9_-]{43}$/);
     for (const warranty of world.warranties.filter((item) => item.activeToken)) expect(warranty.activeToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });

@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import type {
   PublicWarrantyVerification,
   WarrantyStatus,
@@ -30,6 +30,22 @@ export interface PublicWarrantyVerificationRow {
 
 export function createWarrantyVerificationToken() {
   return randomBytes(32).toString("base64url");
+}
+
+/** Secret the customer QR codes are derived from. Required in production; a fixed development value elsewhere so dev and seeded data work. */
+export function warrantyQrSecret(env: NodeJS.ProcessEnv = process.env): string | null {
+  const configured = env.WARRANTY_QR_SECRET?.trim();
+  if (configured) return configured;
+  return env.NODE_ENV === "production" ? null : "garage-os-development-warranty-qr-secret";
+}
+
+/**
+ * The customer QR token is derived from the secret and the token row id (HMAC-SHA256, 43 base64url characters, the exact shape
+ * isWarrantyVerificationTokenFormat accepts). The database still stores only the hash, so a leaked database reveals no code, and
+ * staff can re-display or reprint the same code any time. Replacing a code creates a new row id, hence a new code.
+ */
+export function deriveWarrantyVerificationToken(tokenId: string, secret: string): string {
+  return createHmac("sha256", secret).update(`warranty-qr:${tokenId}`).digest("base64url");
 }
 
 export function hashWarrantyVerificationToken(token: string) {

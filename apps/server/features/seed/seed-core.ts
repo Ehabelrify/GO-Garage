@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { deriveWarrantyVerificationToken, warrantyQrSecret } from "../warranty/warranty-verification";
 
 /** Every seeded text id starts with this prefix, which is how the purge script recognises seeded rows. */
 export const SEED_PREFIX = "seed-";
@@ -126,8 +127,11 @@ export const canonical = (value: unknown): string =>
       : item);
 export const hash = (value: unknown) => createHash("sha256").update(canonical(value)).digest("hex");
 export const plainHash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-/** 43-character base64url token, the exact shape warranty-verification.ts accepts. Deterministic so lookups are testable. */
-export const qrToken = (warrantyId: string) => createHash("sha256").update(`garage-os-seed-qr:${warrantyId}`).digest("base64url");
+/**
+ * 43-character base64url token, the exact shape warranty-verification.ts accepts. Derived from the token ROW id with the same
+ * secret and function the server uses, so a seeded warranty shows a real, scannable QR in the app (the server recomputes it).
+ */
+export const qrToken = (tokenId: string) => deriveWarrantyVerificationToken(tokenId, warrantyQrSecret() ?? "garage-os-development-warranty-qr-secret");
 export const qrTokenHash = (token: string) => createHash("sha256").update(token, "utf8").digest("hex");
 
 export type Money = { minor: number; currency: "EGP" };
