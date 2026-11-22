@@ -16,7 +16,7 @@ BEGIN
     SELECT 1
     FROM pg_constraint
     WHERE conrelid = 'warranties'::regclass
-      AND conname = 'warranties_expires_on_check'
+      AND conname IN ('warranties_expires_on_check', 'warranty_coverage_term_shape')
       AND contype = 'c'
   ) THEN
     RAISE EXCEPTION 'Expected the fixed-term warranty expiry check constraint';
