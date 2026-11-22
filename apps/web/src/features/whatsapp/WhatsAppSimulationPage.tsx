@@ -414,7 +414,7 @@ function WhatsAppSimulationContent({ lang, t, state, notify, branchName, role }:
             onLinked={async () => { await refresh(selectedConversation.id); notify(msg("Chat linked to the customer.", "تم ربط المحادثة بالعميل.")); }} />}
           {actionButtons}
           {detailError && <div className="wa-error-inline" role="alert">{detailError} <button type="button" className="btn btn-sm" onClick={() => selectedId && void loadDetail(selectedId)}>{msg("Retry", "إعادة المحاولة")}</button></div>}
-          <div className="wa-thread" ref={threadRef} role="log" aria-live="polite" aria-relevant="additions text">
+          <div className="wa-thread" ref={threadRef} role="log" tabIndex={0} aria-label={msg("Messages", "الرسائل")} aria-live="polite" aria-relevant="additions text">
             {detailLoading ? <Skeleton rows={4} label={msg("Loading conversation", "تحميل المحادثة")} />
               : selectedDetail?.messages.length ? groupMessagesByDay(selectedDetail.messages, (m) => localStamp(m.createdAt)).map((group) => <div className="wa-day" key={group.day}>
                 <div className="wa-day-sep"><DateText value={group.day} lang={lang} /></div>

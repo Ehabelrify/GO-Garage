@@ -9,6 +9,8 @@ export interface TabBarProps {
   ariaLabel: string;
   /** Used to build ids so a TabPanel can reference its tab. Default: generated. */
   idPrefix?: string;
+  /** Set to false when the page switches views without rendering a TabPanel, so tabs do not point at a panel that does not exist. */
+  panels?: boolean;
 }
 
 /** Next enabled tab index for arrow/Home/End keys. Exported for tests. */
@@ -24,7 +26,7 @@ export function nextTabIndex(count: number, current: number, key: string, rtl: b
 }
 
 /** Accessible tablist. Sync with the URL via `useUrlState("tab", "first")` from shared/hooks. */
-export function TabBar({ tabs, value, onChange, ariaLabel, idPrefix }: TabBarProps) {
+export function TabBar({ tabs, value, onChange, ariaLabel, idPrefix, panels = true }: TabBarProps) {
   const generated = useId();
   const prefix = idPrefix ?? generated;
   const visible = tabs.filter((tab) => !tab.hidden);
@@ -62,7 +64,7 @@ export function TabBar({ tabs, value, onChange, ariaLabel, idPrefix }: TabBarPro
       className="tab"
       id={`${prefix}-tab-${tab.id}`}
       aria-selected={tab.id === value}
-      aria-controls={`${prefix}-panel-${tab.id}`}
+      aria-controls={panels ? `${prefix}-panel-${tab.id}` : undefined}
       tabIndex={tab.id === value ? 0 : -1}
       onClick={() => onChange(tab.id)}
     >{tab.label}{tab.count !== undefined && <span className="tab-count">{tab.count}</span>}</button>)}

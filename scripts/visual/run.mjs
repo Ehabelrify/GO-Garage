@@ -359,9 +359,11 @@ async function drawerFlow({ page, shot }) {
   await openWorkspace(page, "/workspace/customers");
   // Rows are table rows on wide screens and cards on narrow ones; opening one now navigates to the customer record
   // (?customer=...) rather than opening a dialog, so accept either outcome.
-  const row = page.locator("tr.clickable, [role=row].clickable, .data-card.clickable").first();
-  if (!(await row.count())) return { status: "SKIP", detail: "no clickable row on the customers page" };
-  await row.click();
+  // Only the visible layout counts (the table is hidden on narrow screens, the cards on wide ones), and the click must land on the
+  // customer name: DataTable ignores clicks on buttons and links, and the middle of a row is a plate chip or a phone link.
+  const row = page.locator("tr.clickable:visible, .data-card.clickable:visible").first();
+  if (!(await row.count())) return { status: "SKIP", detail: "no visible clickable row on the customers page" };
+  await row.locator(".primary-cell, .data-card-title").first().click();
   await page.waitForFunction(() => document.querySelector('[role="dialog"]') || /[?&]customer=/.test(location.search), null, { timeout: 10_000 });
   const dialog = await page.locator('[role="dialog"]').count();
   await settle(page);
@@ -412,7 +414,9 @@ async function sendButtonFlow(kind, { page, shot }) {
   if (kind === "invoice") await openWorkspace(page, "/workspace/bookings?tab=invoices");
   else if (kind === "quote") await openWorkspace(page, "/workspace/quotes");
   else await openWorkspace(page, "/workspace/warranties?tab=qr");
-  const rows = page.locator("tr.clickable");
+  // The QR tab opens a card from an Open button, and its rows are not clickable on narrow layouts, so fall back to those buttons.
+  let rows = page.locator("tr.clickable");
+  if (kind === "warranty" && !(await rows.count())) rows = page.getByRole("button", { name: /^(open|فتح)$/i });
   const count = await rows.count();
   if (!count) return { status: "SKIP", detail: `no ${kind} rows to open` };
   // Only some rows qualify (issued invoices, offered or accepted quotes, active warranties), so try the first few.

@@ -27,5 +27,5 @@
 .seg-btn[aria-pressed="true"] { background: var(--teal); color: #fff; font-weight: 600; }
 .seg-btn:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .seg-count { min-width: 20px; padding: 0 6px; border-radius: 10px; background: rgba(0, 0, 0, .08); font-size: var(--fs-label); text-align: center; }
-.seg-btn[aria-pressed="true"] .seg-count { background: rgba(255, 255, 255, .22); }
+.seg-btn[aria-pressed="true"] .seg-count { background: rgba(0, 0, 0, .24); color: #fff; } /* darker, not lighter: white on the lightened red measured 4.08:1 */
 @media (max-width: 760px) { .cat-kv { grid-template-columns: minmax(0, 1fr); gap: 2px; } .cat-kv dd { margin-block-end: 8px; } .seg { width: 100%; } .seg-btn { flex: 1; justify-content: center; padding-inline: 8px; } }

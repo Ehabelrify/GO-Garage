@@ -183,7 +183,7 @@ export function WorkshopPage({ lang, t, state, branchName, customerName, service
   const header = <PageHeader
     title={isTechnician ? t("My jobs today", "أعمالي اليوم") : t("Workshop", "الورشة")}
     meta={<><span className="top-meta">{shownCount} {t("jobs", "أوامر شغل")}</span>{openIssues.length > 0 && <span className="ws-issues-badge" role="status">{t("Issues", "المشكلات")} {openIssues.length}</span>}</>}
-    tabs={isTechnician ? undefined : <TabBar ariaLabel={t("View", "العرض")} value={view === "list" ? "list" : "board"} onChange={setView}
+    tabs={isTechnician ? undefined : <TabBar panels={false} ariaLabel={t("View", "العرض")} value={view === "list" ? "list" : "board"} onChange={setView}
       tabs={[{ id: "board", label: t("Board", "اللوحة") }, { id: "list", label: t("List", "القائمة") }]} />}
   />;
 

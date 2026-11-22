@@ -29,7 +29,7 @@
 .ov-chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .ov-chip[aria-pressed="true"] { border-color: var(--teal); background: var(--teal); color: #fff; }
 .ov-chip-count { display: inline-block; min-width: 2ch; padding: 0 6px; border-radius: 999px; background: var(--tone-neutral-bg); color: var(--tone-neutral-fg); font-size: var(--fs-label); font-weight: 600; text-align: center; font-variant-numeric: tabular-nums lining-nums; }
-.ov-chip[aria-pressed="true"] .ov-chip-count { background: rgba(255, 255, 255, .22); color: #fff; }
+.ov-chip[aria-pressed="true"] .ov-chip-count { background: rgba(0, 0, 0, .24); color: #fff; } /* darker, not lighter: white on the lightened red measured 4.08:1 */
 .ov-group { margin-block-end: 16px; min-width: 0; }
 .ov-group-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-block-end: 6px; }
 .ov-group-head h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--fs-h3); }
