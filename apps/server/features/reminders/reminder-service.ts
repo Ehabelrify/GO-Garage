@@ -79,12 +79,16 @@ export async function updateRule(actor: GarageActor, kindValue: string, patch: R
       templateAr: patch.templateAr?.trim() ?? current.templateAr,
       revision: current.revision + 1,
     };
-    await client.query(
-      `INSERT INTO reminder_rules (environment_id, kind, enabled, lead_days, auto_send, template_en, template_ar, revision, updated_by, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now())
-       ON CONFLICT (environment_id, kind) DO UPDATE SET enabled = EXCLUDED.enabled, lead_days = EXCLUDED.lead_days, auto_send = EXCLUDED.auto_send,
-         template_en = EXCLUDED.template_en, template_ar = EXCLUDED.template_ar, revision = EXCLUDED.revision, updated_by = EXCLUDED.updated_by, updated_at = now()`,
-      [env(), kind, next.enabled, next.leadDays, next.autoSend, next.templateEn, next.templateAr, next.revision, actor.userId]);
+    // P2T-024: the write itself is conditional on the revision that was read, so a concurrent edit cannot be overwritten.
+    const values = [env(), kind, next.enabled, next.leadDays, next.autoSend, next.templateEn, next.templateAr, next.revision, actor.userId];
+    const written = current.revision === 0
+      ? await client.query(
+        `INSERT INTO reminder_rules (environment_id, kind, enabled, lead_days, auto_send, template_en, template_ar, revision, updated_by, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now()) ON CONFLICT (environment_id, kind) DO NOTHING`, values)
+      : await client.query(
+        `UPDATE reminder_rules SET enabled = $3, lead_days = $4, auto_send = $5, template_en = $6, template_ar = $7, revision = $8, updated_by = $9, updated_at = now()
+         WHERE environment_id = $1 AND kind = $2 AND revision = $10`, [...values, current.revision]);
+    if ((written.rowCount ?? 0) !== 1) return fail(409, "REVISION_CONFLICT", "This rule changed. Reload and try again.");
     return { rule: ruleView(next) };
   });
 }
@@ -103,6 +107,9 @@ export function previewTemplate(kindValue: string, template: string, lang: "ar" 
 
 const CONSENT = `EXISTS (SELECT 1 FROM messaging_customer_consents mc WHERE mc.customer_id = c.id AND mc.purpose = 'service' AND mc.status = 'granted'
   AND mc.evidence_ref IS NOT NULL AND mc.consented_at <= $1 AND (mc.expires_at IS NULL OR mc.expires_at > $1)) AS has_consent`;
+/** Consent for the reminder's own customer at dispatch time ($3 is now). */
+const CONSENT_AT_DISPATCH = `EXISTS (SELECT 1 FROM messaging_customer_consents mc WHERE mc.customer_id = r.customer_id AND mc.purpose = 'service' AND mc.status = 'granted'
+  AND mc.evidence_ref IS NOT NULL AND mc.consented_at <= $3 AND (mc.expires_at IS NULL OR mc.expires_at > $3))`;
 const NOT_ARCHIVED = "NOT EXISTS (SELECT 1 FROM record_archives ra WHERE ra.entity_kind = 'customer' AND ra.entity_id = c.id)";
 /** $1 is always `now`. Shared columns for every source query (aliases b, c, v, s). */
 const COMMON = `b.id AS branch_id, b.name_en AS branch_en, b.name_ar AS branch_ar, c.id AS customer_id, c.name AS customer_name, c.preferred_language AS language,
@@ -245,10 +252,17 @@ export async function runDueReminders(now: Date = new Date(), actorId = "system"
     const cancelled = await cancelStale(db);
     let autoSent = 0;
     for (const rule of rules.filter((item) => item.enabled && item.autoSend)) {
+      // P2T-023: consent is re-checked at dispatch. A reminder whose consent was withdrawn or expired is skipped, never marked sent.
+      const noConsent = await db.query<{ id: string }>(
+        `UPDATE reminders r SET status = 'skipped', reason = 'no-consent', handled_by = 'system', updated_at = now()
+         WHERE r.environment_id = $1 AND r.rule_kind = $2 AND r.status = 'due' AND r.due_at <= $3 AND (r.snoozed_until IS NULL OR r.snoozed_until <= $3)
+           AND NOT ${CONSENT_AT_DISPATCH} RETURNING r.id`, [env(), rule.kind, now]);
+      for (const row of noConsent.rows) await db.query("INSERT INTO reminder_events (reminder_id, action, actor_id, details) VALUES ($1, 'skipped', 'system', 'no-consent')", [row.id]);
+      skippedNoConsent += noConsent.rows.length;
       const sent = await db.query<{ id: string }>(
-        `UPDATE reminders SET status = 'sent-simulated', sent_at = $3, handled_by = 'system', updated_at = now()
-         WHERE environment_id = $1 AND rule_kind = $2 AND status = 'due' AND due_at <= $3 AND (snoozed_until IS NULL OR snoozed_until <= $3) RETURNING id`,
-        [env(), rule.kind, now]);
+        `UPDATE reminders r SET status = 'sent-simulated', sent_at = $3, handled_by = 'system', updated_at = now()
+         WHERE r.environment_id = $1 AND r.rule_kind = $2 AND r.status = 'due' AND r.due_at <= $3 AND (r.snoozed_until IS NULL OR r.snoozed_until <= $3)
+           AND ${CONSENT_AT_DISPATCH} RETURNING r.id`, [env(), rule.kind, now]);
       for (const row of sent.rows) await db.query("INSERT INTO reminder_events (reminder_id, action, actor_id, details) VALUES ($1, 'sent-simulated', 'system', 'auto')", [row.id]);
       autoSent += sent.rows.length;
     }

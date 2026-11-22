@@ -190,3 +190,54 @@ describe("authorization", () => {
     expect(service.previewTemplate("quote_followup", "Hi {name} about {plate}", "en").text).toBe("Hi Ahmed about ABC 1234");
   });
 });
+
+describe("P2T-023 and P2T-024 hardening (mocked pool)", () => {
+  const owner = { userId: "owner-1", email: "", name: "owner", role: "owner", branchIds: ["b1"] } as GarageActor;
+  const storedRule = { kind: "quote_followup", enabled: true, lead_days: 3, auto_send: false, template_en: "Hi {name}", template_ar: "مرحبا {name}", revision: 4 };
+
+  it("writes an existing rule only at the revision it read and reports a conflict when another edit won", async () => {
+    query.mockReset();
+    query.mockResolvedValueOnce({ rows: [storedRule], rowCount: 1 }).mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    await expect(service.updateRule(owner, "quote_followup", { expectedRevision: 4, enabled: false })).rejects.toMatchObject({ status: 409, code: "REVISION_CONFLICT" });
+    const write = query.mock.calls[1];
+    expect(String(write[0])).toMatch(/UPDATE reminder_rules[\s\S]*revision = \$10/);
+    expect(write[1][7]).toBe(5);
+    expect(write[1][9]).toBe(4);
+  });
+
+  it("creates a default rule without overwriting a row that appeared meanwhile", async () => {
+    query.mockReset();
+    query.mockResolvedValueOnce({ rows: [], rowCount: 0 }).mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    await expect(service.updateRule(owner, "quote_followup", { expectedRevision: 0, enabled: false })).rejects.toMatchObject({ status: 409 });
+    expect(String(query.mock.calls[1][0])).toMatch(/ON CONFLICT \(environment_id, kind\) DO NOTHING/);
+  });
+
+  it("a successful update returns the next revision", async () => {
+    query.mockReset();
+    query.mockResolvedValueOnce({ rows: [storedRule], rowCount: 1 }).mockResolvedValueOnce({ rows: [], rowCount: 1 });
+    const result = await service.updateRule(owner, "quote_followup", { expectedRevision: 4, enabled: false });
+    expect(result.rule.revision).toBe(5);
+    expect(result.rule.enabled).toBe(false);
+  });
+
+  it("automatic dispatch skips reminders whose consent is gone before it marks the rest sent", async () => {
+    query.mockReset();
+    const autoRule = { ...storedRule, kind: "ready_for_pickup", auto_send: true, enabled: true };
+    query.mockImplementation(async (sql: string) => {
+      if (/FROM reminder_rules/.test(sql)) return { rows: [{ ...autoRule }], rowCount: 1 };
+      if (/SET status = 'skipped'/.test(sql) && /due_at <= \$3/.test(sql)) return { rows: [{ id: "withdrawn-1" }], rowCount: 1 };
+      if (/SET status = 'sent-simulated'/.test(sql)) return { rows: [{ id: "ok-1" }], rowCount: 1 };
+      return { rows: [], rowCount: 0 };
+    });
+    const summary = await service.runDueReminders(NOW, "system");
+    const calls = query.mock.calls.map((call) => String(call[0]));
+    const skipIndex = calls.findIndex((sql) => /SET status = 'skipped'/.test(sql) && /NOT EXISTS/.test(sql));
+    const sendIndex = calls.findIndex((sql) => /SET status = 'sent-simulated'/.test(sql));
+    expect(skipIndex).toBeGreaterThan(-1);
+    expect(sendIndex).toBeGreaterThan(skipIndex);
+    expect(calls[sendIndex]).toMatch(/AND EXISTS \(SELECT 1 FROM messaging_customer_consents/);
+    expect(calls.some((sql) => /VALUES \(\$1, 'skipped', 'system', 'no-consent'\)/.test(sql))).toBe(true);
+    expect(summary.autoSent).toBe(1);
+    expect(summary.skippedNoConsent).toBeGreaterThanOrEqual(1);
+  });
+});
