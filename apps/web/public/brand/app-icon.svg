@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">GO Stores application icon</title>
+  <desc id="desc">Compact red GO turbine mark on a graphite rounded square.</desc>
+  <rect x="12" y="12" width="488" height="488" rx="104" fill="#17191D"/>
+  <g transform="translate(16 96) scale(.89)">
+    <g fill="none" stroke="#C82127" stroke-linecap="square" stroke-linejoin="round">
+      <path d="M270 106C244 70 202 51 157 54C84 59 38 112 38 180C38 252 91 306 163 306C220 306 267 278 288 232V181H178" stroke-width="60"/>
+      <circle cx="411" cy="180" r="101" stroke-width="58"/>
+    </g>
+    <path d="M445 64H535L518 119H461Z" fill="#C82127"/>
+    <circle cx="411" cy="180" r="70" fill="#17191D"/>
+    <g fill="#F6F4EF"><path id="blade" d="M418 172C425 148 443 132 463 130C458 153 445 171 422 181Z"/><use href="#blade" transform="rotate(45 411 180)"/><use href="#blade" transform="rotate(90 411 180)"/><use href="#blade" transform="rotate(135 411 180)"/><use href="#blade" transform="rotate(180 411 180)"/><use href="#blade" transform="rotate(225 411 180)"/><use href="#blade" transform="rotate(270 411 180)"/><use href="#blade" transform="rotate(315 411 180)"/></g>
+    <circle cx="411" cy="180" r="14" fill="#B9BEC4" stroke="#F6F4EF" stroke-width="5"/>
+  </g>
+</svg>
