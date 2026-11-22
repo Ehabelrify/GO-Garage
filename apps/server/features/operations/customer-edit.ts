@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isPlausiblePlate, normalizePlate } from "@garage/domain";
+import { isPlausiblePlate, normalizePlate, phoneDigits } from "@garage/domain";
 
 /** Splits "Make Model [Year]" into the vehicle columns (same rule POST /customers uses). */
 export function splitMakeModel(makeModel: string) {
@@ -48,6 +48,6 @@ export async function findDuplicatePlate(db: Queryable, plate: string, scope: { 
 
 /** Digits only, 8 to 15 long; null when invalid. */
 export function normalizePhone(phone: string): string | null {
-  const digits = phone.replace(/\D/g, "");
+  const digits = phoneDigits(phone);
   return digits.length >= 8 && digits.length <= 15 ? digits : null;
 }

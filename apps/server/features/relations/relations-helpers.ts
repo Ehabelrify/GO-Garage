@@ -1,4 +1,4 @@
-import { normalizePlate as normalizePlateKey, plateSearchKeys, toAsciiDigits } from "@garage/domain";
+import { normalizePlate as normalizePlateKey, plateSearchKeys, phoneDigits } from "@garage/domain";
 import { hashWarrantyVerificationToken, isWarrantyVerificationTokenFormat } from "../warranty/warranty-verification";
 
 export const searchTypes = ["customer", "vehicle", "booking", "quote", "warranty"] as const;
@@ -20,7 +20,7 @@ export function plateLikePatterns(value: string): string[] {
 }
 
 export function digitsOnly(value: string): string {
-  return toAsciiDigits(value).replace(/\D/g, "");
+  return phoneDigits(value);
 }
 
 export function parseSearchTypes(raw: unknown): SearchType[] {

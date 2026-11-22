@@ -32,6 +32,11 @@ export function isSearchShortcut(event: { key: string; ctrlKey: boolean; metaKey
   return !(tag === "input" || tag === "textarea" || tag === "select" || target?.isContentEditable);
 }
 
+/** True while a modal dialog or drawer owns focus; global shortcuts must not move focus behind it (P2T-028). */
+export function isModalOpen(doc: { querySelector: (selector: string) => unknown } | undefined = typeof document === "undefined" ? undefined : document): boolean {
+  return Boolean(doc?.querySelector('[aria-modal="true"]'));
+}
+
 export function GlobalSearch({ lang, fetcher = fetchSearch, onNavigate, debounceMs = 250, minLength = 2 }: GlobalSearchProps) {
   const copy = text[lang];
   const [query, setQuery] = useState("");
@@ -49,6 +54,7 @@ export function GlobalSearch({ lang, fetcher = fetchSearch, onNavigate, debounce
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
       if (!isSearchShortcut(event)) return;
+      if (isModalOpen()) return;
       event.preventDefault();
       input.current?.focus();
       input.current?.select();

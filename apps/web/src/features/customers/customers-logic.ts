@@ -1,4 +1,4 @@
-import { formatPlateDisplay, isPlausiblePlate, normalizePlate, plateMatchesQuery, type Customer, type Locale } from "@garage/domain";
+import { formatPlateDisplay, isPlausiblePlate, normalizePlate, plateMatchesQuery, type Customer, type Locale, phoneDigits } from "@garage/domain";
 import type { StatusDomain } from "../../shared/components/StatusBadge";
 import type { RecordType } from "../../shared/record-types";
 import { formatMoney } from "../../shared/format";
@@ -13,7 +13,7 @@ export type SectionKey = (typeof sectionKeys)[number];
 
 export const normalisePlate = (value: string) => normalizePlate(value);
 export { formatPlateDisplay, isPlausiblePlate, plateMatchesQuery };
-export const digitsOf = (value: string) => value.replace(/\D/g, "");
+export const digitsOf = (value: string) => phoneDigits(value);
 
 /** Search by name, phone digits, plate (spaces/dashes ignored) or make/model. */
 export function filterCustomers(customers: Customer[], query: string): Customer[] {

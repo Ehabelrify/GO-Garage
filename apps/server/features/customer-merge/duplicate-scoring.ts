@@ -4,6 +4,7 @@
  *  - plate: the same canonical plate on two different customers;
  *  - name: near-identical names (normalised Arabic/Latin, fuzzy token overlap) for customers sharing a branch.
  */
+import { phoneDigits } from "@garage/domain";
 export interface DuplicateCandidate {
   id: string;
   name: string;
@@ -95,7 +96,7 @@ export function nameSimilarity(left: string, right: string): { similarity: numbe
   return { similarity: union === 0 ? 0 : matched / union, matched, tokensA: a.length, tokensB: b.length };
 }
 
-export const digitsOf = (phone: string): string => phone.replace(/\D/g, "");
+export const digitsOf = (phone: string): string => phoneDigits(phone);
 /** Blocking key for phones: the last 10 digits (or all digits when shorter). */
 export const phoneKey = (phone: string) => { const d = digitsOf(phone); return d.length >= PHONE_SUFFIX ? d.slice(-PHONE_SUFFIX) : d; };
 

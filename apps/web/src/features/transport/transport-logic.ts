@@ -1,4 +1,4 @@
-import { plateMatchesQuery } from "@garage/domain";
+import { plateMatchesQuery, phoneDigits } from "@garage/domain";
 import type { TransportStatus } from "@garage/domain";
 
 /** Mirrors the server transition table; the server stays the authority. */
@@ -81,10 +81,10 @@ export function splitDateTime(iso: string): { date: string; time: string } | nul
 export function matchesTransport(parts: { customerName: string; phone: string; plate: string }, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
-  const digits = needle.replace(/\D/g, "");
+  const digits = phoneDigits(needle);
   const compact = needle.replace(/\s/g, "");
   return parts.customerName.toLowerCase().includes(needle)
-    || (digits.length > 0 && parts.phone.replace(/\D/g, "").includes(digits))
+    || (digits.length > 0 && phoneDigits(parts.phone).includes(digits))
     || plateMatchesQuery(parts.plate, needle)
     || parts.plate.toLowerCase().replace(/\s/g, "").includes(compact);
 }

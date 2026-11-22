@@ -12,3 +12,4 @@ export * from "./reservations";
 export * from "./warranty-terms";
 export * from "./currencies";
 export * from "./plate";
+export * from "./phone";

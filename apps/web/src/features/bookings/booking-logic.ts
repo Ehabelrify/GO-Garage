@@ -1,4 +1,4 @@
-import { plateMatchesQuery, type BranchId, type Booking, type Job } from "@garage/domain";
+import { plateMatchesQuery, type BranchId, type Booking, type Job, phoneDigits as canonicalPhoneDigits, toAsciiDigits } from "@garage/domain";
 
 export type DateRange = "all" | "today" | "tomorrow" | "week" | "upcoming" | "past";
 export const dateRanges: DateRange[] = ["all", "today", "tomorrow", "week", "upcoming", "past"];
@@ -86,10 +86,10 @@ export function draftReady(draft: BookingDraft): boolean {
 export function matchesCustomer(customer: { name: string; phone: string; vehicles: Array<{ plate: string; makeModel: string }> }, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
-  const digits = needle.replace(/\D/g, "");
+  const digits = canonicalPhoneDigits(needle);
   const compact = needle.replace(/\s/g, "");
   return customer.name.toLowerCase().includes(needle)
-    || (digits.length > 0 && customer.phone.replace(/\D/g, "").includes(digits))
+    || (digits.length > 0 && canonicalPhoneDigits(customer.phone).includes(digits))
     || customer.vehicles.some((vehicle) => plateMatchesQuery(vehicle.plate, needle) || vehicle.plate.toLowerCase().replace(/\s/g, "").includes(compact) || vehicle.makeModel.toLowerCase().includes(needle));
 }
 
@@ -108,11 +108,11 @@ export function showBranchColumn(branchCount: number, currentBranch: string): bo
 }
 
 const phoneDigits = (phone: string | null | undefined): string => {
-  const raw = (phone ?? "").trim();
+  const raw = toAsciiDigits(phone ?? "").trim();
   if (!raw) return "";
   const cleaned = raw.replace(/[^\d+]/g, "").replace(/^00/, "+");
   const local = /^0(1\d{9})$/.exec(cleaned);
-  const digits = (local ? `20${local[1]}` : cleaned).replace(/\D/g, "");
+  const digits = canonicalPhoneDigits(local ? `20${local[1]}` : cleaned);
   return digits.length >= 8 && digits.length <= 15 ? digits : "";
 };
 

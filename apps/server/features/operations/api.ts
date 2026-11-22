@@ -3,7 +3,7 @@ import { Router, type Request, type Response } from "express";
 import { clerkClient } from "@clerk/express";
 import { z } from "zod";
 import { initialState } from "../seed/seed-data";
-import { formatPlateDisplay, canTransitionJob } from "@garage/domain";
+import { formatPlateDisplay, canTransitionJob, phoneDigits } from "@garage/domain";
 import type { BranchId, Booking } from "@garage/domain";
 import { canAccessBranch, canAccessJob, canManageBookings, canManageSettings, canManageStaff, capabilities, ownerOnlyCapabilities, roleDefaultCapabilities, sanitizeOverrides, type GarageRole } from "../auth/authz";
 import { requireMembership, actorFor } from "../auth/auth";
@@ -227,7 +227,7 @@ router.post("/customers", async (req, res) => {
 
   const { name, phone, plate, makeModel, language, branchId } = parsed.data;
   if (!canAccessBranch(currentActor, branchId)) return forbidden(res);
-  const normalizedPhone = phone.replace(/\D/g, "");
+  const normalizedPhone = phoneDigits(phone);
   if (normalizedPhone.length < 8 || normalizedPhone.length > 15) {
     return routeError(res, 400, "INVALID_PHONE", "Enter a valid phone number.");
   }

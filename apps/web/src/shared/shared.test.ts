@@ -5,7 +5,7 @@ import { activeFilterCount } from "./components/FilterBar";
 import { DataTable, nextSort, sortRows, type Column } from "./components/DataTable";
 import { Field } from "./components/Form";
 import { nextTabIndex } from "./components/TabBar";
-import { isSearchShortcut } from "./components/GlobalSearch";
+import { isModalOpen, isSearchShortcut } from "./components/GlobalSearch";
 import { Money } from "./components/Money";
 import { RecordRef } from "./components/RecordRef";
 import { EmptyState } from "./components/EmptyState";
@@ -137,6 +137,11 @@ describe("search", () => {
     expect(isSearchShortcut({ key: "k", ctrlKey: true, metaKey: false, target: { tagName: "INPUT" } })).toBe(true);
     expect(isSearchShortcut({ key: "/", ctrlKey: false, metaKey: false, target: { tagName: "DIV" } })).toBe(true);
     expect(isSearchShortcut({ key: "/", ctrlKey: false, metaKey: false, target: { tagName: "INPUT" } })).toBe(false);
+  });
+  it("reports an open modal so global shortcuts do not steal focus (P2T-028)", () => {
+    expect(isModalOpen({ querySelector: (selector: string) => (selector === '[aria-modal="true"]' ? {} : null) })).toBe(true);
+    expect(isModalOpen({ querySelector: () => null })).toBe(false);
+    expect(isModalOpen(undefined)).toBe(false);
   });
   it("normalises results, dropping malformed and unsafe routes, and groups by type", () => {
     const results = normaliseSearchResults({ results: [
