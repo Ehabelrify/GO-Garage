@@ -133,7 +133,17 @@ Standing order, in this sequence, no confirmation needed (the user said "I trust
 Brand notes: the logo is a concept built by Codex from social references (needs Maher's approval and the original vector
 files); keep red actions from reading as destructive; gold is attention/selection/premium only; keep IBM Plex for UI text.
 
+### Cost rule (user, 22 Nov 2026)
+Do NOT burn tokens/credits on testing and reviewing: keep verification minimal and basic. One integrated typecheck + vitest +
+build per stage (not per package), no per-package review agents, no extra reviewer workflows. ONE general review at the very end
+of the whole sequence. Keep all trackers, this handoff, docs and pointers updated at every step so another session can resume.
+
 ## 8. Activity log (newest first; append here)
+- **22 Nov 2026 (user away):** Plan comparison with Codex boards committed (`815c0bb`): fonts are declared (IBM Plex) but never
+  loaded (fix in brand shell: self-host); Agency Square on board 01 contradicts Codex's own guide, so UI font unchanged; gold fails
+  contrast on light surfaces (use fill + graphite text, bronze `#8A5A00` for gold text); radius moves to 6/8 px; full lockup in the
+  sidebar. UX workflow running (3 of 5 packages reported, the sixth, lists/bulk/shortcuts, starts after). Local branch 15 commits
+  ahead of origin. Push permission rules are in `.claude/settings.local.json` (git-ignored; allow add/commit/push, deny force/delete).
 - **22 Nov 2026 (Wave 5 done):** Wave 5 server and web agents finished and were committed after an integrated check (the web calls match the server routes: intake-items, /api/intake, conversations/:id/link). Notes from the reports: a quote created by intake has no acceptance policy/tax treatment until the owner sets terms, so it cannot be offered yet; booking from intake books the chosen service but records chosen items only in `intake_requests`; an unsaved WhatsApp number goes to the channel's `default_branch_id` (set it per channel, else the first branch); product seed labels end in "- example price". UX improvements launched next.
 - **22 Nov 2026 (later):** Seed realism agent finished and was committed (`514c81c`). Wave 5 launched as two parallel agents (server and web). Resume note: if Wave 5 files exist uncommitted in the working tree, check `git status`, run typecheck/tests/build, read the two agent reports in the workflow transcripts, then commit in logical groups. After Wave 5 come the UX improvements (section 4 item 3).
 - **22 Nov 2026:** Visual review of all 234 screenshots by five reviewers -> consolidated report and work packages. Decisions
