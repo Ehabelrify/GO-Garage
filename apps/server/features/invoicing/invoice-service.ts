@@ -4,6 +4,7 @@ import { DEFAULT_CURRENCY, isSupportedCurrency } from "@garage/domain";
 import { pool, withTransaction } from "../../infrastructure/database/db";
 import { hasCapability, type GarageActor } from "../auth/authz";
 import { commercialContext } from "../commercial/policy-service";
+import { autoSendOnIssue } from "../document-delivery/document-delivery-service";
 import {
   applyTaxRate, canTransition, computeTotals, formatInvoiceNumber, lineProblem, paymentStatus, toInvoice, toLine,
   type DraftUpdate, type InvoiceRow, type InvoiceStatus, type LineInput, type LineRow, type PaymentInput,
@@ -316,6 +317,8 @@ export const issueInvoice = (actor: GarageActor, id: string, expectedRevision: n
     const number = formatInvoiceNumber(row.branch_id, year, last_value);
     await client.query("UPDATE invoices SET status='issued', number=$2, issue_date=$3, issued_by=$4, issued_at=now() WHERE id=$1", [id, number, today, actor.userId]);
     await appendEvent(client, id, "issued", "draft", "issued", actor.userId, "", { number, currency: row.currency, ...totals });
+    // Owner decision 22 Nov: documents can go to the customer automatically. Savepoint-guarded, never blocks issuing; skipped without consent.
+    await autoSendOnIssue(client, "invoice", id, "issued");
   });
 
 /**
