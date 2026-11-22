@@ -8,7 +8,8 @@ import { App } from "./App";
 import { RouteChunk } from "./RouteChunk";
 import { GarageStoreProvider } from "../shared/store";
 import { DemoAccountPanel } from "../features/demo-auth/DemoAccountPanel";
-import { LoaderCircle, ShieldCheck, Wrench } from "lucide-react";
+import { LoaderCircle, ShieldCheck } from "lucide-react";
+import { BrandMark } from "../shared/brand/BrandMark";
 import { useSavedLocale } from "../shared/locale";
 import "./login.css";
 
@@ -53,19 +54,19 @@ const clerkAppearance = {
   options: {
     logoPlacement: "inside" as const,
     logoLinkUrl: basePath || "/",
-    logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
+    logoImageUrl: `${window.location.origin}${basePath}/brand/logo-primary.svg`,
   },
   variables: {
-    colorPrimary: "#176d5c",
-    colorForeground: "#1e332d",
-    colorMutedForeground: "#687a73",
-    colorDanger: "#ad423c",
+    colorPrimary: "#C82127",
+    colorForeground: "#17191D",
+    colorMutedForeground: "#676B70",
+    colorDanger: "#B42318",
     colorBackground: "#ffffff",
-    colorInput: "#f7f9f7",
-    colorInputForeground: "#1e332d",
-    colorNeutral: "#1e332d",
+    colorInput: "#FFFFFF",
+    colorInputForeground: "#17191D",
+    colorNeutral: "#17191D",
     fontFamily: '"IBM Plex Sans Arabic", "IBM Plex Sans", sans-serif',
-    borderRadius: "0.75rem",
+    borderRadius: "0.5rem",
   },
   elements: {
     rootBox: { width: "100%", display: "flex", justifyContent: "center" },
@@ -73,32 +74,32 @@ const clerkAppearance = {
       width: "100%",
       maxWidth: "440px",
       overflow: "hidden",
-      borderRadius: "18px",
-      border: "1px solid #dce5e0",
+      borderRadius: "8px",
+      border: "1px solid #D6D4CF",
       background: "#ffffff",
-      boxShadow: "0 22px 58px rgba(27, 55, 45, 0.10)",
+      boxShadow: "0 22px 58px rgba(23, 25, 29, 0.10)",
     },
     card: { border: "0", background: "transparent", boxShadow: "none" },
     footer: { border: "0", background: "transparent", boxShadow: "none" },
-    headerTitle: { color: "#1e332d", fontSize: "24px", fontWeight: 700 },
-    headerSubtitle: { color: "#687a73", lineHeight: 1.6 },
-    socialButtonsBlockButtonText: { color: "#30443d", fontWeight: 600 },
-    formFieldLabel: { color: "#30443d", fontWeight: 600 },
-    formFieldInput: { color: "#1e332d", background: "#f7f9f7", borderColor: "#d6e1db" },
-    footerActionLink: { color: "#176d5c", fontWeight: 700 },
-    footerActionText: { color: "#687a73" },
-    dividerText: { color: "#687a73" },
-    identityPreviewEditButton: { color: "#176d5c" },
+    headerTitle: { color: "#17191D", fontSize: "24px", fontWeight: 700 },
+    headerSubtitle: { color: "#676B70", lineHeight: 1.6 },
+    socialButtonsBlockButtonText: { color: "#17191D", fontWeight: 600 },
+    formFieldLabel: { color: "#17191D", fontWeight: 600 },
+    formFieldInput: { color: "#17191D", background: "#FFFFFF", borderColor: "#D6D4CF" },
+    footerActionLink: { color: "#C82127", fontWeight: 700 },
+    footerActionText: { color: "#676B70" },
+    dividerText: { color: "#676B70" },
+    identityPreviewEditButton: { color: "#C82127" },
     formFieldSuccessText: { color: "#287454" },
-    alertText: { color: "#a33e37" },
-    formButtonPrimary: { background: "#176d5c", color: "#ffffff", borderRadius: "10px" },
+    alertText: { color: "#B42318" },
+    formButtonPrimary: { background: "#C82127", color: "#ffffff", borderRadius: "6px" },
     main: { gap: "16px" },
   },
 };
 
 function LoadingScreen() {
   const { locale } = useSavedLocale();
-  return <div className="auth-loading" role="status" dir={locale === "ar" ? "rtl" : "ltr"}><div className="brand-mark"><Wrench size={20} /></div><span>{locale === "ar" ? "جارٍ التحميل Garage OS..." : "Loading Garage OS..."}</span><div className="loading-line" /></div>;
+  return <div className="auth-loading" role="status" dir={locale === "ar" ? "rtl" : "ltr"}><BrandMark variant="logo" /><span>{locale === "ar" ? "جارٍ التحميل Garage OS..." : "Loading Garage OS..."}</span><div className="loading-line" /></div>;
 }
 
 function GoogleMark() {
@@ -130,8 +131,7 @@ function LoginPage() {
   return <main className="login-shell" dir={locale === "ar" ? "rtl" : "ltr"}>
     <header className="login-header">
       <a className="brand brand-link" href="/" aria-label="Garage OS home">
-        <span className="brand-mark"><Wrench size={19} /></span>
-        <span><strong className="brand-name">Garage OS</strong><small className="brand-sub">GO STORES · EGYPT</small></span>
+        <BrandMark variant="logo" className="login-logo" />
       </a>
       <button type="button" className="btn" onClick={() => setLocale(locale === "ar" ? "en" : "ar")}>{locale === "ar" ? "English" : "العربية"}</button>
     </header>

@@ -1,11 +1,11 @@
 /* Printable A4 document. Logical properties only; RTL follows the sheet's dir attribute. */
-.doc-sheet { max-inline-size: 210mm; margin-inline: auto; padding: 14mm 12mm; background: #fff; color: #172c34; border: 1px solid var(--line); font-size: var(--fs-caption); line-height: 1.5; }
-.doc-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding-block-end: 10px; border-block-end: 2px solid var(--teal); }
+.doc-sheet { max-inline-size: 210mm; margin-inline: auto; padding: 14mm 12mm; background: #fff; color: var(--ink); border: 1px solid var(--line); font-size: var(--fs-caption); line-height: 1.5; }
+.doc-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding-block-end: 10px; border-block-end: 2px solid var(--brand-graphite); }
 .doc-business { display: flex; align-items: center; gap: 10px; }
 .doc-business strong { display: block; font-size: var(--fs-h3); }
 .doc-business small { display: block; color: var(--muted); }
-.doc-logo, .doc-logo-placeholder { inline-size: 44px; block-size: 44px; border-radius: 2px; object-fit: contain; }
-.doc-logo-placeholder { display: grid; place-items: center; background: var(--teal-soft); color: var(--teal-dark); font-weight: 700; text-transform: uppercase; }
+.doc-logo, .doc-logo-placeholder { inline-size: auto; block-size: 44px; max-inline-size: 140px; object-fit: contain; }
+.doc-logo-placeholder { display: grid; place-items: center; background: var(--hover-neutral); color: var(--ink); font-weight: 700; text-transform: uppercase; }
 .doc-title-block { text-align: end; }
 .doc-title-block h2 { margin: 0; font-size: var(--fs-h2); }
 .doc-title-block p { margin: 2px 0 0; }
@@ -20,7 +20,7 @@
 .doc-parties strong, .doc-parties span { display: block; }
 .doc-table { inline-size: 100%; border-collapse: collapse; }
 .doc-table th, .doc-table td { padding: 6px 8px; border-block-end: 1px solid var(--line); text-align: start; vertical-align: top; }
-.doc-table th { background: var(--teal-soft); font-size: var(--fs-caption); }
+.doc-table th { background: var(--hover-neutral); font-size: var(--fs-caption); }
 .doc-table .num { text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .doc-table td small { display: block; color: var(--muted); }
 .doc-table tr { break-inside: avoid; }

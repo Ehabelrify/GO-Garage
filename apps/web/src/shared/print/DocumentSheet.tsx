@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Printer } from "lucide-react";
 import { formatMoney } from "../format";
+import { brandAssets } from "../brand/BrandMark";
 import { documentLabels, type DocumentModel } from "./document-model";
 import "./print.css";
 
@@ -43,7 +44,7 @@ export function DocumentSheet({ model, className }: { model: DocumentModel; clas
   return <article className={`doc-sheet${className ? ` ${className}` : ""}`} dir={lang === "ar" ? "rtl" : "ltr"} lang={lang}>
     <header className="doc-header">
       <div className="doc-business">
-        {model.business.logoUrl ? <img className="doc-logo" src={model.business.logoUrl} alt="" /> : <div className="doc-logo-placeholder" aria-hidden="true">{model.business.name.slice(0, 2)}</div>}
+        <img className="doc-logo" src={model.business.logoUrl ?? brandAssets.logo} alt="" />
         <div><strong>{model.business.name}</strong>{model.business.subtitle && <small>{model.business.subtitle}</small>}</div>
       </div>
       <div className="doc-title-block">

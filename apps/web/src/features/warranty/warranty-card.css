@@ -10,11 +10,11 @@
   border: .2mm solid #82958a; border-radius: 3mm; padding: 3.4mm; line-height: 1.25; }
 .wc-card .wc-face { inline-size: 85.6mm; block-size: 54mm; font-size: 6.2pt; }
 .wc-a5 .wc-face { inline-size: 210mm; block-size: 148mm; padding: 12mm; gap: 5mm; font-size: 12pt; border-radius: 6mm; }
-.wc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 3mm; padding-block-end: 1.4mm; border-block-end: .5mm solid var(--teal, #0f6b6b); }
+.wc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 3mm; padding-block-end: 1.4mm; border-block-end: .5mm solid var(--teal); }
 .wc-brand { display: flex; align-items: center; gap: 1.6mm; }
 .wc-brand strong, .wc-title strong { display: block; font-size: 1.15em; }
 .wc-brand small, .wc-title small, .wc-sub, .wc-facts dt, .wc-qr small { display: block; color: #5b6f75; }
-.wc-logo { display: grid; place-items: center; inline-size: 8mm; block-size: 8mm; border-radius: 1mm; background: var(--teal-soft, #e3f1ef); color: var(--teal-dark, #0b4f4f); font-weight: 700; text-transform: uppercase; }
+.wc-logo { display: grid; place-items: center; inline-size: 8mm; block-size: 8mm; border-radius: 1mm; background: var(--teal-soft); color: var(--teal-dark); font-weight: 700; text-transform: uppercase; }
 .wc-a5 .wc-logo { inline-size: 18mm; block-size: 18mm; border-radius: 2mm; }
 .wc-title { text-align: end; }
 .wc-body { display: flex; justify-content: space-between; gap: 3mm; flex: 1; min-block-size: 0; }
@@ -27,7 +27,7 @@
 .wc-a5 .wc-qr { inline-size: 44mm; }
 .wc-a5 .wc-qr svg { inline-size: 40mm; block-size: 40mm; }
 .wc-qr-off { color: #5b6f75; border: .2mm dashed #82958a; padding: 1mm; border-radius: 1mm; }
-.wc-term { padding: 1.2mm 1.8mm; background: var(--teal-soft, #e3f1ef); border-inline-start: .8mm solid var(--teal, #0f6b6b); border-radius: 1mm; }
+.wc-term { padding: 1.2mm 1.8mm; background: var(--teal-soft); border-inline-start: .8mm solid var(--teal); border-radius: 1mm; }
 .wc-term strong { display: block; font-size: 1.1em; }
 .wc-term span { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .wc-a5 .wc-term span { -webkit-line-clamp: 8; }

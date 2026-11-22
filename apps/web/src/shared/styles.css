@@ -1,5 +1,5 @@
-/* Garage OS global styles. Order matters: tokens -> base -> layout -> components -> legacy. */
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+/* Garage OS global styles. Order matters: fonts (self-hosted) -> tokens -> base -> layout -> components -> legacy. */
+@import "./styles/fonts.css";
 @import "./styles/tokens.css";
 @import "./styles/base.css";
 @import "./styles/layout.css";

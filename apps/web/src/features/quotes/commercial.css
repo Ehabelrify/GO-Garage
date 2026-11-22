@@ -17,7 +17,7 @@
 .qo-totals .grand { font-size: var(--fs-h3); font-weight: 700; padding-block-start: 6px; border-block-start: 1px solid var(--line); }
 .qo-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .qo-option { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); background: var(--paper); cursor: pointer; }
-.qo-option:hover { border-color: #6d9d94; }
+.qo-option:hover { border-color: var(--brand-graphite); }
 .qo-option:has(input:checked) { border-color: var(--teal); background: var(--teal-soft); }
 .qo-option:has(input:disabled) { opacity: .6; cursor: not-allowed; }
 .qo-option:has(input:focus-visible) { outline: var(--focus-ring); outline-offset: 2px; }
@@ -65,7 +65,7 @@
 .qo-toolbar .btn { white-space: nowrap; }
 .qo-chip-row { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .qo-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 2px 8px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: inherit; font-size: var(--fs-label); font-weight: 600; white-space: nowrap; cursor: pointer; border-radius: var(--radius); }
-.qo-chip:hover { border-color: #6d9d94; background: var(--teal-soft); }
+.qo-chip:hover { border-color: var(--brand-graphite); background: var(--teal-soft); }
 .qo-chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .qo-chip[data-state="exhausted"], .qo-chip[data-state="cancelled"] { color: var(--muted); text-decoration: line-through; }
 .qo-cell-sub { display: block; color: var(--muted); font-size: var(--fs-caption); font-weight: 400; overflow-wrap: anywhere; }

@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronDown, ClipboardList, LogOut, MoreHorizontal, ShieldAlert, Wrench, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, ClipboardList, LogOut, MoreHorizontal, ShieldAlert, X } from "lucide-react";
 import { useClerk, useUser } from "@clerk/react";
 import { Link, useLocation } from "wouter";
 import { useGarageStore, type GarageActor } from "../shared/store";
@@ -14,6 +14,7 @@ import { ShortcutsHost } from "./ShortcutsHost";
 import { hasCapability } from "../shared/capabilities";
 import { useFullPrecision } from "../shared/preferences";
 import { buildRecordRegistry } from "./record-registry";
+import { BrandMark } from "../shared/brand/BrandMark";
 import { IntakeButton, IntakeHost, canOpenIntake } from "../features/intake/IntakeHost";
 import {
   defaultPageForRole, navigationForRole, overflowNavigationForRole, primaryNavigationForRole,
@@ -38,7 +39,7 @@ const roleLabels: Record<GarageRole, { en: string; ar: string }> = {
 };
 
 function LoadingWorkspace({ lang }: { lang: Lang }) {
-  return <div className="workspace-state" role="status" dir={lang === "ar" ? "rtl" : "ltr"}><div className="brand-mark"><Wrench size={19} /></div><strong>Garage OS</strong><span>{lang === "ar" ? "جارٍ تحميل مساحة العمل..." : "Loading your workspace..."}</span><div className="loading-line" /></div>;
+  return <div className="workspace-state" role="status" dir={lang === "ar" ? "rtl" : "ltr"}><BrandMark variant="logo" /><strong>Garage OS</strong><span>{lang === "ar" ? "جارٍ تحميل مساحة العمل..." : "Loading your workspace..."}</span><div className="loading-line" /></div>;
 }
 
 function AccessPending({ onSignOut, lang }: { onSignOut: () => void; lang: Lang }) {
@@ -217,8 +218,8 @@ function ReadyWorkspace({
   return <div className={`app-shell ${lang === "en" ? "locale-en" : ""}`} dir={rtl ? "rtl" : "ltr"}>
     <aside className="sidebar">
       <Link className="brand brand-link" href="/workspace/overview">
-        <span className="brand-mark"><Wrench size={19} strokeWidth={1.7} /></span>
-        <span><strong className="brand-name">Garage OS</strong><small className="brand-sub">GO STORES · EGYPT</small></span>
+        <BrandMark variant="lockup" className="lockup" />
+        <BrandMark variant="mark" className="rail" />
       </Link>
       <nav className="nav-list" aria-label={t("Main navigation", "التنقل الأساسي")}>
         {navItems.map(({ id, path, icon: Icon, en, ar }) => <Link key={id} className={`nav-item ${menuPage === id ? "active" : ""}`} href={path} title={t(en, ar)} aria-label={t(en, ar)} aria-current={menuPage === id ? "page" : undefined}>
@@ -231,6 +232,7 @@ function ReadyWorkspace({
       {actor.isDemo && <div className="preview-banner" role="note"><ClipboardList size={13} aria-hidden="true" />{t("Role preview account", "حساب معاينة الدور")}</div>}
       <header className="topbar">
         <div className="topbar-start">
+          <BrandMark variant="mark" className="topbar-mark" />
           {state.branches.length > 1 && <label className="branch-context">
             <span className="sr-only">{t("Branch", "الفرع")}</span>
             <select className="select branch-select" value={state.currentBranch} onChange={(event) => store.setCurrentBranch(event.target.value as typeof state.currentBranch)}>

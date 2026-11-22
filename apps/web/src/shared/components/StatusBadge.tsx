@@ -1,8 +1,8 @@
 import type { Locale } from "@garage/domain";
-import { AlertTriangle, CheckCircle2, Circle, Info, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Circle, Crown, Info, XCircle, type LucideIcon } from "lucide-react";
 import { stageNames } from "../labels";
 
-export type StatusTone = "neutral" | "info" | "success" | "warning" | "danger";
+export type StatusTone = "neutral" | "info" | "success" | "warning" | "danger" | "premium";
 export type StatusDomain =
   | "booking" | "job" | "quote" | "reservation" | "benefit" | "transport"
   | "warranty" | "claim" | "policy" | "decision" | "staff" | "message" | "invoice" | "consent" | "request" | "purchase";
@@ -141,7 +141,7 @@ export function resolveStatus(status: string, lang: Locale, domain?: StatusDomai
   return { label: humanise(status), tone: "neutral" };
 }
 
-const toneIcons: Record<StatusTone, LucideIcon> = { neutral: Circle, info: Info, success: CheckCircle2, warning: AlertTriangle, danger: XCircle };
+const toneIcons: Record<StatusTone, LucideIcon> = { neutral: Circle, info: Info, success: CheckCircle2, warning: AlertTriangle, danger: XCircle, premium: Crown };
 
 export function StatusBadge({ status, lang, domain, label }: { status: string; lang: Locale; domain?: StatusDomain; label?: string }) {
   const resolved = resolveStatus(status, lang, domain);

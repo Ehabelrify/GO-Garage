@@ -1,48 +1,75 @@
 /* Design tokens. Single source for colour, shadow, radius and layering. */
 :root {
   font-family: "IBM Plex Sans Arabic", "IBM Plex Sans", system-ui, sans-serif;
-  color: #172c34;
-  background: #eef2f1;
+  color: #17191D;
+  background: #F6F4EF;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   color-scheme: light;
-  scrollbar-color: #8da9a0 #eef2f1;
+  scrollbar-color: #B9BEC4 #F6F4EF;
 
-  --ink: #172c34;
-  --muted: #52646a;
-  --line: #d8e1df;
-  --line-soft: #e6ecea;
-  --paper: #fbfcfa;
-  --canvas: #eef2f1;
-  --teal: #176d68;
-  --teal-dark: #105854;
-  --teal-soft: #e4f1ef;
+  /* GO Stores brand (concept identity pending Maher approval) */
+  --brand-graphite: #17191D;
+  --brand-graphite-soft: #2A2E33;
+  --brand-warm-white: #F6F4EF;
+  --brand-surface: #FFFFFF;
+  --brand-red: #C82127;
+  --brand-red-dark: #98171B;
+  --brand-red-tint: #FBEDEE;
+  --brand-gold: #F3B61F;
+  --brand-gold-dark: #A86F00;
+  --brand-gold-text: #8A5A00;
+  --brand-gold-tint: #FFF4D6;
+  --brand-gold-ink: #7A4F0E;
+  --brand-silver: #B9BEC4;
+  --brand-line: #D6D4CF;
+  --btn-border: #8A8F95; /* 3.26:1 on white: visible control edge without the heavy graphite outline; hover goes graphite */
+  --brand-muted: #676B70;
+
+  --ink: var(--brand-graphite);
+  --muted: var(--brand-muted);
+  --line: var(--brand-line);
+  --line-soft: #E8E6E1;
+  --paper: var(--brand-surface);
+  --canvas: var(--brand-warm-white);
+  /* Internal names kept: --teal* now carry the brand red (rename to --accent* is a later follow-up). */
+  --teal: var(--brand-red);
+  --teal-dark: var(--brand-red-dark);
+  --teal-soft: var(--brand-red-tint);
   --amber: #a26715;
   --amber-soft: #f8efd9;
   --blue: #315f7a;
   --blue-soft: #e9f1f5;
-  --red: #a7473c;
+  --red: #B42318;
   --red-soft: #f8eae8;
   --green: #2d7254;
   --green-soft: #e6f2eb;
-  --sidebar: #173b40;
-  --shadow: 0 1px 2px rgba(23, 44, 52, .04), 0 8px 24px rgba(23, 44, 52, .035);
-  --shadow-pop: 0 12px 34px rgba(23, 44, 52, .2);
-  --radius: 2px;
-  --focus-ring: 3px solid rgba(23, 109, 104, .28);
+  --sidebar: var(--brand-graphite);
+  --sidebar-soft: var(--brand-graphite-soft);
+  --hover-neutral: #F1EFEA;
+  --shadow: 0 1px 2px rgba(23, 25, 29, .05), 0 6px 20px rgba(23, 25, 29, .04);
+  --shadow-pop: 0 12px 34px rgba(23, 25, 29, .22);
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-pill: 999px;
+  --focus-ring: 3px solid rgba(243, 182, 31, .55);
 
   /* Status tones: text on soft background. Always paired with a text label. */
-  --tone-neutral-fg: #44575a;
-  --tone-neutral-bg: #edf1f0;
+  --tone-neutral-fg: #4A4E53;
+  --tone-neutral-bg: #EEECE7;
   --tone-info-fg: #315f7a;
   --tone-info-bg: #e9f1f5;
   --tone-success-fg: #276d4e;
   --tone-success-bg: #e6f2eb;
   --tone-warning-fg: #7a4f0e;
   --tone-warning-bg: #f8efd9;
-  --tone-danger-fg: #9c443b;
+  --tone-danger-fg: #B42318;
   --tone-danger-bg: #f8eae8;
+  /* premium + in-progress/selected: gold tint, bronze ink, thin gold border */
+  --tone-premium-fg: var(--brand-gold-ink);
+  --tone-premium-bg: var(--brand-gold-tint);
+  --tone-premium-border: var(--brand-gold);
 
   /* Type scale (UI_PATTERNS.md). Phone/tablet overrides below. */
   --fs-display: 28px;
@@ -61,8 +88,9 @@
   --control-h: 40px;
   --control-h-sm: 32px;
   --control-h-lg: 48px;
-  --fg-placeholder: #6a7a7e;
-  --nav-fg: #e6efed;
+  --fg-placeholder: #6B6F74;
+  --nav-fg: #F6F4EF;
+  --caption-muted: #585D62;
   --banner-fg: #5f4310;
 
   /* Stacking order */
