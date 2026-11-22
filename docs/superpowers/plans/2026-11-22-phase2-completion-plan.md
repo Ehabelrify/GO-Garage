@@ -30,7 +30,7 @@ identity, no Replit control point changes, one integrated typecheck + tests + bu
 Integrated typecheck, tests, build; commit per package; update the Phase 2 progress table, Phase 1 log, handoff status board and
 activity log, MIGRATIONS.md and this plan's status below.
 
-## Status (23:35)
-- W1 done, W2 done, W4 done, committed (`b092ffe`, `b123c03`, `0e17c1f`).
-- W5 partly done by hand: `auth/route-rbac.test.ts` (4 tests). Drift guard, demo-actor route tests and the Visual flows for changed drawers are still open.
-- W3 (P2T-010 refresh bus) not started: its agent launch was refused by the permission classifier.
+## Status (23:45)
+- W1, W2, W3, W4, W5 done and committed. Gate: typecheck, 1817 tests, build; CI on `873d92a` green including the database job.
+- Remaining from this plan: nothing that can be closed from source without an owner decision, a database or a browser. The "cannot be closed" list above is the backlog.
+- Next session: push, run Visual checks (new flows included), add database integration tests for the new queries, fix contrast from the named elements, then re-assess statuses toward Verified.
