@@ -32,7 +32,7 @@ export function ReservationDetail({ lang, id, onChanged, canManage = false }: { 
   const store = useGarageStore();
   const lookups = useMemo(() => buildLookups(store.state, lang), [store.state, lang]);
   const canCorrect = canManage && (store.actor?.role === "owner" || store.actor?.role === "branch-manager");
-  const state = useLoader(() => reservationApi.detail(id), null as Awaited<ReturnType<typeof reservationApi.detail>> | null, (error) => commercialError(error, lang));
+  const state = useLoader(() => reservationApi.detail(id), null as Awaited<ReturnType<typeof reservationApi.detail>> | null, (error) => commercialError(error, lang), ["reservations", "bookings"]);
   const [from, setFrom] = useState(todayIso());
   const [to, setTo] = useState(addDays(todayIso(), 14));
   const [slots, setSlots] = useState<SlotAvailability | null>(null);

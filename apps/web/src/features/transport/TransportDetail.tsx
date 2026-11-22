@@ -1,3 +1,4 @@
+import { useInvalidation } from "../../shared/invalidation";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, Eye } from "lucide-react";
 import type { Locale, TransportStatus } from "@garage/domain";
@@ -52,6 +53,7 @@ export function TransportDetail({ id, lang, onChanged, canCoordinate = true, can
     }
   }, [id, onChanged, describe, lang]);
   useEffect(() => { setDetail(null); setContact(null); void load(); }, [id]);
+  useInvalidation(["transport"], () => { void load(); });
 
   const item = detail?.request;
   const closeDialog = () => { setNext(null); setReason(""); setStartsAt(""); setEndsAt(""); setEvidenceRef(""); setDialogError(""); };

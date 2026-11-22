@@ -21,7 +21,7 @@ export function ReserveOffer({ lang, quote: fixed, onReserved }: ReserveOfferPro
   const t = tr(lang);
   const store = useGarageStore();
   const lookups = useMemo(() => buildLookups(store.state, lang), [store.state, lang]);
-  const accepted = useLoader(loadAcceptedQuotes, [] as AcceptedChoice[], (error) => commercialError(error, lang));
+  const accepted = useLoader(loadAcceptedQuotes, [] as AcceptedChoice[], (error) => commercialError(error, lang), ["quotes"]);
   const [picked, setPicked] = useState<QuoteVersionRef[]>([]);
   const [promotion, setPromotion] = useState<PromotionInfo | null>(null);
   const [qualificationId, setQualificationId] = useState<string | null>(null);

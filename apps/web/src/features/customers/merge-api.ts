@@ -1,3 +1,4 @@
+import { invalidateForMutation } from "../../shared/invalidation";
 /** Client for the duplicate-customer endpoints (GET /api/customers/duplicates, /merges, POST /merge/preview, /merge, /merge/:id/undo). */
 export interface DupCustomer { id: string; name: string; phone: string; vehicles: { plate: string }[]; bookings: number }
 export interface DupReason { kind: "phone" | "plate" | "name"; detail: string }
@@ -26,6 +27,7 @@ async function call(url: string, init?: RequestInit): Promise<unknown> {
   }
   const body = await response.json().catch(() => null) as { code?: string; details?: unknown } | null;
   if (!response.ok) throw new MergeApiError(response.status, body?.code ?? "REQUEST_FAILED", body?.details);
+  invalidateForMutation(url, init?.method);
   return body;
 }
 const post = (url: string, payload: unknown) => call(url, { method: "POST", body: JSON.stringify(payload) });

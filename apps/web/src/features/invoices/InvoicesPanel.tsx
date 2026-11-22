@@ -23,7 +23,7 @@ export function InvoicesPanel({ lang, scope }: InvoicesPanelProps) {
   const [record, setRecord] = useUrlState("record", "");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
-  const list = useLoad(() => invoicesApi.list(scope ?? {}), [scope?.customerId, scope?.vehicleId, scope?.jobId]);
+  const list = useLoad(() => invoicesApi.list(scope ?? {}), [scope?.customerId, scope?.vehicleId, scope?.jobId], ["invoices", "finance", "jobs"]);
   const branchName = (id: string) => { const found = state?.branches.find((branch) => branch.id === id); return found ? branchDisplay(found.name, lang) : ""; };
   const rows = useMemo(() => (list.data?.invoices ?? []).filter((invoice) => {
     if (status !== "all" && invoice.status !== status) return false;

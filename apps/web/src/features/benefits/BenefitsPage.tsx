@@ -16,7 +16,7 @@ export function BenefitsPage({ lang, embedded = false }: { lang: Locale; embedde
   const store = useGarageStore();
   const canManage = useCanManageQuotes();
   const lookups = useMemo(() => buildLookups(store.state, lang), [store.state, lang]);
-  const list = useLoader(() => benefitApi.list(), [] as BenefitEntitlement[], (error) => commercialError(error, lang));
+  const list = useLoader(() => benefitApi.list(), [] as BenefitEntitlement[], (error) => commercialError(error, lang), ["benefits", "quotes", "reservations"]);
   const [record, setRecord] = useUrlState("record", "");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");

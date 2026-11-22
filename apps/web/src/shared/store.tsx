@@ -9,6 +9,7 @@ import {
   type PropsWithChildren,
 } from "react";
 import { useSavedLocale } from "./locale";
+import { invalidateForMutation, subscribeInvalidation } from "./invalidation";
 import type {
   BenefitEligibilityResult, BenefitEntitlement, EligibilityResult, FinancialMetricId, FinancialReport, FinancialSourceRow, MetricValue, MoneyEvent, MoneyEventKind, PromotionAllocation, QualificationEvidence, PolicyRef, ReportFilter, TransportRequest, TransportStatus, TransportWindow,
   AcceptedQuoteSnapshot, QuoteDraftInput, QuoteFollowup, QuoteRevision, QuoteVersionRef,
@@ -161,6 +162,7 @@ async function requestJson<T>(url: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     throw new ApiRequestError(data.code ?? "REQUEST_FAILED", data.message ?? "The request could not be completed.", response.status);
   }
+  invalidateForMutation(url, init.method);
   return data as T;
 }
 
@@ -235,13 +237,14 @@ export function GarageStoreProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<GarageState | null>(null);
   const { locale, setLocale: saveLocale } = useSavedLocale();
 
-  const refresh = useCallback(async (): Promise<"fresh" | "failed"> => {
+  const inflight = useRef<Promise<"fresh" | "failed"> | null>(null);
+  const runRefresh = useCallback(async (): Promise<"fresh" | "failed"> => {
     const sequence = ++refreshSequence.current;
     if (!hasAuthorizedData.current) setStatus("loading");
     try {
       const response = await requestJson<BootstrapResponse>("/api/bootstrap");
       if (sequence !== refreshSequence.current) return "failed";
-      setActor(response.actor);
+      setActor((previous) => (previous && JSON.stringify(previous) === JSON.stringify(response.actor) ? previous : response.actor));
       setState((current) => {
         const availableIds = response.state.branches.map((branch) => branch.id);
         const previousBranch = current?.currentBranch;
@@ -278,6 +281,15 @@ export function GarageStoreProvider({ children }: PropsWithChildren) {
     }
   }, [locale]);
 
+  // Concurrent callers (a mutation plus the invalidation it fires) share one bootstrap request.
+  const refresh = useCallback((): Promise<"fresh" | "failed"> => {
+    if (!inflight.current) {
+      const pending = runRefresh().finally(() => { if (inflight.current === pending) inflight.current = null; });
+      inflight.current = pending;
+    }
+    return inflight.current;
+  }, [runRefresh]);
+
   const completeMutation = useCallback(async <T extends object>(payload: T): Promise<T & { ok: true; refresh: "fresh" | "failed" }> => ({
     ...payload, ok: true, refresh: await refresh(),
   }), [refresh]);
@@ -285,6 +297,9 @@ export function GarageStoreProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Keeps the actor (capabilities) and core state fresh: on focus, every 60 s while visible, and after writes from any module.
+  useEffect(() => subscribeInvalidation(["permissions", "bookings", "jobs", "customers", "warranties", "invoices"], () => { void refresh(); }), [refresh]);
 
   const setLocale = useCallback((nextLocale: Locale) => {
     saveLocale(nextLocale);

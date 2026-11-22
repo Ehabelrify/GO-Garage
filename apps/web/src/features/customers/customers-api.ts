@@ -1,3 +1,4 @@
+import { invalidateForMutation } from "../../shared/invalidation";
 import { parse360, type Parsed360 } from "./customers-logic";
 
 export class RecordError extends Error {
@@ -20,7 +21,7 @@ export type WriteResult = { ok: true } | { ok: false; error: string; unsupported
 async function write(url: string, method: "PATCH" | "POST", payload: unknown): Promise<WriteResult> {
   try {
     const response = await fetch(url, { method, credentials: "same-origin", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(payload) });
-    if (response.ok) return { ok: true };
+    if (response.ok) { invalidateForMutation(url, method); return { ok: true }; }
     const body = await response.json().catch(() => ({})) as { code?: string };
     // An unrouted path answers 404/405 without a JSON code: the server endpoint is not available yet.
     return { ok: false, error: body.code ?? "REQUEST_FAILED", unsupported: !body.code && (response.status === 404 || response.status === 405) };

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetch360, RecordError } from "./customers-api";
+import { useInvalidation } from "../../shared/invalidation";
 import type { Parsed360 } from "./customers-logic";
 
 export type Record360State =
@@ -24,5 +25,7 @@ export function useRecord360(kind: "customer" | "vehicle", id: string): { state:
       });
     return () => controller.abort();
   }, [kind, id, tick]);
-  return { state, reload: useCallback(() => setTick((value) => value + 1), []) };
+  const reload = useCallback(() => setTick((value) => value + 1), []);
+  useInvalidation(["customers", "bookings", "invoices", "quotes", "jobs", "warranties"], reload);
+  return { state, reload };
 }

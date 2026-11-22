@@ -1,3 +1,4 @@
+import { invalidateForMutation } from "../../shared/invalidation";
 export interface InvoiceLine {
   id: string; position: number; kind: "package" | "service" | "add-on" | "transport" | "fee" | "other";
   descriptionEn: string; descriptionAr: string; quantity: number; unitMinor: number | null; discountMinor: number; taxMinor: number | null; amountMinor: number | null;
@@ -28,6 +29,7 @@ async function call<T>(url: string, init: RequestInit = {}): Promise<T> {
   }
   const body = await response.json().catch(() => ({})) as { code?: string } & T;
   if (!response.ok) throw new InvoiceApiError(response.status, body.code ?? "REQUEST_FAILED");
+  invalidateForMutation(url, init.method);
   return body;
 }
 const post = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });

@@ -43,7 +43,7 @@ export function FinancePage({ lang, branches }: { lang: Locale; branches: Branch
   const [reportBranch, setReportBranch] = useState(defaultBranch);
   const filter = useMemo<ReportFilter>(() => ({ branchId: reportBranch, ...range }), [reportBranch, range]);
 
-  const events = useLoad<MoneyEvent[]>(() => (canView ? financeApi.events() : Promise.resolve([])), [canView]);
+  const events = useLoad<MoneyEvent[]>(() => (canView ? financeApi.events() : Promise.resolve([])), [canView], ["finance", "invoices"]);
   const selected = events.data?.find((event) => event.id === recordId);
 
   if (!canView) {
@@ -114,7 +114,7 @@ function OverviewTab({ lang, filter, period, setPeriod, range, setRange, reportB
   onSources: (metric: FinancialMetricId) => void; canWrite: boolean;
 }) {
   const t = makeT(lang);
-  const report = useLoad<FinancialReport>(() => financeApi.report(filter), [filter.branchId, filter.from, filter.to, filter.groupBy]);
+  const report = useLoad<FinancialReport>(() => financeApi.report(filter), [filter.branchId, filter.from, filter.to, filter.groupBy], ["finance", "invoices"]);
   const lockedBranch = !branchChoice.all && branchChoice.branches.length === 1;
   const gap = report.data ? reconciliationGap(report.data.metrics) : null;
   const periodText = `${filter.from} – ${filter.to}`;
@@ -282,7 +282,7 @@ function RecordsTab({ lang, filter, metric, setMetric, lookups }: { lang: Locale
   const [extra, setExtra] = useState<{ key: string; rows: FinancialSourceRow[]; cursor: string | null }>({ key: "", rows: [], cursor: null });
   const [moreError, setMoreError] = useState("");
   const key = `${filter.branchId}|${filter.from}|${filter.to}|${filter.groupBy}|${metric}`;
-  const first = useLoad(() => financeApi.drilldown(filter, metric), [filter.branchId, filter.from, filter.to, filter.groupBy, metric]);
+  const first = useLoad(() => financeApi.drilldown(filter, metric), [filter.branchId, filter.from, filter.to, filter.groupBy, metric], ["finance", "invoices"]);
   const more = extra.key === key ? extra : { key, rows: [] as FinancialSourceRow[], cursor: null as string | null };
   const rows = [...(first.data?.rows ?? []), ...more.rows];
   const cursor = more.key === key && more.rows.length ? more.cursor : first.data?.nextCursor ?? null;

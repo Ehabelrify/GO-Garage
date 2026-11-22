@@ -41,7 +41,7 @@ export function QuoteWorkspace({ lang, embedded = false, creating: controlledCre
   const goTo = useOffersNav();
   const canManage = useCanManageQuotes();
   const lookups = useMemo(() => buildLookups(store.state, lang), [store.state, lang]);
-  const list = useLoader(async () => latestPerQuote(await quoteApi.list()), [] as QuoteRow[], (error) => commercialError(error, lang));
+  const list = useLoader(async () => latestPerQuote(await quoteApi.list()), [] as QuoteRow[], (error) => commercialError(error, lang), ["quotes", "reservations"]);
   const [record, setRecord] = useUrlState("record", "");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
@@ -138,8 +138,8 @@ function QuoteDrawerBody({ lang, quote, lookups, accepted, onChanged, goTo, canM
 }) {
   const t = tr(lang);
   const isAccepted = quote.state === "accepted";
-  const reservations = useLoader(async () => isAccepted ? (await reservationApi.list()).filter((row) => row.reservation?.acceptedQuote.quoteId === quote.ref.quoteId) : [], [] as ReservationRow[], (error) => commercialError(error, lang));
-  const benefits = useLoader(async () => isAccepted ? (await benefitApi.list()).filter((row) => row.sourceQuote.quoteId === quote.ref.quoteId) : [], [] as BenefitEntitlement[], (error) => commercialError(error, lang));
+  const reservations = useLoader(async () => isAccepted ? (await reservationApi.list()).filter((row) => row.reservation?.acceptedQuote.quoteId === quote.ref.quoteId) : [], [] as ReservationRow[], (error) => commercialError(error, lang), ["reservations", "quotes"]);
+  const benefits = useLoader(async () => isAccepted ? (await benefitApi.list()).filter((row) => row.sourceQuote.quoteId === quote.ref.quoteId) : [], [] as BenefitEntitlement[], (error) => commercialError(error, lang), ["benefits", "quotes"]);
   const [justAccepted, setJustAccepted] = useState(false);
   const [reserving, setReserving] = useState(false);
   return <div className="qo-stack qo-drawer-pad">

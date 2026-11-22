@@ -3,6 +3,7 @@ import type { Configured, Money, PackageVersion, PolicyRef, QualificationEvidenc
 import type { Bilingual } from "./quote-logic";
 import { humaniseKey, knownPolicyName, policyKey } from "./policy-names";
 import { quoteApi } from "../../shared/store";
+import { invalidateForMutation, useInvalidation, type InvalidationTopic } from "../../shared/invalidation";
 
 /** GET returning null on 401/403/404 (feature unavailable for this role or not built yet); throws on other failures. */
 export async function getJson<T>(url: string): Promise<T | null> {
@@ -17,6 +18,7 @@ async function postJson<T>(url: string, body: unknown): Promise<{ ok: true; data
     const response = await fetch(url, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return { ok: false, status: response.status, code: String((data as { code?: unknown }).code ?? "REQUEST_FAILED") };
+    invalidateForMutation(url, "POST");
     return { ok: true, data: data as T };
   } catch {
     return { ok: false, status: 0, code: "WRITE_OUTCOME_UNKNOWN" };
@@ -149,7 +151,7 @@ export async function loadPromotions(lang: "ar" | "en"): Promise<PromotionInfo[]
 export interface AsyncList<T> { data: T; loading: boolean; error: string | null; reload: () => void }
 
 /** Loads on mount and whenever `reload` is called. Keeps the previous data while reloading. */
-export function useLoader<T>(load: () => Promise<T>, initial: T, describe: (error: unknown) => string): AsyncList<T> {
+export function useLoader<T>(load: () => Promise<T>, initial: T, describe: (error: unknown) => string, topics: readonly InvalidationTopic[] = []): AsyncList<T> {
   const [data, setData] = useState<T>(initial);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -166,7 +168,9 @@ export function useLoader<T>(load: () => Promise<T>, initial: T, describe: (erro
     return () => { live = false; };
   }, []);
   useEffect(() => run(), [run]);
-  return { data, loading, error, reload: () => { run(); } };
+  const reload = () => { run(); };
+  useInvalidation(topics, reload);
+  return { data, loading, error, reload };
 }
 
 /** Accepted quotes (the only quotes that can be reserved or carry benefits). */

@@ -24,7 +24,7 @@ export function ReservationsPage({ lang, embedded = false, adding: controlledAdd
   const t = tr(lang);
   const store = useGarageStore();
   const lookups = useMemo(() => buildLookups(store.state, lang), [store.state, lang]);
-  const list = useLoader(() => reservationApi.list(), [] as ReservationRow[], (error) => commercialError(error, lang));
+  const list = useLoader(() => reservationApi.list(), [] as ReservationRow[], (error) => commercialError(error, lang), ["reservations", "quotes", "bookings"]);
   const [record, setRecord] = useUrlState("record", "");
   const canManage = useCanManageQuotes();
   const [ownAdding, setOwnAdding] = useState(false);

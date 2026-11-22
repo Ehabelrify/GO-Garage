@@ -1,3 +1,4 @@
+import { useInvalidation } from "../../shared/invalidation";
 import { useEffect, useMemo, useState } from "react";
 import type { Branch, Locale, QuoteRevision } from "@garage/domain";
 import { quoteApi, reservationApi, useGarageStore } from "../../shared/store";
@@ -48,12 +49,14 @@ export function useFinanceLookups(branches: Branch[], lang: Locale): FinanceLook
   const state = useMemo(() => ({ customers: garageState?.customers ?? [], jobs: garageState?.jobs ?? [] }), [garageState?.customers, garageState?.jobs]);
   const [quoteRows, setQuoteRows] = useState<Array<QuoteRevision & { branchId?: string }>>([]);
   const [reservationRows, setReservationRows] = useState<Array<{ id: string; branchId: string; beneficiaryId: string; vehicleId: string }>>([]);
+  const [lookupTick, setLookupTick] = useState(0);
+  useInvalidation(["quotes", "reservations"], () => setLookupTick((value) => value + 1));
   useEffect(() => {
     let current = true;
     void quoteApi.list().then((rows) => { if (current) setQuoteRows(rows); }).catch(() => undefined);
     void reservationApi.list().then((rows) => { if (current) setReservationRows(rows); }).catch(() => undefined);
     return () => { current = false; };
-  }, []);
+  }, [lookupTick]);
   return useMemo(() => {
     const customerName = (id: string) => state.customers.find((customer) => customer.id === id)?.name;
     const plateOf = (vehicleId: string) => state.customers.flatMap((customer) => customer.vehicles).find((vehicle) => vehicle.id === vehicleId)?.plate;

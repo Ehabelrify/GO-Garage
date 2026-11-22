@@ -1,3 +1,4 @@
+import { useInvalidation } from "../../shared/invalidation";
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Save, Trash2 } from "lucide-react";
 import { currencyDefinition, currencyExponent, formatPlateDisplay, supportedCurrencies, type Locale } from "@garage/domain";
@@ -39,11 +40,12 @@ export function InvoiceDrawer({ lang, invoiceId, onClose, onChanged }: Props) {
   const [reason, setReason] = useState("");
   const [pay, setPay] = useState({ amount: "", method: "cash" as (typeof methods)[number], reference: "", receivedOn: new Date().toISOString().slice(0, 10) });
 
-  const load = async (id: string) => {
-    setLoading(true); setError("");
-    try { setDetail(await invoicesApi.get(id)); } catch (failure) { setDetail(null); setError(errorCopy(failure instanceof InvoiceApiError ? failure.code : "", lang)); } finally { setLoading(false); }
+  const load = async (id: string, quiet = false) => {
+    if (!quiet) { setLoading(true); setError(""); }
+    try { setDetail(await invoicesApi.get(id)); } catch (failure) { if (quiet) return; setDetail(null); setError(errorCopy(failure instanceof InvoiceApiError ? failure.code : "", lang)); } finally { setLoading(false); }
   };
   useEffect(() => { setEditing(false); setConfirm(null); if (invoiceId) void load(invoiceId); else setDetail(null); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [invoiceId]);
+  useInvalidation(["invoices"], () => { if (invoiceId && !editing) void load(invoiceId, true); });
 
   const invoice = detail?.invoice;
   const exponent = currencyExponent(editing ? currency : invoice?.currency);

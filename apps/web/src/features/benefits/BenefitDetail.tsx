@@ -17,7 +17,7 @@ export function BenefitDetail({ id, lang, onChanged, canManage = false }: { id: 
   const t = tr(lang);
   const store = useGarageStore();
   const lookups = useMemo(() => buildLookups(store.state, lang), [store.state, lang]);
-  const state = useLoader(() => benefitApi.detail(id), null as Awaited<ReturnType<typeof benefitApi.detail>> | null, (error) => commercialError(error, lang));
+  const state = useLoader(() => benefitApi.detail(id), null as Awaited<ReturnType<typeof benefitApi.detail>> | null, (error) => commercialError(error, lang), ["benefits"]);
   const detail = state.data;
   const item = detail?.entitlement;
   const [on, setOn] = useState(todayIso());

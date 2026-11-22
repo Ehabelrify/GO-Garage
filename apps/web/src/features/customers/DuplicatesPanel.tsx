@@ -1,3 +1,4 @@
+import { useInvalidation } from "../../shared/invalidation";
 import { useCallback, useEffect, useState } from "react";
 import type { Locale } from "@garage/domain";
 import { DataTable, DateText, EmptyState, Notice, Phone, Plate, RecordRef, type Column } from "../../shared/components";
@@ -33,6 +34,7 @@ export function DuplicatesPanel({ lang, notify }: { lang: Locale; notify: (messa
     } catch (e) { setError(mergeErrorMessage(e, lang)); } finally { setLoading(false); }
   }, [lang]);
   useEffect(() => { void load(); }, [load]);
+  useInvalidation(["customers"], () => { void load(); });
 
   const person = (customer: DupCustomer) => <span className="merge-person"><RecordRef type="customer" id={customer.id} label={customer.name} /><Phone value={customer.phone} />
     <span className="plate-chips">{customer.vehicles.slice(0, 3).map((v, i) => <Plate key={i} value={v.plate} />)}</span></span>;

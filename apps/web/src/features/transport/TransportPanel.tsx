@@ -3,6 +3,7 @@ import { hasCapability } from "../../shared/capabilities";
 import { Plus } from "lucide-react";
 import type { Locale, TransportDirection, TransportMode, TransportRequest } from "@garage/domain";
 import { transportApi, useGarageStore } from "../../shared/store";
+import { useInvalidation } from "../../shared/invalidation";
 import { DataTable, DateText, DetailDrawer, EmptyState, Field, FilterBar, FormSection, PageHeader, RecordRef, RequiredNote, Select, StatusBadge } from "../../shared/components";
 import { customerDisplay, dateLabel } from "../../shared/ui";
 import { TransportDetail } from "./TransportDetail";
@@ -54,6 +55,7 @@ export function TransportPanel({ lang, bookingId, header }: TransportPanelProps)
     }
   }, [lang]);
   useEffect(() => { void load(); }, [load]);
+  useInvalidation(["transport", "bookings"], () => { void load(); });
 
   const bookings = useMemo(() => (state?.bookings ?? []).filter((booking) => (state?.currentBranch === "all" || booking.branchId === state?.currentBranch) && booking.status !== "cancelled" && booking.status !== "no-show"), [state?.bookings, state?.currentBranch]);
   const customerOf = (customerId: string) => state?.customers.find((customer) => customer.id === customerId);
