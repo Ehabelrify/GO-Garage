@@ -8,7 +8,7 @@ import type { BranchId, Booking } from "@garage/domain";
 import { canAccessBranch, canAccessJob, canManageBookings, canManageSettings, canManageStaff, capabilities, ownerOnlyCapabilities, roleDefaultCapabilities, sanitizeOverrides, type GarageRole } from "../auth/authz";
 import { requireMembership, actorFor } from "../auth/auth";
 import { loadGarageBootstrap } from "./bootstrap";
-import { recordAuditEvent } from "../audit/audit-writer";
+import { recordAuditEvent, recordStaffCustomerAudit } from "../audit/audit-writer";
 import { customerPatchSchema, customerVehicleSchema, findDuplicatePlate, normalizePhone, plateField, splitMakeModel } from "./customer-edit";
 import { pool, withTransaction } from "../../infrastructure/database/db";
 import { dateOnlyFromSql } from "../../infrastructure/database/date-only";
@@ -45,6 +45,7 @@ import { invoiceRouter } from "../invoicing/invoice-routes";
 import { intakeRouter } from "../intake/intake-routes";
 import { auditApiRouter } from "../audit/audit-routes";
 import { remindersRouter } from "../reminders/reminder-routes";
+import { documentDeliveryRouter } from "../document-delivery/document-delivery-routes";
 import { customerMergeRouter } from "../customer-merge/merge-routes";
 import { techRouter, authorizeReadyInTransaction } from "../workshop-tech/tech-routes";
 import { autoGenerateInvoiceForDeliveredJob } from "../invoicing/invoice-service";
@@ -153,6 +154,7 @@ router.use("/invoices", invoiceRouter);
 router.use("/intake", intakeRouter);
 router.use(auditApiRouter);
 router.use("/reminders", remindersRouter);
+router.use("/document-delivery", documentDeliveryRouter);
 router.use("/customers", customerMergeRouter);
 router.use("/jobs", techRouter);
 router.use(relationsRouter);
@@ -267,6 +269,7 @@ router.post("/customers", async (req, res) => {
         "INSERT INTO vehicles (id, customer_id, make, model, year, plate) VALUES ($1, $2, $3, $4, $5, $6)",
         [vehicleId, customerId, make, model || "Vehicle", year, formatPlateDisplay(plate)],
       );
+      await recordStaffCustomerAudit(client, { entityKind: "customer", entityId: customerId, action: "created", branchId, summary: `Customer ${name} created with one vehicle`, actorUserId: currentActor.userId });
     });
   } catch (error) {
     if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
@@ -298,10 +301,17 @@ router.patch("/customers/:id", async (req, res) => {
   if (!normalizedPhone) return routeError(res, 400, "INVALID_PHONE", "Enter a valid phone number.");
   if (!await editableCustomer(currentActor, req.params.id)) return routeError(res, 404, "CUSTOMER_NOT_FOUND", "Customer not found.");
   try {
-    await pool.query(
-      "UPDATE customers SET name=$2, phone=$3, phone_normalized=$4, preferred_language=$5 WHERE id=$1",
-      [req.params.id, parsed.data.name, parsed.data.phone, normalizedPhone, parsed.data.language],
-    );
+    await withTransaction(async (client) => {
+      const before = await client.query<{ name: string; phone: string; preferred_language: string }>(
+        "SELECT name, phone, preferred_language FROM customers WHERE id=$1 FOR UPDATE", [req.params.id]);
+      await client.query(
+        "UPDATE customers SET name=$2, phone=$3, phone_normalized=$4, preferred_language=$5 WHERE id=$1",
+        [req.params.id, parsed.data.name, parsed.data.phone, normalizedPhone, parsed.data.language],
+      );
+      const old = before.rows[0];
+      const changed = [old?.name !== parsed.data.name && "name", old?.phone !== parsed.data.phone && "phone", old?.preferred_language !== parsed.data.language && "language"].filter(Boolean);
+      await recordStaffCustomerAudit(client, { entityKind: "customer", entityId: req.params.id, action: "edited", summary: `Fields changed: ${changed.join(", ") || "none"}`, actorUserId: currentActor.userId });
+    });
   } catch (error) {
     if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
       return routeError(res, 409, "DUPLICATE_PHONE", "A customer with this phone number already exists.");
@@ -742,12 +752,16 @@ router.post("/staff/invitations", async (req, res) => {
   );
   if (existing.rowCount) return routeError(res, 409, "EMAIL_ALREADY_APPROVED", "This email already has access or a pending approval.");
   const id = `invited:${randomUUID()}`;
-  const created = await pool.query<{ createdAt: string }>(
-    `INSERT INTO staff_memberships (clerk_user_id, email, full_name, role, branch_ids, status, invited_by)
-     VALUES ($1, $2, '', $3, $4::text[], 'invited', $5)
-     RETURNING created_at AS "createdAt"`,
-    [id, email, role, uniqueBranchIds, currentActor.userId],
-  );
+  const created = await withTransaction(async (client) => {
+    const row = await client.query<{ createdAt: string }>(
+      `INSERT INTO staff_memberships (clerk_user_id, email, full_name, role, branch_ids, status, invited_by)
+       VALUES ($1, $2, '', $3, $4::text[], 'invited', $5)
+       RETURNING created_at AS "createdAt"`,
+      [id, email, role, uniqueBranchIds, currentActor.userId],
+    );
+    await recordStaffCustomerAudit(client, { entityKind: "staff", entityId: id, action: "invited", branchId: uniqueBranchIds[0], summary: `Invited as ${role} for branches ${uniqueBranchIds.join(", ")}`, actorUserId: currentActor.userId });
+    return row;
+  });
   res.status(201).json({ id, email, role, branchIds: uniqueBranchIds, status: "invited", createdAt: created.rows[0].createdAt });
 });
 
@@ -755,10 +769,11 @@ router.delete("/staff/invitations/:invitationId", async (req, res) => {
   const currentActor = actor(req);
   if (!canManageStaff(currentActor)) return forbidden(res);
   if (currentActor.isDemo) return routeError(res, 403, "DEMO_ACTION_DISABLED", "Staff pre-approval is unavailable in a temporary demo session.");
-  const removed = await pool.query(
-    "DELETE FROM staff_memberships WHERE clerk_user_id = $1 AND status = 'invited'",
-    [req.params.invitationId],
-  );
+  const removed = await withTransaction(async (client) => {
+    const result = await client.query("DELETE FROM staff_memberships WHERE clerk_user_id = $1 AND status = 'invited'", [req.params.invitationId]);
+    if (result.rowCount) await recordStaffCustomerAudit(client, { entityKind: "staff", entityId: req.params.invitationId, action: "invitation-cancelled", summary: "Pending invitation cancelled", actorUserId: currentActor.userId });
+    return result;
+  });
   if (!removed.rowCount) return routeError(res, 404, "INVITATION_NOT_FOUND", "Pending approval not found.");
   res.json({ ok: true });
 });
@@ -780,10 +795,13 @@ router.put("/staff/:userId/permissions", async (req, res) => {
   if (target.rows[0].role === "owner") return routeError(res, 409, "OWNER_NOT_EDITABLE", "Owner permissions cannot be changed.");
   if (req.params.userId.startsWith("demo-")) return routeError(res, 409, "DEMO_NOT_EDITABLE", "Demo identities keep fixed role permissions.");
   const permissions = sanitizeOverrides(target.rows[0].role, parsed.data.permissions);
-  await pool.query(
-    "UPDATE staff_memberships SET permissions = $2::jsonb, updated_at = now() WHERE clerk_user_id = $1",
-    [req.params.userId, JSON.stringify(permissions)],
-  );
+  await withTransaction(async (client) => {
+    await client.query(
+      "UPDATE staff_memberships SET permissions = $2::jsonb, updated_at = now() WHERE clerk_user_id = $1",
+      [req.params.userId, JSON.stringify(permissions)],
+    );
+    await recordStaffCustomerAudit(client, { entityKind: "staff", entityId: req.params.userId, action: "permissions-changed", summary: `Capability overrides set: ${Object.keys(permissions).sort().join(", ") || "none"}`, actorUserId: currentActor.userId });
+  });
   res.json({ ok: true, permissions });
 });
 
@@ -806,10 +824,13 @@ router.delete("/staff/:userId", async (req, res) => {
     );
     if (!owners.rowCount) return routeError(res, 409, "LAST_OWNER", "At least one active owner must remain.");
   }
-  await pool.query(
-    "UPDATE staff_memberships SET status = 'inactive', updated_at = now() WHERE clerk_user_id = $1",
-    [req.params.userId],
-  );
+  await withTransaction(async (client) => {
+    await client.query(
+      "UPDATE staff_memberships SET status = 'inactive', updated_at = now() WHERE clerk_user_id = $1",
+      [req.params.userId],
+    );
+    await recordStaffCustomerAudit(client, { entityKind: "staff", entityId: req.params.userId, action: "access-removed", summary: `Access removed (role ${target.rows[0].role})`, actorUserId: currentActor.userId });
+  });
   let sessionsRevoked = true;
   try {
     const sessionIds: string[] = [];

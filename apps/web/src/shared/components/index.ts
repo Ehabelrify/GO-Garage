@@ -32,6 +32,7 @@ export {
 } from "../search";
 export { DocumentSheet, PrintButton, PrintHost, printDocument } from "../print/DocumentSheet";
 export { documentLabels, type DocumentModel, type DocumentLine, type DocumentTotal, type DocumentParty, type DocumentVehicle } from "../print/document-model";
+export { SendToCustomer, type SendToCustomerProps } from "./SendToCustomer";
 export { SavedViewsMenu, type SavedViewsBinding } from "./SavedViews";
 export { BulkRunDialog, type BulkRunDialogProps } from "./BulkRunDialog";
 export { runBulk, summariseOutcomes, type BulkOutcome } from "../selection";

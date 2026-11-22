@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus, Save, Trash2 } from "lucide-react";
 import { currencyDefinition, currencyExponent, formatPlateDisplay, supportedCurrencies, type Locale } from "@garage/domain";
 import {
-  Amount, ConfirmDialog, DateText, DetailDrawer, Field, FormSection, Notice, PrintButton, PrintHost, RecordRef, Skeleton, type DocumentModel,
+  Amount, ConfirmDialog, DateText, DetailDrawer, Field, FormSection, Notice, PrintButton, PrintHost, RecordRef, SendToCustomer, Skeleton, type DocumentModel,
 } from "../../shared/components";
 import { useGarageStore } from "../../shared/store";
 import { branchDisplay, customerDisplay } from "../../shared/ui";
@@ -85,6 +85,7 @@ export function InvoiceDrawer({ lang, invoiceId, onClose, onChanged }: Props) {
 
   const footer = invoice && doc ? <>
     <span data-testid="print-invoice" className="invoice-print"><PrintButton lang={lang} label={t("Print", "طباعة")} /></span>
+    {invoice.status !== "draft" && invoice.status !== "void" && <SendToCustomer lang={lang} documentKind="invoice" documentId={invoice.id} />}
     {detail?.canWrite && invoice.status === "draft" && !editing && <button type="button" className="btn" onClick={startEdit}>{t("Edit lines", "تعديل البنود")}</button>}
     {editing && <button type="button" className="btn btn-primary" disabled={busy || !parsed.valid} onClick={() => void save()}><Save size={14} aria-hidden="true" />{busy ? t("Saving…", "جارٍ الحفظ…") : t("Save draft", "حفظ المسودة")}</button>}
     {editing && <button type="button" className="btn" disabled={busy} onClick={() => setEditing(false)}>{t("Cancel", "إلغاء")}</button>}

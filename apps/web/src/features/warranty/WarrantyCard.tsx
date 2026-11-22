@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Printer } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import type { WarrantyRecord } from "@garage/domain";
-import { DetailDrawer, Notice, Plate } from "../../shared/components";
+import { DetailDrawer, Notice, Plate, SendToCustomer } from "../../shared/components";
 import { buildWarrantyCard, cardLabels, liveToken, type CardVariant, type WarrantyCardModel } from "./warranty-card";
 import { verificationReady } from "./warranty-logic";
 import { usePrintRequest } from "./warranty-print-request";
@@ -88,8 +88,8 @@ export function WarrantyCardDrawer({ scope, records, onClose }: { scope: Warrant
   return <DetailDrawer open onClose={onClose} lang={lang} wide
     title={records.length === 1 ? t("Warranty card", "بطاقة الضمان") : t("Warranty cards", "بطاقات الضمان")}
     subtitle={records.length === 1 ? scope.customerName(records[0].customerId) : t(`${records.length} cards`, `${records.length} بطاقة`)}
-    footer={<button className="btn btn-primary w-nowrap" type="button" disabled={busy || printing || !models.length} onClick={() => void print()}>
-      <Printer size={15} aria-hidden="true" />{busy ? t("Logging…", "جارٍ التسجيل…") : live.length ? t("Print or reprint", "طباعة أو إعادة طباعة") : t("Print", "طباعة")}</button>}>
+    footer={<>{records.length === 1 && records[0].status === "active" && <SendToCustomer lang={lang} documentKind="warranty-card" documentId={records[0].id} verificationToken={liveToken(records[0].id)} />}<button className="btn btn-primary w-nowrap" type="button" disabled={busy || printing || !models.length} onClick={() => void print()}>
+      <Printer size={15} aria-hidden="true" />{busy ? t("Logging…", "جارٍ التسجيل…") : live.length ? t("Print or reprint", "طباعة أو إعادة طباعة") : t("Print", "طباعة")}</button></>}>
     <div className="wc-variants" role="group" aria-label={t("Card size", "حجم البطاقة")}>
       <button type="button" className={`btn btn-sm${variant === "card" ? " btn-primary" : ""}`} aria-pressed={variant === "card"} onClick={() => setVariant("card")}>{t("Card 85.6 x 54 mm", "بطاقة 85.6 × 54 مم")}</button>
       <button type="button" className={`btn btn-sm${variant === "a5" ? " btn-primary" : ""}`} aria-pressed={variant === "a5"} onClick={() => setVariant("a5")}>{t("A5 certificate", "شهادة A5")}</button>

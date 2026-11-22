@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import type { BenefitEntitlement, Locale, QuoteDraftInput } from "@garage/domain";
 import { benefitApi, quoteApi, reservationApi, useGarageStore } from "../../shared/store";
-import { Amount, Collapsible, DataTable, DateText, DetailDrawer, EmptyState, FilterBar, PageHeader, Plate, RecordRef, Skeleton, StatusBadge, TabBar, TabPanel, useUrlState, type Column } from "../../shared/components";
+import { Amount, Collapsible, DataTable, DateText, DetailDrawer, EmptyState, FilterBar, PageHeader, Plate, RecordRef, SendToCustomer, Skeleton, StatusBadge, TabBar, TabPanel, useUrlState, type Column } from "../../shared/components";
 import { BenefitsPage } from "../benefits/BenefitsPage";
 import { benefitName } from "../benefits/benefit-logic";
 import { PromotionsPage } from "../promotions/PromotionsPage";
@@ -107,6 +107,7 @@ export function QuoteWorkspace({ lang, embedded = false, creating: controlledCre
       subtitle={open ? `${lookups.plate(open.input.vehicle.vehicleId)} · ${t("Revision", "المراجعة")} ${open.ref.revision}`.replace(/^ · /, "") : undefined}
       footer={open ? <>
         <QuotePrintControls lang={lang} quote={open} lookups={lookups} />
+        {(open.state === "offered" || open.state === "accepted") && <SendToCustomer lang={lang} documentKind="quote" documentId={open.ref.quoteId} />}
         {canManage && open.state !== "accepted" && <>
           {open.state === "offered" && open.followup.status !== "answered" && <button type="button" className="btn" onClick={() => void markAnswered(open)}>{t("Mark follow-up answered", "تحديد المتابعة كمُجاب عنها")}</button>}
           <button type="button" className="btn btn-primary" onClick={() => { setMessage(""); setForm({ base: { ...open.input, priorRevision: open.ref, quoteId: open.ref.quoteId, state: "draft" } }); }}>{t("Revise", "مراجعة جديدة")}</button>

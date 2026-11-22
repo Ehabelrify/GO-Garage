@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { BadgeCheck, Printer, QrCode } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import type { WarrantyRecord } from "@garage/domain";
-import { ConfirmDialog, DataTable, DetailDrawer, EmptyState, FilterBar, Notice, type Column } from "../../shared/components";
+import { ConfirmDialog, DataTable, DetailDrawer, EmptyState, FilterBar, Notice, SendToCustomer, type Column } from "../../shared/components";
 import { WarrantyVerificationCard } from "./PublicWarrantyVerificationPage";
 import { startWarrantyPrint } from "./warranty-print";
 import { forgetLiveToken, rememberLiveToken } from "./warranty-card";
@@ -114,6 +114,7 @@ export function QrTab({ scope }: { scope: WarrantyScope }) {
           onClick={() => record.verificationTokenActive ? setAction({ kind: "replace", record }) : void create(record)}>
           <QrCode size={15} />{busyId === record.id ? t("Preparing…", "جارٍ التجهيز…") : record.verificationTokenActive ? t("Replace code", "استبدال الرمز") : t("Prepare QR card", "تجهيز كارت QR")}</button>}
         {liveCode && <button className="btn" type="button" disabled={printing} onClick={() => void print(record)}><Printer size={15} aria-hidden="true" />{printing ? t("Logging…", "جارٍ التسجيل…") : t("Print", "طباعة")}</button>}
+        {record.status === "active" && <SendToCustomer lang={lang} documentKind="warranty-card" documentId={record.id} verificationToken={liveCode?.token} />}
       </>}>
       <p className="form-hint">{liveCode
         ? t("Shown once. Print the card now.", "تظهر مرة واحدة. اطبع الكارت الآن.")

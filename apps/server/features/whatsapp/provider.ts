@@ -35,3 +35,24 @@ export class DisconnectedProviderAdapter implements ProviderAdapter {
 export function providerAdapter(): ProviderAdapter {
   return new DisconnectedProviderAdapter();
 }
+
+/**
+ * Simulation path for document delivery (owner decision 22 Nov 2026: messaging stays simulated with full
+ * functionality until the Meta APIs are connected). It is NOT a connected provider: `connected` stays false so the
+ * status API remains honest, and a result from it is always recorded as "sent-simulated", never as delivered.
+ */
+export class SimulatedProviderAdapter implements ProviderAdapter {
+  readonly connected = false;
+  async send(input: { idempotencyKey: string }): Promise<ProviderSendResult> {
+    return { state: "accepted", providerMessageId: `simulated:${input.idempotencyKey}` };
+  }
+}
+
+/**
+ * Adapter used by document delivery. A real adapter (connected=true) is used as soon as providerAdapter() returns one;
+ * otherwise the simulation path completes the flow. Swapping in Meta needs only providerAdapter() and its env variables.
+ */
+export function deliveryAdapter(): ProviderAdapter {
+  const real = providerAdapter();
+  return real.connected ? real : new SimulatedProviderAdapter();
+}
