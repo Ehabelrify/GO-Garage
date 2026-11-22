@@ -1,12 +1,13 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useLocation, useSearchParams } from "wouter";
 import { Plus, ScanLine } from "lucide-react";
-import type { BranchId } from "@garage/domain";
+import { formatPlateDisplay, type BranchId } from "@garage/domain";
 import {
   DataTable, DateText, DetailDrawer, EmptyState, FilterBar, PageHeader, RecordRef, TabBar, TabPanel, resolveWarrantyCode, useUrlState,
   type Column, type ResolvedWarranty,
 } from "../../shared/components";
 import { hasCapability } from "../../shared/capabilities";
+import { DuplicatesPanel } from "./DuplicatesPanel";
 import { SpecialRequestsPanel } from "../special-requests/SpecialRequestsPanel";
 import { useGarageStore } from "../../shared/store";
 import { customerDisplay, type PageProps } from "../../shared/ui";
@@ -52,7 +53,8 @@ export function CustomersPage({ lang, t, state, notify }: CustomersPageProps) {
   const [lookup, setLookup] = useState<LookupState>({ status: "idle" });
   const [tabValue, setTab] = useUrlState("tab", "customers");
   const canSeeRequests = hasCapability(actor, "bookings.manage");
-  const tab = tabValue === "requests" && canSeeRequests ? "requests" : "customers";
+  const canSeeDuplicates = hasCapability(actor, "settings.manage");
+  const tab = tabValue === "requests" && canSeeRequests ? "requests" : tabValue === "duplicates" && canSeeDuplicates ? "duplicates" : "customers";
 
   const all = state.customers;
   const rows = useMemo(() => filterCustomers(all, query).filter((customer) => language === "all" || customer.language === language), [all, query, language]);
@@ -96,9 +98,9 @@ export function CustomersPage({ lang, t, state, notify }: CustomersPageProps) {
   };
 
   const columns: Column<Row>[] = [
-    { key: "name", header: t("Customer", "العميل"), sortable: true, primary: true, sortValue: (row) => row.name, render: (row) => customerDisplay(row.name, lang) },
-    { key: "phone", header: t("Phone", "الهاتف"), mono: true, render: (row) => <PhoneCell phone={row.phone} lang={lang} /> },
-    { key: "vehicles", header: t("Vehicles", "المركبات"), sortable: true, sortValue: (row) => row.vehicles.length, render: (row) => <PlateChips vehicles={row.vehicles.map((vehicle) => ({ id: vehicle.id, plate: vehicle.plate }))} lang={lang} /> },
+    { key: "name", header: t("Customer", "العميل"), sortable: true, primary: true, sortValue: (row) => row.name, csv: (row) => row.name, render: (row) => customerDisplay(row.name, lang) },
+    { key: "phone", header: t("Phone", "الهاتف"), mono: true, csv: (row) => row.phone, render: (row) => <PhoneCell phone={row.phone} lang={lang} /> },
+    { key: "vehicles", header: t("Vehicles", "المركبات"), csv: (row) => row.vehicles.map((vehicle) => formatPlateDisplay(vehicle.plate)).join(" | "), sortable: true, sortValue: (row) => row.vehicles.length, render: (row) => <PlateChips vehicles={row.vehicles.map((vehicle) => ({ id: vehicle.id, plate: vehicle.plate }))} lang={lang} /> },
     { key: "lastVisit", header: t("Last visit", "آخر زيارة"), sortable: true, sortValue: (row) => stats.get(row.id)?.lastVisit ?? "", render: (row) => <DateText value={stats.get(row.id)?.lastVisit} lang={lang} /> },
     { key: "openJobs", header: t("Open jobs", "أوامر مفتوحة"), numeric: true, sortable: true, sortValue: (row) => stats.get(row.id)?.openJobs ?? 0, render: (row) => stats.get(row.id)?.openJobs ?? 0 },
   ];
@@ -119,10 +121,13 @@ export function CustomersPage({ lang, t, state, notify }: CustomersPageProps) {
         <button type="button" className="btn cust-nowrap" aria-expanded={scanOpen} aria-label={lookupLabel} title={lookupLabel} onClick={() => setScanOpen((value) => !value)}><ScanLine size={18} aria-hidden="true" /></button>
         {addButton}
       </> : undefined}
-      tabs={canSeeRequests ? <TabBar ariaLabel={t("Customers", "العملاء")} idPrefix="cust" value={tab} onChange={setTab}
-        tabs={[{ id: "customers", label: t("Customers", "العملاء") }, { id: "requests", label: t("Special requests", "الطلبات الخاصة") }]} /> : undefined}
+      tabs={canSeeRequests || canSeeDuplicates ? <TabBar ariaLabel={t("Customers", "العملاء")} idPrefix="cust" value={tab} onChange={setTab}
+        tabs={[{ id: "customers", label: t("Customers", "العملاء") },
+          ...(canSeeRequests ? [{ id: "requests", label: t("Special requests", "الطلبات الخاصة") }] : []),
+          ...(canSeeDuplicates ? [{ id: "duplicates", label: t("Duplicates", "التكرارات") }] : [])]} /> : undefined}
     />
     <TabPanel idPrefix="cust" id="requests" active={tab === "requests"}><SpecialRequestsPanel lang={lang} notify={notify} /></TabPanel>
+    {tab === "duplicates" && <TabPanel idPrefix="cust" id="duplicates" active><DuplicatesPanel lang={lang} notify={notify} /></TabPanel>}
     {tab === "customers" && <TabPanel idPrefix="cust" id="customers" active>
     {scanOpen && <form className="cust-lookup" onSubmit={(event) => void scan(event)} role="search" aria-label={lookupLabel}>
       <input className="field-input mono" dir="ltr" autoFocus value={code} onChange={(event) => { setCode(event.target.value); if (lookup.status !== "idle") setLookup({ status: "idle" }); }}
@@ -143,8 +148,11 @@ export function CustomersPage({ lang, t, state, notify }: CustomersPageProps) {
       filters={[{ key: "language", label: t("Language", "اللغة"), value: language, onChange: setLanguage, options: [{ value: "all", label: t("All languages", "كل اللغات") }, { value: "ar", label: t("Arabic", "العربية") }, { value: "en", label: t("English", "الإنجليزية") }] }]}
       onClear={clear}
       resultCount={rows.length}
+      viewsId="customers"
     />
     <DataTable
+      listId="customers"
+      exportName="customers"
       columns={columns}
       rows={rows}
       rowKey={(row) => row.id}

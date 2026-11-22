@@ -1,0 +1,17 @@
+/* Duplicates tab and merge drawer. Logical properties only (RTL-safe). Font sizes via tokens only. */
+.merge-stack { display: grid; gap: 14px; min-width: 0; }
+.merge-h { margin: 0 0 6px; font-size: var(--fs-body); }
+.merge-person { display: grid; gap: 4px; min-width: 0; }
+.merge-reasons { display: flex; flex-wrap: wrap; gap: 4px; }
+.merge-reason-chip { padding: 2px 8px; border: 1px solid var(--line); background: var(--paper); font-size: var(--fs-caption); white-space: nowrap; border-radius: var(--radius); }
+.merge-band { white-space: nowrap; font-size: var(--fs-label); }
+.merge-band[data-band="high"] { color: var(--red); font-weight: 600; }
+.merge-band[data-band="medium"] { color: var(--ink); }
+.merge-band[data-band="low"] { color: var(--muted); }
+.merge-choice { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.merge-choice legend { margin-block-end: 6px; padding: 0; font-size: var(--fs-label); color: var(--muted); }
+.merge-option { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); background: var(--paper); cursor: pointer; border-radius: var(--radius); min-width: 0; }
+.merge-option[data-selected] { border-color: var(--teal); background: var(--teal-soft); }
+.merge-option input { margin-block-start: 4px; flex: none; }
+.merge-option-main { display: grid; gap: 4px; min-width: 0; }
+.merge-reason { display: grid; gap: 6px; font-size: var(--fs-label); }
