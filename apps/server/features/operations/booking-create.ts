@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { checkBookingCapacity, configuredNumber, configuredServiceHours } from "@garage/domain";
 import type { Branch, BranchId, Booking, Service } from "@garage/domain";
@@ -179,6 +179,18 @@ export async function createBookingInTransaction(client: Client, actor: Pick<Gar
     try {await acceptedQuoteInTransaction(client,input.quoteRef,input.branchId,input.customerId,input.vehicleId);}
     catch{return {error:"ACCEPTED_QUOTE_MISMATCH" as const};}
   }
+  // Pending path: persist/replay the key in booking_change_idempotency (action 'create-pending').
+  const origin = `staff:${actor.userId}`;
+  const fingerprint = createHash("sha256").update(JSON.stringify({ action: "create-pending", input })).digest("hex");
+  await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`booking-create:${origin}:${idempotencyKey}`]);
+  const prior = await client.query<{ request_fingerprint: string; action: string; booking_id: string }>(
+    "SELECT request_fingerprint, action, booking_id FROM booking_change_idempotency WHERE origin=$1 AND idempotency_key=$2",
+    [origin, idempotencyKey]);
+  if (prior.rows[0]) {
+    if (prior.rows[0].request_fingerprint !== fingerprint || prior.rows[0].action !== "create-pending") return { status: "invalid", code: "IDEMPOTENCY_KEY_REUSED" };
+    const existing = await client.query<{ id: string; status: Booking["status"] }>("SELECT id, status FROM bookings WHERE id=$1", [prior.rows[0].booking_id]);
+    if (existing.rows[0]) return { bookingId: existing.rows[0].id, status: existing.rows[0].status };
+  }
   await client.query("SELECT pg_advisory_xact_lock_shared(hashtext('booking-capacity-settings'))");
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`${input.branchId}:${dateOnlyFromSql(input.dropoffDate)}`]);
   const matching = await client.query(
@@ -227,5 +239,8 @@ export async function createBookingInTransaction(client: Client, actor: Pick<Gar
   if (status === "confirmed") {
     await addJob(client, { id: bookingId, customer_id: input.customerId, vehicle_id: input.vehicleId, service_id: input.serviceId, branch_id: input.branchId }, actor.userId);
   }
+  await client.query(
+    "INSERT INTO booking_change_idempotency(origin,idempotency_key,request_fingerprint,action,booking_id) VALUES($1,$2,$3,'create-pending',$4)",
+    [origin, idempotencyKey, fingerprint, bookingId]);
   return { bookingId, status };
 }

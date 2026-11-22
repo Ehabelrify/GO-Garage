@@ -102,7 +102,7 @@ export const reservationApi={
 export type SlotAvailability = {status:"available";slots:{dropoffDate:string;dropoffTime:string;expectedPickupDate:string}[];configurationVersion:string}|{status:"unconfigured";missing:string[]};
 export const bookingAvailabilityApi = {
   slots:(input:{branchId:string;fromDate:string;toDate:string;serviceId?:string;quoteId?:string;quoteRevision?:number;bookingId?:string})=>requestJson<SlotAvailability>(`/api/availability/slots?${new URLSearchParams(Object.entries(input).filter(([,value])=>value!==undefined).map(([key,value])=>[key,String(value)])).toString()}`),
-  reschedule:(bookingId:string,dropoffDate:string,dropoffTime:string)=>requestJson<{ok:true}>(`/api/bookings/${encodeURIComponent(bookingId)}/reschedule`,{method:"PATCH",body:JSON.stringify({dropoffDate,dropoffTime})}),
+  reschedule:(bookingId:string,dropoffDate:string,dropoffTime:string)=>requestJson<{ok:true}>(`/api/bookings/${encodeURIComponent(bookingId)}/reschedule`,{method:"PATCH",headers:{"Idempotency-Key":crypto.randomUUID()},body:JSON.stringify({dropoffDate,dropoffTime})}),
 };
 
 type StoreStatus = "loading" | "ready" | "error";
@@ -332,6 +332,7 @@ export function GarageStoreProvider({ children }: PropsWithChildren) {
     try {
       const response = await requestJson<{ bookingId: string; status: string }>("/api/bookings", {
         method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify(input),
       });
       return await completeMutation({ bookingId: response.bookingId, status: response.status });
@@ -351,7 +352,7 @@ export function GarageStoreProvider({ children }: PropsWithChildren) {
 
   const cancelBooking = useCallback(async (bookingId: string, reason: string) => {
     try {
-      await requestJson(`/api/bookings/${encodeURIComponent(bookingId)}/cancel`, { method: "PATCH", body: JSON.stringify({ reason: reason.trim() }) });
+      await requestJson(`/api/bookings/${encodeURIComponent(bookingId)}/cancel`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ reason: reason.trim() }) });
       return await completeMutation({});
     } catch (error) {
       return { ok: false as const, error: failureCode(error) };
