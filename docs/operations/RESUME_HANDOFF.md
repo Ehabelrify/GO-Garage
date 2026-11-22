@@ -82,9 +82,9 @@ owner two-factor, remaining role-based permission checks, large/dense file refac
 | Area | State |
 |---|---|
 | Wave 1-2.7 (hardening, access, modules, customer 360, special requests, invoices, plates, visual job) | Done, committed, pushed |
-| Wave 4 (visual-review fixes: design system + 8 feature packages + server capabilities + seed) | Committed locally (6 commits ahead of origin) except the last seed edits; **not pushed** |
-| Seed agent (realism, promotions, technician jobs) | Running when this was written; uncommitted edits in `apps/server/features/seed/*` |
-| Wave 5 (quick intake) | Not started |
+| Wave 4 (visual-review fixes: design system + 8 feature packages + server capabilities + seed) | **Done and committed locally** (8 commits ahead of origin, last `514c81c`); **not pushed** (user pushes; hold while agents are mid-work) |
+| Seed agent (realism, promotions, technician jobs) | Done, committed (`514c81c`): 110 customers, 31 pending reviews, finance ~5.2M revenue / ~1.7M outstanding, technician has 9 open jobs, 6 promotion policies + rows |
+| Wave 5 (quick intake) | **Running** (22 Nov): two agents, server (migration 0033: product kind, unlinked WhatsApp contacts, GET /api/catalogue/intake-items, POST /api/intake, POST /api/whatsapp/conversations/:id/link) and web (apps/web/src/features/intake, top-bar New button, WhatsApp 'New contact' banner). Tracker IDs P1-063..P1-067 reserved. Uncommitted until both report. |
 | UX improvements (section 4 item 3) | Not started |
 | Visual checks rerun | Waiting for the user to push and trigger |
 | Replit test with Maher | Waiting |
@@ -116,6 +116,7 @@ Finance/Warranties print buttons (named 'Print' in Wave 4, unverified), screensh
 - **Demo lookups:** seeded customer Ahmed Mahmoud El-Shazly, plates `أ ب ج 1234` and `س م ر 5678` (see the visual README).
 
 ## 8. Activity log (newest first; append here)
+- **22 Nov 2026 (later):** Seed realism agent finished and was committed (`514c81c`). Wave 5 launched as two parallel agents (server and web). Resume note: if Wave 5 files exist uncommitted in the working tree, check `git status`, run typecheck/tests/build, read the two agent reports in the workflow transcripts, then commit in logical groups. After Wave 5 come the UX improvements (section 4 item 3).
 - **22 Nov 2026:** Visual review of all 234 screenshots by five reviewers -> consolidated report and work packages. Decisions
   taken (section 3). Wave 4 implemented in parallel: shared design system (WP0), server capabilities/consent/promotions (WP-S),
   seed realism (WP9), eight feature packages (WP1-WP8). Committed locally as 6 commits (`aac4e45`..`3aad6e6`). Quick-intake
