@@ -3,7 +3,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 /**
  * Migration 0038: the customer_purchases view links the generic invoice (table invoices) for a delivered job that has one
  * and no warranty, ignores a void invoice, and keeps invoice_id (the warranty draft) null. Runs only against the
- * disposable CI database (GARAGE_TEST_DATABASE_URL); otherwise skipped. Draft invoices can be deleted, so cleanup is complete.
+ * disposable CI database (GARAGE_TEST_DATABASE_URL); otherwise skipped. Only draft invoices can be deleted (trigger guard_invoice_header),
+ * so the void invoice stays behind with the job, booking, customer and vehicle it references; every id carries a unique suffix, so the
+ * leftovers are inert on the disposable database.
  */
 const testDatabaseUrl = process.env.GARAGE_TEST_DATABASE_URL;
 const originalDatabaseUrl = process.env.DATABASE_URL;
@@ -46,13 +48,17 @@ integration("customer_purchases view links the generic invoice (0038)", () => {
     try {
       if (!db) return;
       await db.pool.query("DELETE FROM invoices WHERE id = ANY($1::text[]) AND status = 'draft'", [[invoiceId, voidInvoiceId]]);
-      await db.pool.query("DELETE FROM jobs WHERE id = $1", [jobId]);
-      await db.pool.query("DELETE FROM bookings WHERE id = $1", [bookingId]);
-      await db.pool.query("DELETE FROM customer_branches WHERE customer_id = $1", [customerId]);
-      await db.pool.query("DELETE FROM vehicles WHERE customer_id = $1", [customerId]);
-      await db.pool.query("DELETE FROM customers WHERE id = $1", [customerId]);
-      await db.pool.query("DELETE FROM services WHERE id = $1", [serviceId]);
-      await db.pool.query("DELETE FROM branches WHERE id = $1", [branchId]);
+      // A void invoice cannot be deleted, so the rows it references are removed only when no invoice references the job.
+      const kept = await db.pool.query("SELECT 1 FROM invoices WHERE job_id = $1 LIMIT 1", [jobId]);
+      if (!kept.rowCount) {
+        await db.pool.query("DELETE FROM jobs WHERE id = $1", [jobId]);
+        await db.pool.query("DELETE FROM bookings WHERE id = $1", [bookingId]);
+        await db.pool.query("DELETE FROM customer_branches WHERE customer_id = $1", [customerId]);
+        await db.pool.query("DELETE FROM vehicles WHERE customer_id = $1", [customerId]);
+        await db.pool.query("DELETE FROM customers WHERE id = $1", [customerId]);
+        await db.pool.query("DELETE FROM services WHERE id = $1", [serviceId]);
+        await db.pool.query("DELETE FROM branches WHERE id = $1", [branchId]);
+      }
       await db.pool.end();
     } finally {
       if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = originalDatabaseUrl;
