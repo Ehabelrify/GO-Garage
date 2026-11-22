@@ -25,8 +25,8 @@ export function addTransport(world: World, visit: VisitRec, direction: "pickup" 
   const day = direction === "return" ? visit.pickup : visit.date;
   const start = ctx.at(day, direction === "return" ? "14:00" : "08:00");
   const snapshot = {
-    direction, mode, serviceArea: lbl("القاهرة الكبرى (نص تجريبي)", "Greater Cairo (example)"), providerId: `seed-provider-${mode}-${branchId}`,
-    capacity: mode === "courtesy-car" ? 1 : 2, fee, custodyRule: lbl("تُسجل حالة السيارة عند الاستلام (نص تجريبي)", "Vehicle condition is recorded at hand-over (example wording)"),
+    direction, mode, serviceArea: lbl("القاهرة الكبرى", "Greater Cairo"), providerId: `seed-provider-${mode}-${branchId}`,
+    capacity: mode === "courtesy-car" ? 1 : 2, fee, custodyRule: lbl("تُسجل حالة السيارة عند الاستلام", "Vehicle condition is recorded at hand-over"),
   };
   const path = target === "cancelled" || target === "exception" ? PATH.slice(0, 3) : PATH.slice(0, PATH.indexOf(target) + 1);
   const finalPath: TransportStatus[] = target === "cancelled" || target === "exception" ? [...path, target] : path;
@@ -44,12 +44,12 @@ export function addTransport(world: World, visit: VisitRec, direction: "pickup" 
   });
   ds.add("transport_private_contacts", {
     transport_id: id, contact: visit.customer.phone, location: ctx.now ? (visit.customer.language === "ar" ? AR_AREAS[area] : EN_AREAS[area]) : "",
-    instructions: visit.customer.language === "ar" ? "الاتصال قبل الوصول بنصف ساعة. السيارة في الجراج (نص تجريبي)." : "Call 30 minutes before arrival. The car is in the garage (example).",
+    instructions: visit.customer.language === "ar" ? "الاتصال قبل الوصول بنصف ساعة. السيارة في الجراج." : "Call 30 minutes before arrival. The car is in the garage.",
   });
   finalPath.forEach((status, index) => {
     ds.add("transport_events", {
       transport_id: id, revision: index + 1, from_status: index === 0 ? null : finalPath[index - 1], to_status: status, actor_id: index < 2 ? staff : managerOf(branchId),
-      reason: status === "cancelled" ? "Customer drove the car in themselves (example)" : status === "exception" ? "Provider could not reach the pickup address (example)" : null,
+      reason: status === "cancelled" ? "Customer drove the car in themselves" : status === "exception" ? "Provider could not reach the pickup address" : null,
       evidence_ref: ["in-custody", "completed"].includes(status) ? ev("custody", `${id.slice(-4)}-${index}`) : null,
       occurred_at: new Date(Math.min(created.getTime() + index * 6 * 3_600_000, ctx.now.getTime() - 60_000)),
     });
@@ -92,7 +92,7 @@ export function addConsents(world: World) {
         expires_at: null, consented_by: staff, revoked_at: revokes ? revokedAt : null, revoked_by: revokes ? staff : null, revision: revokes ? 2 : 1,
       });
       ds.add("messaging_customer_consent_events", { id: `seed-mce-${customer.id.slice(-3)}-${purpose}-1`, channel_id: channel, customer_id: customer.id, purpose, revision: 1, action: "granted", evidence_ref: evidenceRef, reason: null, actor_user_id: staff, occurred_at: base });
-      if (revokes) ds.add("messaging_customer_consent_events", { id: `seed-mce-${customer.id.slice(-3)}-${purpose}-2`, channel_id: channel, customer_id: customer.id, purpose, revision: 2, action: "revoked", evidence_ref: evidenceRef, reason: "Customer asked to stop promotional messages (example)", actor_user_id: staff, occurred_at: revokedAt });
+      if (revokes) ds.add("messaging_customer_consent_events", { id: `seed-mce-${customer.id.slice(-3)}-${purpose}-2`, channel_id: channel, customer_id: customer.id, purpose, revision: 2, action: "revoked", evidence_ref: evidenceRef, reason: "Customer asked to stop promotional messages", actor_user_id: staff, occurred_at: revokedAt });
     }
   }
 }
@@ -108,9 +108,9 @@ export function addOverheadAndAdjustments(world: World) {
     const month = first.toISOString().slice(0, 7);
     for (const [branchId, tag] of [["branch-a", "A"], ["branch-b", "B"]] as const) {
       const items: Array<[string, number, string]> = [
-        ["rent", branchId === "branch-a" ? 4_200_000 : 3_600_000, "Workshop rent (example)"],
-        ["salaries", branchId === "branch-a" ? 6_800_000 : 5_100_000, "Staff salaries (example)"],
-        ["utilities", rng.int(380_000, 620_000), "Electricity, water and internet (example)"],
+        ["rent", branchId === "branch-a" ? 4_200_000 : 3_600_000, "Workshop rent"],
+        ["salaries", branchId === "branch-a" ? 6_800_000 : 5_100_000, "Staff salaries"],
+        ["utilities", rng.int(380_000, 620_000), "Electricity, water and internet"],
       ];
       for (const [slug, amount, reason] of items) {
         recordMoneyEvent(world, { kind: "overhead", amountMinor: amount, at: first, branchId, ref: `OVH-${tag}-${month}-${slug}`, method: "bank-transfer", reason });
@@ -120,7 +120,7 @@ export function addOverheadAndAdjustments(world: World) {
   const candidates = world.moneyReverseCandidates.slice(0, 4);
   candidates.forEach((eventId, index) => {
     world.ds.add("operational_money_event_reversals", {
-      id: `seed-mrev-${index + 1}`, event_id: eventId, reason: "Duplicate receipt entered by mistake; reversed (example)", evidence_ref: ev("reversal", `m${index + 1}`),
+      id: `seed-mrev-${index + 1}`, event_id: eventId, reason: "Duplicate receipt entered by mistake; reversed", evidence_ref: ev("reversal", `m${index + 1}`),
       reversed_by: OWNER, reversed_at: new Date(Math.min(ctx.now.getTime() - 60_000, new Date(`${ctx.today}T08:00:00Z`).getTime())),
     });
   });
@@ -129,7 +129,7 @@ export function addOverheadAndAdjustments(world: World) {
   for (const visit of world.visits) {
     if (refunds >= 4) break;
     if (visit.stage !== "cancelled" || !visit.reservation) continue;
-    recordMoneyEvent(world, { kind: "refund", amountMinor: 500_000, at: new Date(Math.min(ctx.now.getTime() - 60_000, visit.createdAt.getTime() + 5 * 86_400_000)), branchId: visit.branchId, ref: `RFND-${String(visit.n).padStart(4, "0")}`, method: "bank-transfer", reason: "Advance refunded after cancellation approved by the Owner (example)", customerId: visit.customer.id, jobId: visit.jobId });
+    recordMoneyEvent(world, { kind: "refund", amountMinor: 500_000, at: new Date(Math.min(ctx.now.getTime() - 60_000, visit.createdAt.getTime() + 5 * 86_400_000)), branchId: visit.branchId, ref: `RFND-${String(visit.n).padStart(4, "0")}`, method: "bank-transfer", reason: "Advance refunded after cancellation approved by the Owner", customerId: visit.customer.id, jobId: visit.jobId });
     refunds++;
   }
 }

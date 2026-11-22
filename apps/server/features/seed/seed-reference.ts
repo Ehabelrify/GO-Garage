@@ -27,10 +27,10 @@ export const SERVICES: ServiceDef[] = [
   svc("audio", "Audio upgrade", "ترقية النظام الصوتي", "general", 8, "Sample quote", true, { key: "audio", minutes: 480, days: 1 }, true, 9500),
   svc("ceramic", "Ceramic coating", "طلاء سيراميك", "clean", 20, "Estimate after inspection", true, { key: "ceramic", minutes: 420, days: 2 }, true, 12000),
   svc("full-ppf", "Full PPF", "حماية كاملة للطلاء", "clean", 30, "Estimate after inspection", true, { key: "ppf", minutes: 480, days: 4 }, true, 35000),
-  svc("seed-svc-interior-nano", "Interior nano ceramic", "نانو سيراميك للداخلية", "general", 4, "Advertised list price (example)", true, { key: "nano", minutes: 240, days: 1 }, false, 2500),
-  svc("seed-svc-glass-guard", "Windshield / screen Glass Guard", "حماية الزجاج والشاشات", "general", 2, "Advertised list price (example)", true, { key: "glass", minutes: 120, days: 1 }, false, 5000),
-  svc("seed-svc-panorama-film", "Panorama roof film", "فيلم البانوراما", "general", 2.5, "Advertised list price (example)", true, { key: "panorama", minutes: 150, days: 1 }, false, 8000),
-  svc("seed-svc-lights-mirrors", "Lights and mirrors film", "فيلم الإضاءة والمرايا", "general", 1.5, "Advertised in package only (example)", true, { key: "lights", minutes: 90, days: 1 }, false, 1500),
+  svc("seed-svc-interior-nano", "Interior nano ceramic", "نانو سيراميك للداخلية", "general", 4, "Advertised list price", true, { key: "nano", minutes: 240, days: 1 }, false, 2500),
+  svc("seed-svc-glass-guard", "Windshield / screen Glass Guard", "حماية الزجاج والشاشات", "general", 2, "Advertised list price", true, { key: "glass", minutes: 120, days: 1 }, false, 5000),
+  svc("seed-svc-panorama-film", "Panorama roof film", "فيلم البانوراما", "general", 2.5, "Advertised list price", true, { key: "panorama", minutes: 150, days: 1 }, false, 8000),
+  svc("seed-svc-lights-mirrors", "Lights and mirrors film", "فيلم الإضاءة والمرايا", "general", 1.5, "Advertised in package only", true, { key: "lights", minutes: 90, days: 1 }, false, 1500),
   // Adjacent services named in GS-F014. Availability is unconfirmed, so they are inactive and priced as draft catalogue items.
   svc("seed-svc-wrapping", "Vehicle wrapping", "تغليف السيارات (راب)", "general", 16, "Availability unconfirmed", false, null),
   svc("seed-svc-carbon-fiber", "Carbon fibre trim", "كربون فايبر", "general", 8, "Availability unconfirmed", false, null),
@@ -50,15 +50,15 @@ export interface WarrantyPolicyDef {
   status: "draft" | "published" | "retired"; publishedOn: string | null; reviewRole: "owner" | "branch-manager"; auto: boolean;
 }
 export const WARRANTY_POLICIES: WarrantyPolicyDef[] = [
-  { id: "seed-wp-ppf-pro", version: 1, name: "GO garage Pro PPF - 7 years (example, superseded)", services: ["full-ppf"], kind: "fixed", months: 84, status: "retired", publishedOn: "2025-01-01", reviewRole: "branch-manager", auto: true },
-  { id: "seed-wp-ppf-pro", version: 2, name: "GO garage Pro PPF - 7 years (example)", services: ["full-ppf"], kind: "fixed", months: 84, status: "published", publishedOn: "2026-06-01", reviewRole: "branch-manager", auto: true },
-  { id: "seed-wp-ppf-ultimate", version: 1, name: "GO stores Ultimate PPF - 10 years (example)", services: ["full-ppf"], kind: "fixed", months: 120, status: "published", publishedOn: "2025-01-01", reviewRole: "owner", auto: true },
-  { id: "seed-wp-ppf-plus", version: 1, name: "GO stores Plus+ PPF - lifetime wording (example)", services: ["full-ppf"], kind: "lifetime", months: null, status: "published", publishedOn: "2025-01-01", reviewRole: "owner", auto: true },
-  { id: "seed-wp-ppf-black", version: 1, name: "Black edition PPF - 7 years (example)", services: ["full-ppf"], kind: "fixed", months: 84, status: "published", publishedOn: "2025-01-01", reviewRole: "branch-manager", auto: true },
-  { id: "seed-wp-ppf-matte", version: 1, name: "Matte PPF - 10 years (example)", services: ["full-ppf"], kind: "fixed", months: 120, status: "published", publishedOn: "2025-01-01", reviewRole: "owner", auto: true },
-  { id: "seed-wp-heat-film", version: 1, name: "Heat film - lifetime wording (example)", services: ["tint"], kind: "lifetime", months: null, status: "published", publishedOn: "2025-01-01", reviewRole: "branch-manager", auto: true },
-  { id: "seed-wp-ceramic", version: 1, name: "Ceramic coating - 24 months (example)", services: ["ceramic"], kind: "fixed", months: 24, status: "published", publishedOn: "2025-01-01", reviewRole: "branch-manager", auto: true },
-  { id: "seed-wp-interior-nano", version: 1, name: "Interior nano ceramic - 6 months (example)", services: ["seed-svc-interior-nano"], kind: "fixed", months: 6, status: "published", publishedOn: "2025-01-01", reviewRole: "branch-manager", auto: true },
+  { id: "seed-wp-ppf-pro", version: 1, name: "GO garage Pro PPF - 7 years (superseded)", services: ["full-ppf"], kind: "fixed", months: 84, status: "retired", publishedOn: "2025-01-01", reviewRole: "branch-manager", auto: true },
+  { id: "seed-wp-ppf-pro", version: 2, name: "GO garage Pro PPF - 7 years", services: ["full-ppf"], kind: "fixed", months: 84, status: "published", publishedOn: "2026-06-01", reviewRole: "branch-manager", auto: true },
+  { id: "seed-wp-ppf-ultimate", version: 1, name: "GO stores Ultimate PPF - 10 years", services: ["full-ppf"], kind: "fixed", months: 120, status: "published", publishedOn: "2025-01-01", reviewRole: "owner", auto: true },
+  { id: "seed-wp-ppf-plus", version: 1, name: "GO stores Plus+ PPF - lifetime wording", services: ["full-ppf"], kind: "lifetime", months: null, status: "published", publishedOn: "2025-01-01", reviewRole: "owner", auto: true },
+  { id: "seed-wp-ppf-black", version: 1, name: "Black edition PPF - 7 years", services: ["full-ppf"], kind: "fixed", months: 84, status: "published", publishedOn: "2025-01-01", reviewRole: "branch-manager", auto: true },
+  { id: "seed-wp-ppf-matte", version: 1, name: "Matte PPF - 10 years", services: ["full-ppf"], kind: "fixed", months: 120, status: "published", publishedOn: "2025-01-01", reviewRole: "owner", auto: true },
+  { id: "seed-wp-heat-film", version: 1, name: "Heat film - lifetime wording", services: ["tint"], kind: "lifetime", months: null, status: "published", publishedOn: "2025-01-01", reviewRole: "branch-manager", auto: true },
+  { id: "seed-wp-ceramic", version: 1, name: "Ceramic coating - 24 months", services: ["ceramic"], kind: "fixed", months: 24, status: "published", publishedOn: "2025-01-01", reviewRole: "branch-manager", auto: true },
+  { id: "seed-wp-interior-nano", version: 1, name: "Interior nano ceramic - 6 months", services: ["seed-svc-interior-nano"], kind: "fixed", months: 6, status: "published", publishedOn: "2025-01-01", reviewRole: "branch-manager", auto: true },
   { id: "seed-wp-glass-guard", version: 1, name: "Glass Guard coverage - 12 months (draft)", services: ["seed-svc-glass-guard"], kind: "fixed", months: 12, status: "draft", publishedOn: null, reviewRole: "owner", auto: false },
 ];
 export const warrantyPolicyAt = (id: string, date: string) =>
@@ -69,13 +69,13 @@ export const lifetimeDefinition = (policy: WarrantyPolicyDef, at: Date) => ({
   state: "approved",
   value: {
     subject: "vehicle",
-    subjectDefinition: "The vehicle on which the product was originally installed by GO stores (example wording).",
-    terminationConditions: "Ends on sale of the vehicle, accident damage, or removal by a third party (example wording).",
-    transferRule: "Not transferable. A referral discount does not transfer warranty coverage (example wording).",
-    maintenanceConditions: "Optional free aftercare visits are recommended; no mandatory interval is defined (example wording).",
-    issuer: "GO stores (example)",
-    remedy: "Repair or replace the affected panel at the issuing branch (example wording).",
-    publicWording: { ar: "ضمان مدى الحياة للسيارة الأصلية وفق الشروط (نص تجريبي)", en: "Lifetime coverage for the original vehicle under the stated conditions (example text)" },
+    subjectDefinition: "The vehicle on which the product was originally installed by GO stores.",
+    terminationConditions: "Ends on sale of the vehicle, accident damage, or removal by a third party.",
+    transferRule: "Not transferable. A referral discount does not transfer warranty coverage.",
+    maintenanceConditions: "Optional free aftercare visits are recommended; no mandatory interval is defined.",
+    issuer: "GO stores",
+    remedy: "Repair or replace the affected panel at the issuing branch.",
+    publicWording: { ar: "ضمان مدى الحياة للسيارة الأصلية وفق الشروط", en: "Lifetime coverage for the original vehicle under the stated conditions" },
   },
   policy: { id: policy.id, version: policy.version },
   approval: { approvedBy: OWNER, approvedAt: at.toISOString(), evidenceRef: EVIDENCE, reason: SEED_REASON },
@@ -186,15 +186,15 @@ export function buildReference(ds: Dataset, ctx: SeedContext): Reference {
   for (const branchId of BRANCH_IDS) {
     policyRows(`reservation-deposit:${branchId}`, "reservation-deposit", {
       validityDays: 30,
-      deposit: { required: true, amount: egp(5000), refundRule: lbl("يُراجع الاسترداد مع المالك (نص تجريبي)", "Refund is reviewed by the Owner (example wording)") },
-      cancellationRule: lbl("يتم مراجعة الإلغاء يدويًا (نص تجريبي)", "Cancellation is reviewed manually (example wording)"),
+      deposit: { required: true, amount: egp(5000), refundRule: lbl("يُراجع الاسترداد مع المالك", "Refund is reviewed by the Owner") },
+      cancellationRule: lbl("يتم مراجعة الإلغاء يدويًا", "Cancellation is reviewed manually"),
       cancellationDisposition: "review-required", priceLock: true, redemptionTiming: "installation", restoreAllowed: true, expiryAction: "review-required",
     }, { branchId });
   }
 
   /* benefits (GS-F026 published promises; eligibility/frequency unverified) */
   const benefitBase = {
-    eligibleBranchIds: [BRANCH_A, BRANCH_B], eligibilityRule: lbl("حسب شروط العرض المنشور (نص تجريبي)", "Per the published offer terms (example wording)"),
+    eligibleBranchIds: [BRANCH_A, BRANCH_B], eligibilityRule: lbl("حسب شروط العرض المنشور", "Per the published offer terms"),
     responsibleTeamId: "seed-team-service", transferRule: "same-customer-vehicle", cancellationRule: "review-required",
     expiryRule: { kind: "none" }, reversalRestoresEligibility: true,
   };
@@ -213,9 +213,9 @@ export function buildReference(ds: Dataset, ctx: SeedContext): Reference {
   for (const branchId of BRANCH_IDS) {
     for (const [direction, mode, fee] of transportCombos) {
       policyRows(`transport-availability:${branchId}:${direction}:${mode}`, "transport-availability", {
-        direction, mode, serviceArea: lbl("القاهرة الكبرى (نص تجريبي)", "Greater Cairo (example)"), providerId: `seed-provider-${mode}-${branchId}`,
+        direction, mode, serviceArea: lbl("القاهرة الكبرى", "Greater Cairo"), providerId: `seed-provider-${mode}-${branchId}`,
         capacity: mode === "courtesy-car" ? 1 : 2, fee,
-        custodyRule: lbl("تُسجل حالة السيارة عند الاستلام (نص تجريبي)", "Vehicle condition is recorded at hand-over (example wording)"),
+        custodyRule: lbl("تُسجل حالة السيارة عند الاستلام", "Vehicle condition is recorded at hand-over"),
       }, { branchId });
     }
   }
@@ -228,12 +228,12 @@ export function buildReference(ds: Dataset, ctx: SeedContext): Reference {
     exceptionAuthority: { roles: ["owner"], requiresReason: true, requiresEvidence: true },
   };
   const promoPolicies = {
-    club: policyRows("promotion-qualification:seed-ultimate-club", "promotion-qualification", { ...promoBase, promotionId: "seed-ultimate-club", evidenceKinds: ["membership-verification"], maximumUnits: 15, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(10001), perVehicle: egp(10001) }, beneficiaryRule: lbl("عضوية النادي مؤكدة (نص تجريبي)", "Club membership confirmed (example wording)") }),
-    plus: policyRows("promotion-qualification:seed-plus-lifetime", "promotion-qualification", { ...promoBase, promotionId: "seed-plus-lifetime", evidenceKinds: ["membership-verification"], maximumUnits: 10, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(0), perVehicle: egp(0) }, beneficiaryRule: lbl("حجز قبل الموعد المعلن (نص تجريبي)", "Reserved before the advertised deadline (example wording)") }),
-    recent: policyRows("promotion-qualification:seed-recent-ultimate", "promotion-qualification", { ...promoBase, promotionId: "seed-recent-ultimate", evidenceKinds: ["membership-verification"], maximumUnits: 20, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(0), perVehicle: egp(0) }, beneficiaryRule: lbl("عرض ألتيميت الأخير (نص تجريبي)", "Recent Ultimate offer (example wording)") }),
-    nov: policyRows("promotion-qualification:seed-nov-announcement", "promotion-qualification", { ...promoBase, promotionId: "seed-nov-announcement", evidenceKinds: ["membership-verification"], maximumUnits: 25, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(0), perVehicle: egp(0) }, beneficiaryRule: lbl("إعلان 5 نوفمبر (نص تجريبي)", "5 November announcement (example wording)") }),
-    referral: policyRows("promotion-qualification:seed-warranty-card-referral", "promotion-qualification", { ...promoBase, promotionId: "seed-warranty-card-referral", evidenceKinds: ["warranty-reference"], maximumUnits: 50, recipient: { kind: "referred-customer", transferWarranty: false }, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(10000), perVehicle: egp(10000) }, beneficiaryRule: lbl("كارت ضمان سابق، والخصم لا ينقل الضمان (نص تجريبي)", "Existing warranty card; discount does not transfer the warranty (example wording)") }),
-    threecars: policyRows("promotion-qualification:seed-four-cars", "promotion-qualification", { ...promoBase, promotionId: "seed-four-cars", evidenceKinds: ["grouped-vehicles"], maximumUnits: 10, grouping: { minimumVehicles: 3, maximumVehicles: 4, timingWindowHours: 72, timing: "same-booking" }, discountAllocation: { kind: "equal-remainder-by-vehicle", total: egp(35000), perVehicle: null }, beneficiaryRule: lbl("الرابعة مجانًا عند ثلاث سيارات معًا (نص تجريبي)", "Fourth car free when three come together (example wording)") }),
+    club: policyRows("promotion-qualification:seed-ultimate-club", "promotion-qualification", { ...promoBase, promotionId: "seed-ultimate-club", evidenceKinds: ["membership-verification"], maximumUnits: 15, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(10001), perVehicle: egp(10001) }, beneficiaryRule: lbl("عضوية النادي مؤكدة", "Club membership confirmed") }),
+    plus: policyRows("promotion-qualification:seed-plus-lifetime", "promotion-qualification", { ...promoBase, promotionId: "seed-plus-lifetime", evidenceKinds: ["membership-verification"], maximumUnits: 10, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(0), perVehicle: egp(0) }, beneficiaryRule: lbl("حجز قبل الموعد المعلن", "Reserved before the advertised deadline") }),
+    recent: policyRows("promotion-qualification:seed-recent-ultimate", "promotion-qualification", { ...promoBase, promotionId: "seed-recent-ultimate", evidenceKinds: ["membership-verification"], maximumUnits: 20, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(0), perVehicle: egp(0) }, beneficiaryRule: lbl("عرض ألتيميت الأخير", "Recent Ultimate offer") }),
+    nov: policyRows("promotion-qualification:seed-nov-announcement", "promotion-qualification", { ...promoBase, promotionId: "seed-nov-announcement", evidenceKinds: ["membership-verification"], maximumUnits: 25, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(0), perVehicle: egp(0) }, beneficiaryRule: lbl("إعلان 5 نوفمبر", "5 November announcement") }),
+    referral: policyRows("promotion-qualification:seed-warranty-card-referral", "promotion-qualification", { ...promoBase, promotionId: "seed-warranty-card-referral", evidenceKinds: ["warranty-reference"], maximumUnits: 50, recipient: { kind: "referred-customer", transferWarranty: false }, grouping: { minimumVehicles: 1, maximumVehicles: 1, timingWindowHours: 24, timing: "same-quote" }, discountAllocation: { kind: "per-vehicle-fixed", total: egp(10000), perVehicle: egp(10000) }, beneficiaryRule: lbl("كارت ضمان سابق، والخصم لا ينقل الضمان", "Existing warranty card; discount does not transfer the warranty") }),
+    threecars: policyRows("promotion-qualification:seed-four-cars", "promotion-qualification", { ...promoBase, promotionId: "seed-four-cars", evidenceKinds: ["grouped-vehicles"], maximumUnits: 10, grouping: { minimumVehicles: 3, maximumVehicles: 4, timingWindowHours: 72, timing: "same-booking" }, discountAllocation: { kind: "equal-remainder-by-vehicle", total: egp(35000), perVehicle: null }, beneficiaryRule: lbl("الرابعة مجانًا عند ثلاث سيارات معًا", "Fourth car free when three come together") }),
   } as Reference["promoPolicies"];
   const promoCaps = { club: 15, plus: 10, recent: 20, nov: 25, referral: 50, threecars: 10 } as Reference["promoCaps"];
 
@@ -241,8 +241,8 @@ export function buildReference(ds: Dataset, ctx: SeedContext): Reference {
   const financeBase = { currency: "EGP", minorUnitExponent: 2, reportingTimezone: "Africa/Cairo", emptyPeriod: "complete" };
   const fin = (metric: keyof Reference["financePolicies"], sourceKinds: string[], required: string[], rule: [string, string]) => {
     const ref = policyRows(`finance-definition:seed-${metric}`, "finance-definition", {
-      ...financeBase, metric, recognitionRule: lbl(rule[0], rule[1]), taxTreatment: lbl("حسب تعريف المالك (نص تجريبي)", "As defined by the Owner (example wording)"),
-      sourceKinds, completenessRule: lbl("كل المصادر المسجلة (نص تجريبي)", "All recorded sources (example wording)"), requiredSourceKinds: required,
+      ...financeBase, metric, recognitionRule: lbl(rule[0], rule[1]), taxTreatment: lbl("حسب تعريف المالك", "As defined by the Owner"),
+      sourceKinds, completenessRule: lbl("كل المصادر المسجلة", "All recorded sources"), requiredSourceKinds: required,
     });
     ds.add("finance_definition_attestations", {
       environment_id: ctx.environmentId, definition_id: ref.id, definition_version: 1, currency: "EGP", minor_unit_exponent: 2,
@@ -295,7 +295,7 @@ export function buildReference(ds: Dataset, ctx: SeedContext): Reference {
       const common: Pick<PackageDef, "id" | "name" | "categories" | "scope" | "work" | "primaryServiceId" | "gradeKey" | "warranty" | "provenance"> = {
         id, name: lbl(`${grade.ar} - حماية كاملة للطلاء (${catName.ar}، بدون السقف)`, `${grade.en} - full-car PPF (${catName.en}, roof excluded)`),
         categories: [category], scope, work: [work("work-ppf", "full-ppf", ["scope-ppf"])], primaryServiceId: "full-ppf", gradeKey: grade.key,
-        warranty: { "work-ppf": grade.warranty }, provenance: "Advertised list of 26 April 2026 (GS-F016); roof excluded (GS-F017). Example data.",
+        warranty: { "work-ppf": grade.warranty }, provenance: "Advertised list of 26 April 2026 (GS-F016); roof excluded (GS-F017).",
       };
       if (grade.key === "pro") {
         const older = grade.prices[category] - 1500;
@@ -310,7 +310,7 @@ export function buildReference(ds: Dataset, ctx: SeedContext): Reference {
     addPackage({
       id: `seed-pkg-addon-${key}`, kind: "standalone", name: lbl(ar, en), scope: [scopeItem("scope-main", serviceId, { areas: [key] })],
       work: [work("work-main", serviceId, ["scope-main"])], primaryServiceId: serviceId, priceMinor: price * 100,
-      warranty: warrantyId ? { "work-main": warrantyId } : {}, provenance: `${source} Example data.`,
+      warranty: warrantyId ? { "work-main": warrantyId } : {}, provenance: `${source}`,
     });
   };
   addOn("heat-plus", "tint", "GO stores plus heat film", "فيلم حراري جو ستورز بلس", 5000, "seed-wp-heat-film", "Advertised list (GS-F018), lifetime wording (GS-F019).");
@@ -332,16 +332,16 @@ export function buildReference(ds: Dataset, ctx: SeedContext): Reference {
   const nano: [string, string] = ["scope-nano", "seed-svc-interior-nano"];
   const lights: [string, string] = ["scope-lights", "seed-svc-lights-mirrors"];
   const promoWarranty = (grade: GradeKey) => ({ "work-ppf": gradeByKey(grade).warranty, "work-scope-glass-film": "seed-wp-heat-film", "work-scope-nano": "seed-wp-interior-nano" });
-  addPackage({ id: "seed-pkg-promo-ultimate-club", name: lbl("باقة نادي ألتيميت (180 ميكرون / 10 سنوات)", "Ultimate club package (180 um / 10 years)"), ...promoScope("ultimate", "included", [glass, screens, nano]), primaryServiceId: "full-ppf", gradeKey: "ultimate", priceMinor: 4_499_900, effectiveFrom: ctx.day(-60), effectiveThrough: ctx.day(40), warranty: promoWarranty("ultimate"), benefitKeys: ["wash", "vip"], promo: "club", provenance: "4 October offer (GS-F021): roof/panorama, glass heat film, screens, interior nano gift; limited to 15 cars. Example data." });
-  addPackage({ id: "seed-pkg-promo-plus-lifetime", name: lbl("باقة بلس مدى الحياة (200 ميكرون)", "Plus lifetime package (200 um)"), ...promoScope("plus", "included", [glass, screens, nano, lights]), primaryServiceId: "full-ppf", gradeKey: "plus", priceMinor: 5_299_900, effectiveFrom: ctx.day(-52), effectiveThrough: ctx.day(40), warranty: promoWarranty("plus"), benefitKeys: ["wash", "vip", "tow"], promo: "plus", provenance: "18 October 2026 offer (GS-F022). Example data." });
-  addPackage({ id: "seed-pkg-promo-recent-ultimate", name: lbl("عرض ألتيميت الأخير 39,999", "Recent Ultimate offer 39,999"), ...promoScope("ultimate", "excluded", [glass, nano, lights]), primaryServiceId: "full-ppf", gradeKey: "ultimate", priceMinor: 3_999_900, effectiveFrom: ctx.day(-6), effectiveThrough: ctx.day(40), warranty: promoWarranty("ultimate"), promo: "recent", provenance: "Recent Ultimate offer (GS-F024); roof not explicitly included. Example data." });
-  addPackage({ id: "seed-pkg-promo-nov-from", name: lbl("إعلان 5 نوفمبر - فيلم يبدأ من 32,999", "5 November announcement - film from 32,999"), ...promoScope("pro", "excluded", []), primaryServiceId: "full-ppf", gradeKey: "pro", priceMinor: 3_299_900, effectiveFrom: ctx.day(-16), effectiveThrough: ctx.day(9), warranty: { "work-ppf": "seed-wp-ppf-pro" }, benefitKeys: ["inspection", "tow", "wash", "vip", "fourth"], promo: "nov", provenance: "5 November 2026 announcement (GS-F026): film from 32,999, free handover inspection, free Cairo tow, free washing during warranty, chauffeur car. Eligibility unverified. Example data." });
+  addPackage({ id: "seed-pkg-promo-ultimate-club", name: lbl("باقة نادي ألتيميت (180 ميكرون / 10 سنوات)", "Ultimate club package (180 um / 10 years)"), ...promoScope("ultimate", "included", [glass, screens, nano]), primaryServiceId: "full-ppf", gradeKey: "ultimate", priceMinor: 4_499_900, effectiveFrom: ctx.day(-60), effectiveThrough: ctx.day(40), warranty: promoWarranty("ultimate"), benefitKeys: ["wash", "vip"], promo: "club", provenance: "4 October offer (GS-F021): roof/panorama, glass heat film, screens, interior nano gift; limited to 15 cars." });
+  addPackage({ id: "seed-pkg-promo-plus-lifetime", name: lbl("باقة بلس مدى الحياة (200 ميكرون)", "Plus lifetime package (200 um)"), ...promoScope("plus", "included", [glass, screens, nano, lights]), primaryServiceId: "full-ppf", gradeKey: "plus", priceMinor: 5_299_900, effectiveFrom: ctx.day(-52), effectiveThrough: ctx.day(40), warranty: promoWarranty("plus"), benefitKeys: ["wash", "vip", "tow"], promo: "plus", provenance: "18 October 2026 offer (GS-F022)." });
+  addPackage({ id: "seed-pkg-promo-recent-ultimate", name: lbl("عرض ألتيميت الأخير 39,999", "Recent Ultimate offer 39,999"), ...promoScope("ultimate", "excluded", [glass, nano, lights]), primaryServiceId: "full-ppf", gradeKey: "ultimate", priceMinor: 3_999_900, effectiveFrom: ctx.day(-6), effectiveThrough: ctx.day(40), warranty: promoWarranty("ultimate"), promo: "recent", provenance: "Recent Ultimate offer (GS-F024); roof not explicitly included." });
+  addPackage({ id: "seed-pkg-promo-nov-from", name: lbl("إعلان 5 نوفمبر - فيلم يبدأ من 32,999", "5 November announcement - film from 32,999"), ...promoScope("pro", "excluded", []), primaryServiceId: "full-ppf", gradeKey: "pro", priceMinor: 3_299_900, effectiveFrom: ctx.day(-16), effectiveThrough: ctx.day(9), warranty: { "work-ppf": "seed-wp-ppf-pro" }, benefitKeys: ["inspection", "tow", "wash", "vip", "fourth"], promo: "nov", provenance: "5 November 2026 announcement (GS-F026): film from 32,999, free handover inspection, free Cairo tow, free washing during warranty, chauffeur car. Eligibility unverified." });
 
   // Roof add-on is size dependent and the adjacent services are unconfirmed: draft items with an unconfigured price.
   const draft = (key: string, serviceId: string, en: string, ar: string, note: string) => {
     addPackage({
       id: `seed-pkg-draft-${key}`, kind: "standalone", state: "draft", name: lbl(ar, en), scope: [scopeItem("scope-main", serviceId, { areas: [key] })],
-      work: [], primaryServiceId: serviceId, priceMinor: null, provenance: `${note} Availability unconfirmed; example data.`,
+      work: [], primaryServiceId: serviceId, priceMinor: null, provenance: `${note} Availability unconfirmed.`,
     });
   };
   draft("roof", "full-ppf", "Roof PPF add-on (size dependent)", "إضافة السقف (حسب المقاس)", "GS-F017: roof addition depends on size.");
@@ -383,7 +383,7 @@ export function buildReference(ds: Dataset, ctx: SeedContext): Reference {
       entity_kind: "package", entity_id: pkg.id, version: pkg.version, action: published ? "published" : "draft-saved", actor_id: OWNER, reason: SEED_REASON, occurred_at: base,
     });
     if (pkg.state === "retired") {
-      ds.add("catalogue_audit", { entity_kind: "package", entity_id: pkg.id, version: pkg.version, action: "retired", actor_id: OWNER, reason: "Superseded by version 2 (example)", occurred_at: ctx.at("2026-06-01", "09:00") });
+      ds.add("catalogue_audit", { entity_kind: "package", entity_id: pkg.id, version: pkg.version, action: "retired", actor_id: OWNER, reason: "Superseded by version 2", occurred_at: ctx.at("2026-06-01", "09:00") });
     }
   }
 
@@ -439,13 +439,13 @@ export function buildReference(ds: Dataset, ctx: SeedContext): Reference {
 
 /** Public holidays (approximate, fictional calendar entries) closed in both branches. */
 export const CLOSURES: Array<[string, string]> = [
-  ["2026-01-07", "Coptic Christmas (example closure)"],
-  ["2026-01-25", "Revolution Day (example closure)"],
-  ["2026-03-20", "Eid al-Fitr (example closure)"],
-  ["2026-04-25", "Sinai Liberation Day (example closure)"],
-  ["2026-05-27", "Eid al-Adha (example closure)"],
-  ["2026-07-23", "Revolution anniversary (example closure)"],
-  ["2026-10-06", "Armed Forces Day (example closure)"],
+  ["2026-01-07", "Coptic Christmas"],
+  ["2026-01-25", "Revolution Day"],
+  ["2026-03-20", "Eid al-Fitr"],
+  ["2026-04-25", "Sinai Liberation Day"],
+  ["2026-05-27", "Eid al-Adha"],
+  ["2026-07-23", "Revolution anniversary"],
+  ["2026-10-06", "Armed Forces Day"],
 ];
 
 export const packageAt = (reference: Reference, id: string, date: string) =>

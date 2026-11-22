@@ -84,7 +84,7 @@ export function makeQuote(world: World, o: QuoteOptions): QuoteRec {
   const validThrough = addDays(offeredOn, 21);
   const terms = { validityDays: 30, acceptanceMethods: ["staff-recorded", "customer-confirmed"], evidenceRequired: true, overrideRole: "owner", taxTreatment: ref.taxPolicy };
   const priceOrigin = o.manual || discount > 0
-    ? { kind: o.manual ? "inspection" : "manual", actorId: manager, reason: o.manual ? "Custom scope priced after inspection (example)" : "Warranty-card referral discount (example)" }
+    ? { kind: o.manual ? "inspection" : "manual", actorId: manager, reason: o.manual ? "Custom scope priced after inspection" : "Warranty-card referral discount" }
     : { kind: "catalogue" };
 
   const input = (state: "draft" | "offered") => ({
@@ -243,7 +243,7 @@ export function makeVisit(world: World, o: VisitOptions): VisitRec | null {
     const endAt = ctx.past(date, time, o.status === "no-show" ? 180 : -60);
     jobEvents.push({
       from: "booked", to: visit.stage, actor: o.status === "no-show" ? manager : reception, at: new Date(Math.max(endAt.getTime(), createdAt.getTime() + 600_000)),
-      note: o.status === "no-show" ? "Customer did not arrive; no contact within the grace period (example note)" : rng.pick(["Customer requested cancellation (example)", "Rescheduled by phone then cancelled (example)", "Customer found a closer branch (example)"]),
+      note: o.status === "no-show" ? "Customer did not arrive; no contact within the grace period" : rng.pick(["Customer requested cancellation", "Rescheduled by phone then cancelled", "Customer found a closer branch"]),
     });
   } else {
     jobEvents.push({ from: null, to: "booked", actor: createdBy, note: "Booking confirmed", at: createdAt });
@@ -270,8 +270,8 @@ export function makeVisit(world: World, o: VisitOptions): VisitRec | null {
       ["ready", "delivered", lastDay, "16:30", reception],
     ];
     const notes: Record<string, string> = {
-      received: "Vehicle received and inspected at the bay (example note)", "in-service": "Work started by the assigned technician (example note)",
-      qc: "Work finished; quality check in progress (example note)", ready: "Quality check passed; vehicle ready for pickup (example note)", delivered: "Delivered to the customer; handover checklist signed (example note)",
+      received: "Vehicle received and inspected at the bay", "in-service": "Work started by the assigned technician",
+      qc: "Work finished; quality check in progress", ready: "Quality check passed; vehicle ready for pickup", delivered: "Delivered to the customer; handover checklist signed",
     };
     for (let step = 0; step < reached; step++) {
       const [from, to, day, clock, actor] = times[step];
@@ -324,7 +324,7 @@ export function addPickupCommitment(world: World, visit: VisitRec, missed: boole
   ds.add("pickup_commitments", {
     id, booking_id: visit.id, job_id: visit.jobId, revision: 1, supersedes_id: null, promised_at: ctx.at(promisedDay, "16:00"),
     branch_timezone: "Africa/Cairo", recorded_by: manager, recorded_at: recorded, customer_agreement_evidence_ref: evidence("pickup-agreement", String(visit.n).padStart(4, "0")),
-    reason: "Customer agreed to the pickup window by phone (example)", cancellation_reason: null,
+    reason: "Customer agreed to the pickup window by phone", cancellation_reason: null,
   });
 }
 

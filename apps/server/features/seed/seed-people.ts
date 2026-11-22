@@ -16,18 +16,21 @@ export const BRANCH_B = "branch-b";
 export const BRANCH_IDS = [BRANCH_A, BRANCH_B] as const;
 export const OWNER = "demo-owner";
 
-/** demo-* accounts mirror auth/demo-auth.ts; the remaining staff are fictional seed memberships (not login accounts). */
+/** The demo technician account (auth/demo-auth.ts). The seed assigns it a realistic job set in its demo branch. */
+export const DEMO_TECHNICIAN = "demo-technician";
+
+/** demo-* accounts mirror auth/demo-auth.ts; the remaining staff are fictional seed memberships (not login accounts). Names are single-script and emails lowercase. */
 export const STAFF: StaffRec[] = [
-  { id: OWNER, email: "Owner@noemail.com", name: "Demo Owner", role: "owner", branchIds: [] },
-  { id: "demo-manager", email: "Manager@noemail.com", name: "Salma Nabil", role: "branch-manager", branchIds: [BRANCH_A] },
-  { id: "demo-reception", email: "Reception@noemail.com", name: "Karim Adel", role: "receptionist", branchIds: [BRANCH_A] },
-  { id: "demo-technician", email: "Technician@noemail.com", name: "Youssef Samir", role: "technician", branchIds: [BRANCH_A] },
-  { id: "seed-tech-a2", email: "seed.tech.a2@example.test", name: "محمود عادل (Mahmoud Adel)", role: "technician", branchIds: [BRANCH_A] },
-  { id: "seed-tech-a3", email: "seed.tech.a3@example.test", name: "إسلام فتحي (Islam Fathy)", role: "technician", branchIds: [BRANCH_A] },
-  { id: "seed-manager-b", email: "seed.manager.b@example.test", name: "هاني رجب (Hany Ragab)", role: "branch-manager", branchIds: [BRANCH_B] },
-  { id: "seed-reception-b", email: "seed.reception.b@example.test", name: "ندى سمير (Nada Samir)", role: "receptionist", branchIds: [BRANCH_B] },
-  { id: "seed-tech-b1", email: "seed.tech.b1@example.test", name: "عمرو صلاح (Amr Salah)", role: "technician", branchIds: [BRANCH_B] },
-  { id: "seed-tech-b2", email: "seed.tech.b2@example.test", name: "مصطفى جمال (Mostafa Gamal)", role: "technician", branchIds: [BRANCH_B] },
+  { id: OWNER, email: "owner@noemail.com", name: "Khaled Mansour", role: "owner", branchIds: [] },
+  { id: "demo-manager", email: "manager@noemail.com", name: "Salma Nabil", role: "branch-manager", branchIds: [BRANCH_A] },
+  { id: "demo-reception", email: "reception@noemail.com", name: "Karim Adel", role: "receptionist", branchIds: [BRANCH_A] },
+  { id: DEMO_TECHNICIAN, email: "technician@noemail.com", name: "Youssef Samir", role: "technician", branchIds: [BRANCH_A] },
+  { id: "seed-tech-a2", email: "mahmoud.adel@gostores.example", name: "Mahmoud Adel", role: "technician", branchIds: [BRANCH_A] },
+  { id: "seed-tech-a3", email: "islam.fathy@gostores.example", name: "Islam Fathy", role: "technician", branchIds: [BRANCH_A] },
+  { id: "seed-manager-b", email: "hany.ragab@gostores.example", name: "Hany Ragab", role: "branch-manager", branchIds: [BRANCH_B] },
+  { id: "seed-reception-b", email: "nada.samir@gostores.example", name: "Nada Samir", role: "receptionist", branchIds: [BRANCH_B] },
+  { id: "seed-tech-b1", email: "amr.salah@gostores.example", name: "Amr Salah", role: "technician", branchIds: [BRANCH_B] },
+  { id: "seed-tech-b2", email: "mostafa.gamal@gostores.example", name: "Mostafa Gamal", role: "technician", branchIds: [BRANCH_B] },
 ];
 
 export const staffFor = (branchId: string, role: StaffRec["role"]) =>
@@ -41,16 +44,20 @@ const MALE: Array<[string, string]> = [
   ["يوسف", "Youssef"], ["كريم", "Karim"], ["طارق", "Tarek"], ["هشام", "Hisham"], ["خالد", "Khaled"],
   ["أمير", "Amir"], ["حسام", "Hossam"], ["وليد", "Walid"], ["شريف", "Sherif"], ["باسم", "Bassem"],
   ["إسلام", "Islam"], ["ياسر", "Yasser"], ["تامر", "Tamer"], ["ماجد", "Maged"], ["سامح", "Sameh"],
+  ["عادل", "Adel"], ["رامي", "Ramy"], ["نادر", "Nader"], ["إيهاب", "Ehab"], ["ممدوح", "Mamdouh"], ["أسامة", "Osama"],
+  ["صلاح", "Salah"], ["جمال", "Gamal"], ["هاني", "Hany"], ["عمرو", "Amr"],
 ];
 const FEMALE: Array<[string, string]> = [
   ["مريم", "Mariam"], ["نور", "Nour"], ["سارة", "Sara"], ["هدى", "Hoda"], ["منى", "Mona"], ["دينا", "Dina"],
   ["ياسمين", "Yasmin"], ["ريم", "Reem"], ["نهى", "Noha"], ["آية", "Aya"], ["هبة", "Heba"], ["رنا", "Rana"],
+  ["ليلى", "Layla"], ["أسماء", "Asmaa"], ["شيماء", "Shaimaa"], ["إيمان", "Eman"], ["سلمى", "Salma"], ["نادين", "Nadine"], ["رشا", "Rasha"], ["دعاء", "Doaa"],
 ];
 const FAMILY: Array<[string, string]> = [
   ["حسن", "Hassan"], ["الشاذلي", "El-Shazly"], ["فوزي", "Fawzy"], ["السيد", "El-Sayed"], ["عبد الرحمن", "Abdelrahman"],
   ["منصور", "Mansour"], ["إبراهيم", "Ibrahim"], ["سليمان", "Soliman"], ["الجندي", "El-Gendy"], ["زكي", "Zaki"],
   ["الفخراني", "El-Fakhrany"], ["عبد الله", "Abdallah"], ["البنا", "El-Banna"], ["رشدي", "Roshdy"], ["لطفي", "Lotfy"],
   ["شعبان", "Shaaban"], ["الدسوقي", "El-Desouky"], ["حجازي", "Hegazy"],
+  ["الحداد", "El-Haddad"], ["عفيفي", "Afifi"], ["النجار", "El-Naggar"], ["بدوي", "Badawy"], ["مرسي", "Morsy"], ["صبري", "Sabry"], ["عطية", "Atteya"], ["جاد", "Gad"],
 ];
 
 export interface CarModel { make: string; model: string; category: CategoryKey }
@@ -134,6 +141,7 @@ export const RICH_COUNT = RICH.length;
 export function buildPeople(rng: Rng, totalCustomers: number): CustomerRec[] {
   const customers: CustomerRec[] = [];
   const platesUsed = new Set<string>();
+  const namesUsed = new Set<string>();
   let vehicleSeq = 0;
   const prefixes = ["100", "101", "102", "111", "112", "120", "122", "127"];
 
@@ -157,13 +165,19 @@ export function buildPeople(rng: Rng, totalCustomers: number): CustomerRec[] {
   for (let index = 0; index < totalCustomers; index++) {
     const rich = index < RICH.length ? RICH[index] : null;
     const male = rich ? !FEMALE.includes(rich.first) : rng.chance(0.72);
-    const first = rich ? rich.first : rng.pick(male ? MALE : FEMALE);
-    const father = rich ? rich.father : rng.pick(MALE);
-    const family = rich ? rich.family : rng.pick(FAMILY);
-    const language: Lang = rich ? rich.lang : rng.chance(0.68) ? "ar" : "en";
+    let first = rich ? rich.first : rng.pick(male ? MALE : FEMALE);
+    let father = rich ? rich.father : rng.pick(MALE);
+    let family = rich ? rich.family : rng.pick(FAMILY);
+    // One script per name, and no two customers share a name: re-draw on a repeated or self-repeating combination.
+    for (let attempt = 0; !rich && (first[0] === father[0] || namesUsed.has(`${first[1]} ${father[1]} ${family[1]}`)) && attempt < 200; attempt++) {
+      first = rng.pick(male ? MALE : FEMALE); father = rng.pick(MALE); family = rng.pick(FAMILY);
+    }
+    const language: Lang = rich ? rich.lang : rng.chance(0.76) ? "ar" : "en";
     const nameAr = `${first[0]} ${father[0]} ${family[0]}`;
     const nameEn = `${first[1]} ${father[1]} ${family[1]}`;
-    const subscriber = 1000 + index;
+    namesUsed.add(nameEn);
+    // Subscriber numbers stay in the fictional 000 block and never end in a round "00".
+    const subscriber = 1101 + index * 17 + Math.floor((index * 17) / 100);
     const prefix = prefixes[index % prefixes.length];
     const customer: CustomerRec = {
       id: `seed-cust-${pad(index + 1, 3)}`,

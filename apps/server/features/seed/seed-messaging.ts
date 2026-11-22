@@ -18,7 +18,7 @@ function script(chat: ChatSpec): Msg[] {
         m("customer", `السلام عليكم، عايز أعرف سعر حماية الطلاء لـ ${car}`, `Hello, I would like the price of paint protection for my ${car}`, 0),
         m("bot", "أهلًا بك في جو ستورز. من فضلك اكتب الاسم الثلاثي ونوع السيارة (رد تجريبي).", "Welcome to GO stores. Please send your three-part name and car model (simulated reply).", 1),
         m("customer", `الاسم ${chat.customer.nameAr} والسيارة ${car}`, `My name is ${chat.customer.nameEn}, the car is ${car}`, 6),
-        m("staff", `أهلًا ${chat.customer.nameAr}. الباقة المناسبة: ${label.ar} بسعر ${price} جنيه (سعر إعلاني تجريبي).`, `Hello ${chat.customer.nameEn}. The suitable package is ${label.en} at ${price} EGP (advertised example price).`, 25, true),
+        m("staff", `أهلًا ${chat.customer.nameAr}. الباقة المناسبة: ${label.ar} بسعر ${price} جنيه (سعر معلن).`, `Hello ${chat.customer.nameEn}. The suitable package is ${label.en} at ${price} EGP (advertised price).`, 25, true),
         m("customer", "ينفع أحجز وأدفع عربون؟", "Can I reserve and pay a deposit?", 12),
         m("staff", "تم تسجيل عرض السعر. العربون يُسجل كمرجع فقط بدون دفع داخل النظام (محاكاة).", "The quote is recorded. The deposit is noted as a reference only, with no payment in the system (simulation).", 9, true),
       ];
@@ -42,7 +42,7 @@ function script(chat: ChatSpec): Msg[] {
         m("customer", "في مشكلة بسيطة في الفيلم بعد شهرين من التركيب", "There is a small problem with the film two months after installation", 0),
         m("bot", "نأسف لذلك. أرسل صورًا وسيتم فتح طلب ضمان (محاكاة).", "Sorry to hear that. Please send photos and a warranty claim will be opened (simulation).", 1),
         m("customer", "[صورة مرفقة - بيانات وصفية فقط]", "[photo attached - metadata only]", 8),
-        m("staff", "تم فتح طلب ضمان وسيتم مراجعته خلال 5 أيام عمل (نص تجريبي).", "A warranty claim has been opened and will be reviewed within 5 working days (example text).", 18, true),
+        m("staff", "تم فتح طلب ضمان وسيتم مراجعته خلال 5 أيام عمل.", "A warranty claim has been opened and will be reviewed within 5 working days.", 18, true),
         m("internal-note", "ملاحظة داخلية: مراجعة الفيلم عند الاستلام القادم.", "Internal note: inspect the film at the next visit.", 5, true),
       ];
     case "special":
@@ -50,14 +50,14 @@ function script(chat: ChatSpec): Msg[] {
         m("customer", chat.special ? `عندي طلب خاص: ${chat.special}` : "عندي طلب خاص", chat.special ? `I have a special request: ${chat.special}` : "I have a special request", 0),
         m("bot", "هذا الطلب يحتاج مراجعة بشرية وسيتم تحويله للمالك (محاكاة).", "This request needs human review and is routed to the Owner (simulation).", 1),
         m("internal-note", "ملاحظة داخلية: طلب خاص/مخصص موجه للمالك للقبول أو المراجعة.", "Internal note: special/custom request routed to the Owner to accept or review.", 4, true),
-        m("staff", "سيتواصل معك المالك خلال يوم عمل (نص تجريبي).", "The Owner will contact you within one working day (example text).", 40, true),
+        m("staff", "سيتواصل معك المالك خلال يوم عمل.", "The Owner will contact you within one working day.", 40, true),
       ];
     default:
       return [
         m("customer", "عايز أسأل عن تركيب فيلم الحرارة", "I would like to ask about heat film installation", 0),
         m("bot", "من فضلك اكتب نوع السيارة والموديل (محاكاة).", "Please send the car type and model (simulation).", 1),
         m("customer", `${car}`, `${car}`, 7),
-        m("staff", "تم تحويل طلبك للفريق وسيتم الرد قريبًا (نص تجريبي).", "Your request was handed to the team and you will get a reply soon (example text).", 30, true),
+        m("staff", "تم تحويل طلبك للفريق وسيتم الرد قريبًا.", "Your request was handed to the team and you will get a reply soon.", 30, true),
       ];
   }
 }
@@ -104,15 +104,15 @@ export function generateMessaging(world: World) {
       }
     });
     const events: Array<[string, string, string | null, Date]> = [["seeded-scenario", "Fictional development inbox scenario (seed data).", OWNER, base]];
-    if (status !== "open") events.push(["status-changed", `Status set to ${status} (example).`, staff, lastAt]);
-    if (chat.kind === "special") events.push(["routed-to-owner", "Special request routed to the Owner (example).", managerOf(chat.branchId), new Date(times[2]?.getTime() ?? base.getTime())]);
+    if (status !== "open") events.push(["status-changed", `Status set to ${status}.`, staff, lastAt]);
+    if (chat.kind === "special") events.push(["routed-to-owner", "Special request routed to the Owner.", managerOf(chat.branchId), new Date(times[2]?.getTime() ?? base.getTime())]);
     events.forEach(([type, details, actor, at], index) => {
       ds.add("whatsapp_conversation_events", { id: `${chat.id}-e${index + 1}`, conversation_id: chat.id, event_type: type, details, actor_user_id: actor, created_at: at });
     });
     if (chat.kind === "booking" && chat.visit) {
       ds.add("whatsapp_booking_drafts", {
         id: `${chat.id}-draft`, conversation_id: chat.id, service_id: chat.visit.product.serviceId, dropoff_date: chat.visit.date, dropoff_time: chat.visit.time, expected_pickup: chat.visit.pickup,
-        eta_reason: "Estimated from the configured branch capacity (example).", change_booking_id: null, change_action: null,
+        eta_reason: "Estimated from the configured branch capacity.", change_booking_id: null, change_action: null,
         status: chat.visit.status === "cancelled" ? "cancelled" : "confirmed", created_at: base, updated_at: lastAt,
       });
     }

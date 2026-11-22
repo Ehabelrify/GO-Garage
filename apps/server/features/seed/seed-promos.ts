@@ -67,7 +67,7 @@ export function makePromoFlow(world: World, o: PromoFlowOptions): { quote: Quote
     }
     ds.add("promotion_qualifications", {
       id: qualificationId, environment_id: ctx.environmentId, promotion_id: policy.id, policy_version: 1, branch_id: o.branchId, beneficiary_id: o.customer.id,
-      vehicle_ids: o.groupVehicleIds ?? [o.vehicle.id], state: "eligible", decision_reasons: [`${evidenceKind} verified (example)`], created_by: manager,
+      vehicle_ids: o.groupVehicleIds ?? [o.vehicle.id], state: "eligible", decision_reasons: [`${evidenceKind} verified`], created_by: manager,
       created_at: new Date(resAt.getTime() - 3_600_000),
     });
     ds.add("promotion_evidence", { qualification_id: qualificationId, kind: evidenceKind, reference_id: evidenceId, verified_by: manager, verified_at: new Date(resAt.getTime() - 3_600_000) });
@@ -86,7 +86,7 @@ export function makePromoFlow(world: World, o: PromoFlowOptions): { quote: Quote
     }
     if (status === "reversed") {
       ds.add("promotion_allocation_events", {
-        allocation_id: allocationId, action: "reversed", actor_id: manager, reason: outcome === "expired" || expiredNow ? "Reservation expired unused (example)" : "Cancelled by customer (example)",
+        allocation_id: allocationId, action: "reversed", actor_id: manager, reason: outcome === "expired" || expiredNow ? "Reservation expired unused" : "Cancelled by customer",
         evidence_ref: evidence("reversal", resId.slice(-4)), occurred_at: ctx.past(addDays(o.quoteDate, 20), "12:00"),
       });
     }
@@ -107,16 +107,16 @@ export function makePromoFlow(world: World, o: PromoFlowOptions): { quote: Quote
   const status = expiredNow ? "expired" : outcome;
   const terms = {
     validityDays: 30,
-    deposit: { required: true, amount: egp(5000), refundRule: { ar: "يُراجع الاسترداد مع المالك (نص تجريبي)", en: "Refund is reviewed by the Owner (example wording)" } },
-    cancellationRule: { ar: "يتم مراجعة الإلغاء يدويًا (نص تجريبي)", en: "Cancellation is reviewed manually (example wording)" }, cancellationDisposition: "review-required",
+    deposit: { required: true, amount: egp(5000), refundRule: { ar: "يُراجع الاسترداد مع المالك", en: "Refund is reviewed by the Owner" } },
+    cancellationRule: { ar: "يتم مراجعة الإلغاء يدويًا", en: "Cancellation is reviewed manually" }, cancellationDisposition: "review-required",
     priceLock: true, redemptionTiming: "installation", restoreAllowed: true, expiryAction: "review-required",
   };
   const events: Array<[string, string | null, string | null]> = [[firm ? "reserved" : "enquired", null, null]];
-  if (firm) events.push(["deposit-reference", "Deposit reference noted; no payment recorded in Garage OS (example)", depositRef]);
+  if (firm) events.push(["deposit-reference", "Deposit reference noted; no payment recorded in Garage OS", depositRef]);
   if (visit && outcome !== "cancelled") events.push(["scheduled", null, null]);
   if (outcome === "redeemed") events.push(["redeemed", null, null]);
-  if (outcome === "cancelled") events.push(["cancelled", "Customer cancelled after scheduling (example)", null]);
-  if (status === "expired") events.push(["expired", "Reservation window ended without booking (example)", null]);
+  if (outcome === "cancelled") events.push(["cancelled", "Customer cancelled after scheduling", null]);
+  if (status === "expired") events.push(["expired", "Reservation window ended without booking", null]);
   ds.add("promotion_reservations", {
     id: resId, environment_id: ctx.environmentId, quote_id: quote.id, quote_revision: quote.revision, promotion_id: policy.id, promotion_version: 1,
     qualification_id: qualificationId, allocation_id: allocationId, branch_id: o.branchId, beneficiary_id: o.customer.id, vehicle_id: o.vehicle.id,
@@ -133,12 +133,12 @@ export function makePromoFlow(world: World, o: PromoFlowOptions): { quote: Quote
   });
   if (firm) {
     ds.add("promotion_reservation_deposit_events", {
-      reservation_id: resId, state: "reference-only", reference: depositRef, actor_id: reception, reason: "Deposit reference noted; no payment recorded (example)",
+      reservation_id: resId, state: "reference-only", reference: depositRef, actor_id: reception, reason: "Deposit reference noted; no payment recorded",
       occurred_at: new Date(resAt.getTime() + 3_600_000),
     });
     if (status === "cancelled" || status === "expired") {
       ds.add("promotion_reservation_allocation_events", {
-        reservation_id: resId, allocation_id: allocationId, action: "released", actor_id: manager, reason: "Allocation released (example)",
+        reservation_id: resId, allocation_id: allocationId, action: "released", actor_id: manager, reason: "Allocation released",
         evidence_ref: evidence("release", resId.slice(-4)), occurred_at: ctx.past(addDays(o.quoteDate, 21), "12:00"),
       });
     }

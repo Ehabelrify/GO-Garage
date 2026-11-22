@@ -55,7 +55,7 @@ function issueWarranties(world: World, visit: VisitRec) {
     ds.add("warranties", {
       id, policy_id: policy.id, policy_version: policy.version, job_id: visit.jobId, customer_id: visit.customer.id, vehicle_id: visit.vehicle.id,
       branch_id: visit.branchId, service_id: target.serviceId, start_date: startDate, expires_on: expiresOn, status: voided ? "void" : "active",
-      void_reason: voided ? "Issued against the wrong vehicle plate; replaced by a corrected card (example)" : null, issued_by: issuer, issued_at: issuedAt,
+      void_reason: voided ? "Issued against the wrong vehicle plate; replaced by a corrected card" : null, issued_by: issuer, issued_at: issuedAt,
       coverage_kind: policy.kind, lifetime_definition: lifetime ? json(lifetime) : null, component_id: target.componentId,
       accepted_quote_id: visit.quote?.accepted ? visit.quote.id : null, accepted_quote_revision: visit.quote?.accepted ? visit.quote.revision : null,
       accepted_quote_digest: visit.quote?.accepted ? visit.quote.digest : null,
@@ -78,7 +78,7 @@ function issueWarranties(world: World, visit: VisitRec) {
     visit.warranties.push(warranty);
     world.warranties.push(warranty);
     if (voided) {
-      ds.add("warranty_audit_events", { id: `seed-wae-${id.slice(9)}-3`, warranty_id: id, action: "warranty-voided", details: "Voided with a recorded reason (example).", actor_user_id: managerOf(visit.branchId), created_at: new Date(issuedAt.getTime() + 86_400_000) });
+      ds.add("warranty_audit_events", { id: `seed-wae-${id.slice(9)}-3`, warranty_id: id, action: "warranty-voided", details: "Voided with a recorded reason.", actor_user_id: managerOf(visit.branchId), created_at: new Date(issuedAt.getTime() + 86_400_000) });
     } else {
       addQrTokens(world, warranty);
       if (policy.kind === "lifetime" && !visit.rich && daysBetween(startDate, ctx.today) > 120 && rng.chance(0.08)) terminate(world, warranty);
@@ -94,9 +94,9 @@ function terminate(world: World, warranty: WarrantyRec) {
   warranty.terminatedOn = terminatedOn;
   ds.add("warranty_termination_events", {
     id: `seed-wte-${warranty.id.slice(9)}`, warranty_id: warranty.id, terminated_on: terminatedOn, actor_user_id: OWNER,
-    reason: "Vehicle sold to a new owner; lifetime coverage ends with the original vehicle owner (example)", evidence_ref: ev("termination", warranty.id.slice(9)), created_at: ctx.past(terminatedOn, "12:00"),
+    reason: "Vehicle sold to a new owner; lifetime coverage ends with the original vehicle owner", evidence_ref: ev("termination", warranty.id.slice(9)), created_at: ctx.past(terminatedOn, "12:00"),
   });
-  ds.add("warranty_audit_events", { id: `seed-wae-${warranty.id.slice(9)}-t`, warranty_id: warranty.id, action: "lifetime-terminated", details: "Termination recorded with evidence (example).", actor_user_id: OWNER, created_at: ctx.past(terminatedOn, "12:00") });
+  ds.add("warranty_audit_events", { id: `seed-wae-${warranty.id.slice(9)}-t`, warranty_id: warranty.id, action: "lifetime-terminated", details: "Termination recorded with evidence.", actor_user_id: OWNER, created_at: ctx.past(terminatedOn, "12:00") });
 }
 
 /* --------------------------------- QR tokens --------------------------------- */
@@ -176,12 +176,12 @@ function addClaim(world: World, warranty: WarrantyRec) {
   const reviewedAt = resolved ? new Date(openedAt.getTime() + 3 * 86_400_000) : null;
   const reviewedAtSafe = reviewedAt && reviewedAt.getTime() > ctx.now.getTime() ? new Date(ctx.now.getTime() - 60_000) : reviewedAt;
   ds.add("warranty_claims", {
-    id, warranty_id: warranty.id, summary: `${text[0]} / ${text[1]}`, evidence: "Customer photos and the original job card attached as evidence metadata (example).",
-    status, resolution: resolved ? (status === "approved" ? "Approved. Re-application scheduled at no cost (example)." : status === "denied" ? "Denied. Damage matches a listed exclusion: external impact (example)." : "Closed after the customer confirmed the issue was resolved (example).") : null,
+    id, warranty_id: warranty.id, summary: `${text[0]} / ${text[1]}`, evidence: "Customer photos and the original job card attached as evidence metadata.",
+    status, resolution: resolved ? (status === "approved" ? "Approved. Re-application scheduled at no cost." : status === "denied" ? "Denied. Damage matches a listed exclusion: external impact." : "Closed after the customer confirmed the issue was resolved.") : null,
     opened_by: receptionOf(visit.branchId), reviewed_by: resolved ? reviewer : null, reviewed_at: reviewedAtSafe, created_at: openedAt, updated_at: reviewedAtSafe ?? openedAt,
   });
   ds.add("warranty_audit_events", { id: `seed-wae-${id.slice(9)}-c1`, claim_id: id, action: "claim-opened", details: text[0], actor_user_id: receptionOf(visit.branchId), created_at: openedAt });
-  if (resolved) ds.add("warranty_audit_events", { id: `seed-wae-${id.slice(9)}-c2`, claim_id: id, action: `claim-${status}`, details: "Review recorded (example).", actor_user_id: reviewer, created_at: reviewedAtSafe });
+  if (resolved) ds.add("warranty_audit_events", { id: `seed-wae-${id.slice(9)}-c2`, claim_id: id, action: `claim-${status}`, details: "Review recorded.", actor_user_id: reviewer, created_at: reviewedAtSafe });
   for (let index = 1; index <= rng.int(1, 3); index++) {
     ds.add("warranty_claim_attachments", {
       id: `seed-cla-${id.slice(9)}-${index}`, claim_id: id, object_name: `seed/claims/${id}/evidence-${index}.jpg`,
@@ -217,9 +217,9 @@ function recordVisitFinance(world: World, visit: VisitRec) {
   if (sale <= 0) return;
   const n = String(visit.n).padStart(4, "0");
   const base = { branchId: visit.branchId, customerId: visit.customer.id, jobId: visit.jobId, quoteId: visit.quote?.accepted ? visit.quote.id : null };
-  recordMoneyEvent(world, { ...base, kind: "recognized-revenue", amountMinor: sale, at: visit.deliveredAt, ref: `REV-${n}`, method: "delivery-recognition", reason: "Revenue recognised on delivery (example definition)" });
+  recordMoneyEvent(world, { ...base, kind: "recognized-revenue", amountMinor: sale, at: visit.deliveredAt, ref: `REV-${n}`, method: "delivery-recognition", reason: "Revenue recognised on delivery" });
   const costRatio = visit.product.kind === "package" ? rng.float() * 0.1 + 0.42 : rng.float() * 0.15 + 0.35;
-  recordMoneyEvent(world, { ...base, kind: "direct-cost", amountMinor: Math.round(sale * costRatio), at: new Date(visit.deliveredAt.getTime() - 3_600_000), ref: `COST-${n}`, method: "supplier-invoice", reason: "Film, materials and labour cost for the job (example)" });
+  recordMoneyEvent(world, { ...base, kind: "direct-cost", amountMinor: Math.round(sale * costRatio), at: new Date(visit.deliveredAt.getTime() - 3_600_000), ref: `COST-${n}`, method: "supplier-invoice", reason: "Film, materials and labour cost for the job" });
   // Collections are recorded after the invoice draft logic assigned paidMinor; deliverVisit runs issueWarranties first.
   const paid = visit.warranties.length ? visit.paidMinor : Math.round(sale * rng.pick([1, 1, 1, 1, 0.5]));
   if (!visit.warranties.length) visit.paidMinor = paid;
@@ -229,7 +229,7 @@ function recordVisitFinance(world: World, visit: VisitRec) {
     for (let part = 0; part < parts; part++) {
       const amount = part === 0 && parts === 2 ? Math.round(paid * 0.4) : parts === 2 ? paid - Math.round(paid * 0.4) : paid;
       const at = part === 0 && parts === 2 ? ctx.past(addDays(visit.date, -1), "13:00") : new Date(Math.min(visit.deliveredAt.getTime() + 600_000, ctx.now.getTime() - 60_000));
-      const id = recordMoneyEvent(world, { ...base, reservationId: part === 0 && visit.reservation ? visit.reservation.id : null, kind: "collection", amountMinor: amount, at, ref: `RCPT-${n}-${part + 1}`, method: rng.pick(methods), reason: part === 0 && parts === 2 ? "Booking advance (example)" : "Payment on delivery (example)" });
+      const id = recordMoneyEvent(world, { ...base, reservationId: part === 0 && visit.reservation ? visit.reservation.id : null, kind: "collection", amountMinor: amount, at, ref: `RCPT-${n}-${part + 1}`, method: rng.pick(methods), reason: part === 0 && parts === 2 ? "Booking advance" : "Payment on delivery" });
       if (id && part === 1) world.moneyReverseCandidates.push(id);
     }
   }
@@ -263,7 +263,7 @@ export function materializeBenefit(world: World, quote: import("./seed-world").Q
     id, environment_id: ctx.environmentId, source_quote_id: quote.id, source_revision: quote.revision, binding_index: bindingIndex, trigger_kind: trigger,
     benefit_id: binding.id, benefit_version: binding.version, customer_id: quote.customer.id, vehicle_id: quote.vehicle.id, branch_ids: ["branch-a", "branch-b"],
     promise: json({
-      limit: { state: "approved", value: limit, policy: binding, approval }, eligibilityRule: { ar: "حسب شروط العرض المنشور (نص تجريبي)", en: "Per the published offer terms (example wording)" },
+      limit: { state: "approved", value: limit, policy: binding, approval }, eligibilityRule: { ar: "حسب شروط العرض المنشور", en: "Per the published offer terms" },
       activationTrigger: trigger, transferRule: "same-customer-vehicle", cancellationRule: "review-required", expiryRule: { kind: "none" }, reversalRestoresEligibility: true,
     }),
     responsible_team_id: "seed-team-service", status: "active", revision: 1, created_at: at,
@@ -279,7 +279,7 @@ export function materializeBenefit(world: World, quote: import("./seed-world").Q
     });
     ds.add("benefit_audit", { entitlement_id: id, action: "redeemed", actor_id: receptionOf(quote.branchId), event_ref: redemptionId, occurred_at: redeemedAt });
     if (reverse) {
-      ds.add("benefit_reversals", { id: `${redemptionId}-rev`, redemption_id: redemptionId, reason: "Service not performed; redemption reversed (example)", evidence_ref: ev("reversal", redemptionId.slice(-6)), restored_quantity: quantity, actor_id: managerOf(quote.branchId), created_at: new Date(redeemedAt.getTime() + 86_400_000) });
+      ds.add("benefit_reversals", { id: `${redemptionId}-rev`, redemption_id: redemptionId, reason: "Service not performed; redemption reversed", evidence_ref: ev("reversal", redemptionId.slice(-6)), restored_quantity: quantity, actor_id: managerOf(quote.branchId), created_at: new Date(redeemedAt.getTime() + 86_400_000) });
       ds.add("benefit_audit", { entitlement_id: id, action: "reversed", actor_id: managerOf(quote.branchId), event_ref: redemptionId, occurred_at: new Date(redeemedAt.getTime() + 86_400_000) });
     }
   };
