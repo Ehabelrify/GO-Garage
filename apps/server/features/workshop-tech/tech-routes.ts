@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Router, type NextFunction, type Request, type Response } from "express";
+import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import type { PoolClient } from "pg";
 import { actorFor } from "../auth/auth";
@@ -195,45 +195,43 @@ techRouter.patch("/:id/checklist/:itemId", async (req, res) => {
   res.json({ ok: true, items: result.items, summary: result.summary });
 });
 
+export type ReadyGateResult =
+  | { outcome: "allow"; eventNote: string | null }
+  | { outcome: "blocked"; payload: { code: "CHECKLIST_INCOMPLETE"; message: string; remaining: { id: string; labelEn: string; labelAr: string }[]; canOverride: boolean } };
+
 /**
- * Gate in front of the existing PATCH /api/jobs/:jobId/stage: a move to 'ready' needs every mandatory checklist item
- * done. Owner or branch manager may override with `overrideReason` (audited). Everything else falls through unchanged.
+ * Gate for a move to 'ready', run by the job stage route INSIDE its own transaction after it has locked the job row.
+ * Locks the checklist rows (FOR UPDATE) so a concurrent untick waits until the stage update commits, and writes the
+ * override audit in the same transaction: if the audit fails, the whole stage change rolls back.
+ * Every mandatory item must be done; an owner or branch manager may override with `overrideReason`.
  */
-export async function readyGate(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = (req.body ?? {}) as { nextStage?: unknown; overrideReason?: unknown };
-    if (body.nextStage !== "ready") return next();
-    const a = actor(req);
-    const decision = await withTransaction(async (client) => {
-      const access = await accessJob(client, a, String(req.params.jobId), true);
-      if (!access.ok) return { pass: true as const };
-      await ensureChecklist(client, access.job);
-      const items = (await client.query<ChecklistRow>(
-        "SELECT id, label_en, label_ar, mandatory, done FROM job_checklist_items WHERE job_id = $1 ORDER BY position", [access.job.id])).rows
-        .map((row): ChecklistItemLike => ({ id: row.id, labelEn: row.label_en, labelAr: row.label_ar, mandatory: row.mandatory, done: row.done }));
-      return { pass: false as const, jobId: access.job.id, gate: evaluateReadyGate({ items, role: a.role, isDemo: a.isDemo, overrideReason: body.overrideReason }) };
-    });
-    if (decision.pass || decision.gate.outcome === "allow") return next();
-    if (decision.gate.outcome === "blocked") {
-      return res.status(409).json({
+export async function authorizeReadyInTransaction(
+  client: Queryable,
+  a: GarageActor,
+  job: Pick<JobRow, "id" | "service_id">,
+  body: { overrideReason?: unknown },
+): Promise<ReadyGateResult> {
+  await ensureChecklist(client, job);
+  const items = (await client.query<ChecklistRow>(
+    "SELECT id, label_en, label_ar, mandatory, done FROM job_checklist_items WHERE job_id = $1 ORDER BY position FOR UPDATE", [job.id])).rows
+    .map((row): ChecklistItemLike => ({ id: row.id, labelEn: row.label_en, labelAr: row.label_ar, mandatory: row.mandatory, done: row.done }));
+  const gate = evaluateReadyGate({ items, role: a.role, isDemo: a.isDemo, overrideReason: body.overrideReason });
+  if (gate.outcome === "allow") return { outcome: "allow", eventNote: null };
+  if (gate.outcome === "blocked") {
+    return {
+      outcome: "blocked",
+      payload: {
         code: "CHECKLIST_INCOMPLETE",
         message: isManagerRole(a.role) ? "Finish the required checklist steps, or give a reason to override." : "Finish the required checklist steps first.",
-        remaining: decision.gate.remaining.map((item) => ({ id: item.id, labelEn: item.labelEn, labelAr: item.labelAr })),
+        remaining: gate.remaining.map((item) => ({ id: item.id, labelEn: item.labelEn, labelAr: item.labelAr })),
         canOverride: isManagerRole(a.role),
-      });
-    }
-    const { reason, remaining } = decision.gate;
-    res.on("finish", () => {
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        void audit(pool, decision.jobId, "ready-gate-override", `${remaining.length} step(s) skipped. Reason: ${reason}`, a.userId).catch(() => undefined);
-      }
-    });
-    next();
-  } catch (error) {
-    next(error);
+      },
+    };
   }
+  const details = `${gate.remaining.length} step(s) skipped. Reason: ${gate.reason}`;
+  await audit(client, job.id, "ready-gate-override", details, a.userId);
+  return { outcome: "allow", eventNote: `Ready gate override: ${details}`.slice(0, 500) };
 }
-techRouter.patch("/:jobId/stage", readyGate);
 
 const photoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_JOB_PHOTO_BYTES, files: 1, fields: 4, parts: 6 } });
 

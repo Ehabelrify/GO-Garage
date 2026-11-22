@@ -16,7 +16,7 @@ vi.mock("../../infrastructure/storage/private-storage", () => ({
   privateStorageClient: () => (storageConfigured.value ? { uploadFromBytes: async () => ({ ok: true }), delete: async () => ({ ok: true }) } : null),
 }));
 
-const { techRouter } = await import("./tech-routes");
+const { techRouter, authorizeReadyInTransaction } = await import("./tech-routes");
 
 const actor = (role: GarageActor["role"], extra: Partial<GarageActor> = {}): GarageActor =>
   ({ userId: `${role}-1`, email: "", name: role, role, branchIds: ["b1"], ...extra });
@@ -109,32 +109,43 @@ describe("access control", () => {
   });
 });
 
-describe("ready gate on the stage route", () => {
-  it("blocks a technician while a mandatory step is open", async () => {
-    current.actor = actor("technician");
-    const res = await call("PATCH", "/jobs/j1/stage", { nextStage: "ready" });
-    expect(res.status).toBe(409);
-    expect(res.body.code).toBe("CHECKLIST_INCOMPLETE");
-    expect(res.body.canOverride).toBe(false);
-    expect(res.body.remaining).toEqual([{ id: "i1", labelEn: "Prep", labelAr: "prep-ar" }]);
+describe("authorizeReadyInTransaction (runs inside the stage transaction)", () => {
+  const job = { id: "j1", service_id: "tint" };
+  it("blocks a technician while a mandatory step is open, locking checklist rows", async () => {
+    const res = await authorizeReadyInTransaction({ query } as never, actor("technician"), job, {});
+    expect(res.outcome).toBe("blocked");
+    if (res.outcome !== "blocked") return;
+    expect(res.payload.code).toBe("CHECKLIST_INCOMPLETE");
+    expect(res.payload.canOverride).toBe(false);
+    expect(res.payload.remaining).toEqual([{ id: "i1", labelEn: "Prep", labelAr: "prep-ar" }]);
+    expect(sqlLog.some((s) => /FROM job_checklist_items WHERE job_id = \$1 ORDER BY position FOR UPDATE/.test(s))).toBe(true);
+    expect(sqlLog.some((s) => s.includes("INSERT INTO job_audit_events"))).toBe(false);
   });
-  it("lets a manager override with a reason and audits it", async () => {
-    current.actor = actor("branch-manager");
-    expect((await call("PATCH", "/jobs/j1/stage", { nextStage: "ready" })).status).toBe(409);
-    const res = await call("PATCH", "/jobs/j1/stage", { nextStage: "ready", overrideReason: "Checked by hand" });
-    expect(res.body.reached).toBe("stage-route");
-    await new Promise((r) => setTimeout(r, 20));
+  it("blocks a manager without a reason", async () => {
+    const res = await authorizeReadyInTransaction({ query } as never, actor("branch-manager"), job, {});
+    expect(res.outcome === "blocked" && res.payload.canOverride).toBe(true);
+  });
+  it("lets a manager override with a reason and writes the audit on the same client", async () => {
+    const res = await authorizeReadyInTransaction({ query } as never, actor("branch-manager"), job, { overrideReason: "Checked by hand" });
+    expect(res.outcome).toBe("allow");
+    expect(res.outcome === "allow" && res.eventNote).toContain("Checked by hand");
     expect(sqlLog.some((s) => s.includes("INSERT INTO job_audit_events"))).toBe(true);
   });
-  it("does not touch other stage moves", async () => {
-    current.actor = actor("technician");
-    expect((await call("PATCH", "/jobs/j1/stage", { nextStage: "qc" })).body.reached).toBe("stage-route");
+  it("propagates an audit write failure so the stage change rolls back", async () => {
+    const base = query.getMockImplementation()!;
+    query.mockImplementation(async (sql: string, params?: unknown[]) => {
+      if (sql.includes("INSERT INTO job_audit_events")) throw new Error("audit down");
+      return base(sql, params);
+    });
+    await expect(authorizeReadyInTransaction({ query } as never, actor("owner"), job, { overrideReason: "Checked by hand" })).rejects.toThrow("audit down");
   });
-  it("passes when all mandatory items are done", async () => {
-    current.actor = actor("technician");
+  it("passes without audit when all mandatory items are done", async () => {
     checklistRows[0].done = true;
-    try { expect((await call("PATCH", "/jobs/j1/stage", { nextStage: "ready" })).body.reached).toBe("stage-route"); }
-    finally { checklistRows[0].done = false; }
+    try {
+      const res = await authorizeReadyInTransaction({ query } as never, actor("technician"), job, {});
+      expect(res).toEqual({ outcome: "allow", eventNote: null });
+      expect(sqlLog.some((s) => s.includes("INSERT INTO job_audit_events"))).toBe(false);
+    } finally { checklistRows[0].done = false; }
   });
 });
 

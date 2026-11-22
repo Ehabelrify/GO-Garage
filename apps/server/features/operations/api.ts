@@ -44,7 +44,7 @@ import { intakeRouter } from "../intake/intake-routes";
 import { auditApiRouter } from "../audit/audit-routes";
 import { remindersRouter } from "../reminders/reminder-routes";
 import { customerMergeRouter } from "../customer-merge/merge-routes";
-import { techRouter } from "../workshop-tech/tech-routes";
+import { techRouter, authorizeReadyInTransaction } from "../workshop-tech/tech-routes";
 import { autoGenerateInvoiceForDeliveredJob } from "../invoicing/invoice-service";
 import { BenefitError, materializeBenefitsInTransaction } from "../commercial/benefit-service";
 import { lockReservationForJobDelivery, redeemReservationOnJobDelivery } from "../commercial/reservation-service";
@@ -544,7 +544,7 @@ router.patch("/bookings/:bookingId/cancel", async (req, res) => {
 router.patch("/jobs/:jobId/stage", async (req, res) => {
   const currentActor = actor(req);
   if (!["owner", "branch-manager", "technician"].includes(currentActor.role)) return forbidden(res);
-  const parsed = z.object({ nextStage: z.string().min(1) }).safeParse(req.body);
+  const parsed = z.object({ nextStage: z.string().min(1), overrideReason: z.unknown().optional() }).safeParse(req.body);
   if (!parsed.success) return routeError(res, 400, "INVALID_STAGE", "Choose a valid workshop stage.");
   if(["cancelled","no-show"].includes(parsed.data.nextStage)){
     const linked=await pool.query("SELECT 1 FROM promotion_reservations r JOIN jobs j ON j.booking_id=r.booking_id WHERE j.id=$1 AND r.status IN ('scheduled','redeemed')",[req.params.jobId]);
@@ -577,6 +577,12 @@ router.patch("/jobs/:jobId/stage", async (req, res) => {
     if (parsed.data.nextStage === "delivered" && job.stage === "delivered") return "ok" as const;
     if (!canTransitionJob(job.stage as Parameters<typeof canTransitionJob>[0], parsed.data.nextStage as Parameters<typeof canTransitionJob>[1])) {
       return "transition" as const;
+    }
+    let eventNote: string | null = null;
+    if (parsed.data.nextStage === "ready") {
+      const gate = await authorizeReadyInTransaction(client, currentActor, { id: job.id, service_id: job.service_id }, { overrideReason: parsed.data.overrideReason });
+      if (gate.outcome === "blocked") return gate;
+      eventNote = gate.eventNote;
     }
     const issueTargets: { componentId: string | null; policyRef: { id: string; version: number } }[] = [];
     if (parsed.data.nextStage === "delivered") {
@@ -612,9 +618,9 @@ router.patch("/jobs/:jobId/stage", async (req, res) => {
       await client.query("UPDATE bookings SET status = $2, updated_at = now() WHERE id = (SELECT booking_id FROM jobs WHERE id = $1)", [job.id, bookingStatus]);
     }
     await client.query(
-      `INSERT INTO job_events (id, job_id, from_stage, to_stage, actor_user_id)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [makeId("event"), job.id, job.stage, parsed.data.nextStage, currentActor.userId],
+      `INSERT INTO job_events (id, job_id, from_stage, to_stage, actor_user_id, note)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [makeId("event"), job.id, job.stage, parsed.data.nextStage, currentActor.userId, eventNote],
     );
     for (const target of issueTargets) {
       await issueCoverageInTransaction(client, commercialContext, currentActor, {
@@ -634,6 +640,7 @@ router.patch("/jobs/:jobId/stage", async (req, res) => {
     throw error;
   });
   if (result instanceof WarrantyIssuanceError || result instanceof BenefitError) return routeError(res, result.status, result.code, result.message);
+  if (typeof result === "object" && "outcome" in result) return res.status(409).json(result.payload);
   if (result === "forbidden") return forbidden(res);
   if (result === "record") return routeError(res, 404, "JOB_NOT_FOUND", "Job not found.");
   if (result === "transition") return routeError(res, 409, "INVALID_TRANSITION", "That stage change is not allowed.");
