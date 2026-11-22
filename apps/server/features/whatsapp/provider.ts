@@ -4,6 +4,8 @@ export type ProviderSendResult =
   | { state: "unknown-outcome"; reconciliationRef: string | null };
 
 export interface ProviderAdapter {
+  /** True only for an adapter that can really reach a provider. A configuration flag alone never makes this true (P2T-006). */
+  readonly connected: boolean;
   send(input: {
     channelId: string;
     recipient: string;
@@ -24,6 +26,7 @@ export interface ProviderAdapter {
 }
 
 export class DisconnectedProviderAdapter implements ProviderAdapter {
+  readonly connected = false;
   async send(): Promise<ProviderSendResult> {
     return { state: "definite-failure", code: "PROVIDER_DISCONNECTED", retryable: false };
   }

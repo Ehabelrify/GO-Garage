@@ -22,6 +22,7 @@ import { dateOnlyFromSql } from "../../infrastructure/database/date-only";
 import { reserveConfirmedBooking, rescheduleConfirmedBooking, cancelConfirmedBooking } from "../operations/booking-service";
 import { listAvailableSlotsForDemand } from "../operations/availability-service";
 import { isWhatsAppProviderDeliveryEnabled, isWhatsAppSimulationWriteEnabled } from "./whatsapp-policy";
+import { providerAdapter } from "./provider";
 import { canAccessInbox,canActorAccessInboxBranch,loadInboxMembership,setInboxMembership } from "./inbox-access";
 import { customerConsentRouter } from "./consent-routes";
 import { projectContact } from "./contact-projection";
@@ -221,8 +222,9 @@ router.get("/status", async (req, res) => {
   const centralMembership=await loadInboxMembership(actor.userId);
   res.json({
     mode: conversationMode(),
-    providerConnected: isWhatsAppProviderDeliveryEnabled(),
-    deliveryEnabled: isWhatsAppProviderDeliveryEnabled(),
+    // Connected means a real adapter is wired, not that a flag is set; delivery is enabled only when both hold (P2T-006).
+    providerConnected: providerAdapter().connected,
+    deliveryEnabled: providerAdapter().connected && isWhatsAppProviderDeliveryEnabled(),
     centralMembership:centralMembership?.status??"not-enrolled",
     readiness: {
       businessAssetsApproved: false,
