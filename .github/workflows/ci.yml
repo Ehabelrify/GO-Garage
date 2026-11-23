@@ -61,6 +61,18 @@ jobs:
         run: npm run db:migrate
         env:
           DATABASE_URL: ${{ env.GARAGE_TEST_DATABASE_URL }}
+      # The same three steps the Replit guide (docs/operations/REPLIT_FRESH_PREVIEW.md) gives, run here against the throwaway
+      # database so a seed row that breaks a CHECK, a trigger or a foreign key fails CI instead of failing on Replit.
+      # It seeds and then purges, so the integration suites below start from the same empty-of-sample-data database as before.
+      # A purge that cannot remove a seeded table in order (foreign key) also fails here.
+      - name: Seed, then purge, the sample data (constraint check)
+        run: |
+          npm run db:seed:dev
+          GARAGE_CONFIRM_PURGE=yes npm run db:purge:demo -- --execute --keep-demo-accounts
+        env:
+          DATABASE_URL: ${{ env.GARAGE_TEST_DATABASE_URL }}
+          GARAGE_DATASET_CLASS: scenario
+          GARAGE_SEED_NOW: "2026-11-21T10:00:00Z"
       # Serial on purpose: the rehearsal suite snapshots global booking/job counts, and the other suites create and delete
       # bookings in the same database, so running the files in parallel makes the snapshot flaky.
       - name: Run integration suites

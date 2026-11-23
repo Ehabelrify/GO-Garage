@@ -18,6 +18,7 @@ import { generateMessaging } from "./seed-messaging";
 import { addIntakeSeed } from "./seed-products";
 import { addSpecialRequests } from "./seed-requests";
 import { addSeedInvoices } from "./seed-invoices";
+import { addSeedActivity } from "./seed-activity";
 
 export interface GenerateOptions {
   now?: Date;
@@ -62,6 +63,7 @@ export function generateDataset(options: GenerateOptions = {}): { ds: Dataset; w
   addIntakeSeed(world);
   addSpecialRequests(world);
   addSeedInvoices(world);
+  addSeedActivity(world);
   return { ds, world, ctx };
 }
 

@@ -40,8 +40,9 @@ export function addSeedInvoices(world: World) {
     const recent = ctx.now.getTime() - deliveredAt.getTime() < RECENT_DRAFT_DAYS * DAY;
     const voided = !recent && visit.n % 41 === 0 && visit.paidMinor === 0;
     const received = recent || voided ? 0 : Math.min(visit.paidMinor, sale);
-    // Deterministic pick among issued invoices that received money: 0 = fully reversed, 1 = split with one part reversed, 2 = refunded, 3 = untouched.
-    const slot = received > 0 ? eligibleCount++ % 4 : -1;
+    // Deterministic pick among issued invoices that received money, about one in forty each so corrections stay the exception:
+    // 0 = fully reversed, 1 = split with one part reversed, 2 = refunded, everything else untouched.
+    const slot = received > 0 ? eligibleCount++ % 40 : -1;
     const split = slot === 1 && received >= 2;
     const firstPart = split ? Math.round(received * 0.6) : received;
     const reversed = slot === 0 ? received : split ? received - firstPart : 0;
@@ -131,7 +132,7 @@ export function addSeedInvoices(world: World) {
   }
 
   // Supplementary adjustment drafts: separate invoices linked to an issued or paid original, which is never rewritten.
-  originals.filter((_, index) => index % 5 === 2).forEach((parent, index) => {
+  originals.filter((_, index) => index % 40 === 2).forEach((parent, index) => {
     const adjustmentId = `seed-inv-adj-${String(index + 1).padStart(3, "0")}`;
     const amount = 100_000 + (index % 4) * 50_000;
     const at = new Date(Math.min(parent.lastAt.getTime() + 3 * DAY, ctx.now.getTime() - 20_000));

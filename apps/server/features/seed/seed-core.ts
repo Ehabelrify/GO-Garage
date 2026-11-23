@@ -37,6 +37,7 @@ export const TABLE_ORDER = [
   "whatsapp_conversations", "whatsapp_messages", "whatsapp_conversation_events", "whatsapp_booking_drafts",
   "messaging_contact_links", "messaging_outbox",
   "special_requests", "special_request_events",
+  "document_delivery_log", "staff_customer_audit_events", "reminders", "reminder_events",
 ] as const;
 export type TableName = (typeof TABLE_ORDER)[number];
 
